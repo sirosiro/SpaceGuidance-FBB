@@ -1,0 +1,104 @@
+{
+    "grid": {
+        "root": {
+            "type": "branch",
+            "data": [
+                {
+                    "type": "branch",
+                    "data": [
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "chaosEngine"
+                                ],
+                                "activeView": "chaosEngine",
+                                "id": "1"
+                            },
+                            "size": 470
+                        },
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "sg-orbit-viewer"
+                                ],
+                                "activeView": "sg-orbit-viewer",
+                                "id": "7"
+                            },
+                            "size": 471
+                        }
+                    ],
+                    "size": 862
+                },
+                {
+                    "type": "branch",
+                    "data": [
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "sg-chaos-fdir"
+                                ],
+                                "activeView": "sg-chaos-fdir",
+                                "id": "8"
+                            },
+                            "size": 470
+                        },
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "sg-telemetry-gauge"
+                                ],
+                                "activeView": "sg-telemetry-gauge",
+                                "id": "6"
+                            },
+                            "size": 471
+                        }
+                    ],
+                    "size": 863
+                }
+            ],
+            "size": 941
+        },
+        "width": 1725,
+        "height": 941,
+        "orientation": "HORIZONTAL"
+    },
+    "panels": {
+        "sg-orbit-viewer": {
+            "id": "sg-orbit-viewer",
+            "contentComponent": "sg-orbit-viewer",
+            "params": {
+                "_componentName": "sg-orbit-viewer"
+            },
+            "title": "SG 3D Cyber Orbit Viewer"
+        },
+        "sg-chaos-fdir": {
+            "id": "sg-chaos-fdir",
+            "contentComponent": "sg-chaos-fdir",
+            "params": {
+                "_componentName": "sg-chaos-fdir"
+            },
+            "title": "SG Chaos FDIR & Scorecard"
+        },
+        "sg-telemetry-gauge": {
+            "id": "sg-telemetry-gauge",
+            "contentComponent": "sg-telemetry-gauge",
+            "params": {
+                "_componentName": "sg-telemetry-gauge"
+            },
+            "title": "SG Telemetry & C&W"
+        },
+        "chaosEngine": {
+            "id": "chaosEngine",
+            "contentComponent": "chaosEngine",
+            "params": {
+                "_componentName": "chaosEngine"
+            },
+            "title": "Chaos & Fault Injection"
+        }
+    },
+    "activeGroup": "1"
+}

@@ -8,6 +8,9 @@ echo "=========================================================="
 echo "  SpaceGuidance-FBB: Stage 1 Asteroid Pipeline Challenge  "
 echo "=========================================================="
 
+pkill -9 -f space_guidance_daemon 2>/dev/null || true
+rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
+
 echo "[1/2] Starting Simulation Daemon..."
 "$ROOT/bin/space_guidance_daemon" &
 DAEMON_PID=$!

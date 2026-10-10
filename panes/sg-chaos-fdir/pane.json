@@ -1,6 +1,6 @@
 {
-  "id": "chaos-fdir-console",
-  "title": "Chaos FDIR & Scorecard",
+  "id": "sg-chaos-fdir",
+  "title": "SG Chaos FDIR & Scorecard",
   "icon": "ShieldAlert",
   "category": "SpaceGuidance",
   "entry": "index.js"

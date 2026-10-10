@@ -35,9 +35,9 @@ SpaceGuidance-FBB/
 ├── examples/                     # 初心者向けお手本サンプル
 │   └── mission01_baseline_pilot.py # チューニングガイド付きベースライン
 ├── panes/                        # DPPA Web ダッシュボード動的ペイン
-│   ├── space-orbit-viewer/       # 3D サイバー・ワイヤーフレーム描画
-│   ├── space-telemetry-gauge/    # テレメトリ＆C&W レッドアラート
-│   └── chaos-fdir-console/       # カオス FDIR コンソール＆スコアカード
+│   ├── sg-orbit-viewer/              # 3D サイバー・ワイヤーフレーム描画
+│   ├── sg-telemetry-gauge/        # テレメトリ＆C&W レッドアラート
+│   └── sg-chaos-fdir/                # カオス FDIR コンソール＆スコアカード
 └── scenario/
     └── 01_asteroid_pipeline/     # Stage 1 自動テスト＆実行スクリプト
 ```
@@ -46,19 +46,40 @@ SpaceGuidance-FBB/
 
 ## 3. クイックスタート (Quick Start)
 
-### ① プラグイン仕様の検証
+### ① プラグイン仕様の検証 (PPA 整合性チェック)
 ```bash
+cd /workspaces/FPGA-BoardlessBench
 ./bin/fbb plugin validate ~/.fbb/plugins/SpaceGuidance-FBB
 ```
 
-### ② Stage 1 ミッションの実行 (お手本サンプルの走行)
+### ② F-BB 統合ラボ環境での実行 (Web ダッシュボード・3D 観戦モード)
+F-BB の Verilator RTL シミュレータ、C-Shim、および Web ダッシュボードと全連動させて、リアルタイム 3D 空間で飛行を観戦・デバッグします。
+
 ```bash
-bash /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/run_mission.sh
+cd /workspaces/FPGA-BoardlessBench
+./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
+```
+* **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の 4 分割画面が自動ロードされます：
+  * **SG 3D Cyber Orbit Viewer**: 3D 六角形ポータルトンネルをくぐり抜ける立体ワイヤーフレーム飛行ビュー（3D CHASE / 3D ISOMETRIC / 2D TACTICAL 切替対応）
+  * **SG Telemetry & C&W**: 推進剤（燃料）残量バー、Master C&W 警報灯、姿勢角・速度計器
+  * **SG Chaos FDIR & Scorecard**: 飛行モード遷移バナー、軌道偏差ベクトル（Δd）ゲージ
+  * **Chaos & Fault Injection Engine**: F-BB 標準パネル。**`[Restart Scenario]`** ボタンから何度でもワンクリックで再フライト可能
+* **終了方法**: ターミナルで `Ctrl + C` を押すと、全プロセスが安全に停止します。
+
+### ③ スタンドアローン直接実行 (CLI 高速モード)
+Web ダッシュボードを立ち上げず、物理デーモンと Python パイロットのみでアルゴリズムやパラメータ変更の結果を数秒で高速検証します。
+
+```bash
+cd /workspaces/SpaceGuidance-FBB
+bash scenario/01_asteroid_pipeline/run_mission.sh
 ```
 
-### ③ カオス障害注入・FDIR 自動検証
+### ④ カオス障害注入・自律復旧 (FDIR) 自動検証
+放射線 SEU（ビット反転）、通信途絶（LOS）、およびスラスター固着障害を自動注入し、機体の自己診断・推測航法復旧を CI テストします。
+
 ```bash
-python3 /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/test_chaos_fdir.py
+cd /workspaces/SpaceGuidance-FBB
+python3 scenario/01_asteroid_pipeline/test_chaos_fdir.py
 ```
 
 ---

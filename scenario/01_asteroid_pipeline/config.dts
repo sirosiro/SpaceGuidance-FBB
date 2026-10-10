@@ -1,0 +1,21 @@
+/dts-v1/;
+
+/ {
+    vfpga_reg@43C00000 {
+        compatible = "generic-uio";
+        reg = <0x43C00000 0x1000>;
+        label = "/dev/uio0";
+        registers = 
+            "CR_CTRL         @ 0x00",
+            "SR_STATUS       @ 0x04",
+            "SENSOR_RAW      @ 0x08",
+            "SENSOR_EDGE     @ 0x0C",
+            "THRUST_CMD_X    @ 0x10",
+            "THRUST_CMD_Y    @ 0x14",
+            "THRUST_CMD_Z    @ 0x18",
+            "TORQUE_CMD      @ 0x1C",
+            "SAFETY_LIMIT    @ 0x20",
+            "WATCHDOG_KICK   @ 0x24",
+            "CHAOS_FAULT_INJ @ 0x28";
+    };
+};

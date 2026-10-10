@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <chrono>
@@ -57,6 +58,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Zero out shared memory on every startup to ensure clean initial coordinates (pos_x=0)
+    memset(shm, 0, sizeof(ShmSpaceGuidance));
+
     SpacePhysicsEngine physics(100.0, 25.0);
     std::cout << "[SpaceGuidance Daemon] Ready. Running physics at 100Hz." << std::endl;
 
@@ -64,6 +68,12 @@ int main(int argc, char** argv) {
     shm->cr_ctrl = 1;
     shm->safety_limit = 0x00010000;
     shm->fuel = 100.0;
+
+    // Immediately write clean initial telemetry JSON
+    {
+        std::ofstream jf("/tmp/space_guidance_telemetry.json");
+        jf << "{\"pos_x\":0.0,\"pos_y\":0.0,\"vel_x\":0.0,\"vel_y\":0.0,\"angle\":0.0,\"omega\":0.0,\"fuel\":100.0,\"cross_track_err\":0.0,\"sensor_raw\":0,\"fdir_mode\":0}\n";
+    }
 
     int tick_cnt = 0;
     while (shm->cr_ctrl & 0x01) {

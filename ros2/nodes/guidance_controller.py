@@ -35,15 +35,15 @@ class SpaceGuidanceHardware:
             "thrust_cmd_x": unpacked[4],
             "thrust_cmd_y": unpacked[5],
             "torque_cmd": unpacked[7],
-            "pos_x": unpacked[11],
-            "pos_y": unpacked[12],
-            "vel_x": unpacked[13],
-            "vel_y": unpacked[14],
-            "angle": unpacked[15],
-            "omega": unpacked[16],
-            "fuel": unpacked[17],
-            "cross_track_err": unpacked[18],
-            "fdir_mode": unpacked[19]
+            "pos_x": unpacked[12],
+            "pos_y": unpacked[13],
+            "vel_x": unpacked[14],
+            "vel_y": unpacked[15],
+            "angle": unpacked[16],
+            "omega": unpacked[17],
+            "fuel": unpacked[18],
+            "cross_track_err": unpacked[19],
+            "fdir_mode": unpacked[20]
         }
 
     def write_commands(self, thrust_x, thrust_y, torque, fdir_mode=0):
