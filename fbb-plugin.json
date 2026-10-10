@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "fbb-plugin-space-guidance",
+  "vendor": "F-BB Community",
+  "version": "1.0.0",
+  "description": "Autonomous Space Guidance and Docking Challenge Plugin for FPGA-BoardlessBench",
+  "peripherals": [
+    {
+      "bus": "axil",
+      "compatible": "fbb,space-guidance",
+      "binary": "bin/space_guidance_daemon",
+      "default_args": [
+        "--base",
+        "0x43C00000"
+      ],
+      "ui_widget": {
+        "title": "Space Guidance Cockpit"
+      }
+    }
+  ]
+}

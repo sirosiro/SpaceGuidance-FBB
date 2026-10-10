@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+build/
+bin/
+obj_dir/
+*.vcd
+*.log
+.vscode/
