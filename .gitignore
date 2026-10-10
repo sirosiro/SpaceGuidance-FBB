@@ -6,3 +6,4 @@ obj_dir/
 *.vcd
 *.log
 .vscode/
+obj_dir_physics/

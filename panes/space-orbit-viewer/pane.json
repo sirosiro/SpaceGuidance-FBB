@@ -1,0 +1,7 @@
+{
+  "id": "space-orbit-viewer",
+  "title": "3D Cyber Orbit Viewer",
+  "icon": "Compass",
+  "category": "SpaceGuidance",
+  "entry": "index.js"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "space-telemetry-gauge",
+  "title": "Spacecraft Telemetry & C&W",
+  "icon": "Gauge",
+  "category": "SpaceGuidance",
+  "entry": "index.js"
+}
