@@ -95,3 +95,9 @@ python3 scenario/01_asteroid_pipeline/test_chaos_fdir.py
 ## 5. Zynq-7000 実機への移植ガイド (Sim-to-Real)
 * **PL (FPGA 論理)**: `rtl/*.v` を Vivado IP Integrator に追加し、AXI4-Lite スレーブとして Zynq PS の M_AXI_GP0 (`0x43C00000`) に接続。
 * **PS (ARM CPU)**: Linux 上で UIO ドライバ（`/dev/uio0`）をバインドし、`ros2/nodes/guidance_controller.py` をそのまま実行。
+
+---
+
+## ライセンス (License)
+
+本プロジェクトは **MIT License** の下で公開されています。商用・非商用問わず、誰でも自由に改変・再配布・利用することが可能です。
