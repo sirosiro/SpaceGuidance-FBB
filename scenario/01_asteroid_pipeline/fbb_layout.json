@@ -12,7 +12,7 @@
                         "activeView": "sg-orbit-viewer",
                         "id": "7"
                     },
-                    "size": 1129.1304988432676
+                    "size": 1061
                 },
                 {
                     "type": "branch",
@@ -29,7 +29,7 @@
                                         "activeView": "sg-telemetry-gauge",
                                         "id": "6"
                                     },
-                                    "size": 360
+                                    "size": 338
                                 },
                                 {
                                     "type": "leaf",
@@ -40,10 +40,10 @@
                                         "activeView": "sg-chaos-fdir",
                                         "id": "8"
                                     },
-                                    "size": 361.86950115673244
+                                    "size": 340
                                 }
                             ],
-                            "size": 304
+                            "size": 302
                         },
                         {
                             "type": "leaf",
@@ -54,16 +54,16 @@
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 619
+                            "size": 614
                         }
                     ],
-                    "size": 721.8695011567324
+                    "size": 678
                 }
             ],
-            "size": 923
+            "size": 916
         },
-        "width": 1851,
-        "height": 923,
+        "width": 1739,
+        "height": 916,
         "orientation": "HORIZONTAL"
     },
     "panels": {
@@ -75,14 +75,6 @@
             },
             "title": "SG 3D Cyber Orbit Viewer"
         },
-        "sg-chaos-fdir": {
-            "id": "sg-chaos-fdir",
-            "contentComponent": "sg-chaos-fdir",
-            "params": {
-                "_componentName": "sg-chaos-fdir"
-            },
-            "title": "SG Chaos FDIR & Scorecard"
-        },
         "sg-telemetry-gauge": {
             "id": "sg-telemetry-gauge",
             "contentComponent": "sg-telemetry-gauge",
@@ -90,6 +82,14 @@
                 "_componentName": "sg-telemetry-gauge"
             },
             "title": "SG Telemetry & C&W"
+        },
+        "sg-chaos-fdir": {
+            "id": "sg-chaos-fdir",
+            "contentComponent": "sg-chaos-fdir",
+            "params": {
+                "_componentName": "sg-chaos-fdir"
+            },
+            "title": "SG Chaos FDIR & Scorecard"
         },
         "chaosEngine": {
             "id": "chaosEngine",

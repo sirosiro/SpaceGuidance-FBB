@@ -2,9 +2,17 @@
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PLUGIN_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
 
+# Priority: scenario-local pilot.py, fallback: examples/mission01_baseline_pilot.py
+if [ -f "$SCRIPT_DIR/pilot.py" ]; then
+    PILOT_SCRIPT="$SCRIPT_DIR/pilot.py"
+else
+    PILOT_SCRIPT="$PLUGIN_ROOT/examples/mission01_baseline_pilot.py"
+fi
+
 cleanup() {
     kill $DAEMON_PID $PILOT_PID 2>/dev/null || true
     pkill -9 -f "space_guidance_daemon" 2>/dev/null || true
+    pkill -9 -f "pilot.py" 2>/dev/null || true
     pkill -9 -f "mission01_baseline_pilot.py" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -18,12 +26,12 @@ if [ "$FBB_ACTIVE" = "1" ]; then
     DAEMON_PID=$!
     sleep 0.5
 
-    echo "[SpaceGuidance] Launching Stage 1 Python Autopilot..."
-    python3 "$PLUGIN_ROOT/examples/mission01_baseline_pilot.py" "$@" &
+    echo "[SpaceGuidance] Launching Stage 1 Python Autopilot ($PILOT_SCRIPT)..."
+    python3 "$PILOT_SCRIPT" "$@" &
     PILOT_PID=$!
     wait $PILOT_PID 2>/dev/null || true
     echo "[SpaceGuidance] Autopilot finished. Terminating physics daemon."
     cleanup
 else
-    bash "$PLUGIN_ROOT/scenario/01_asteroid_pipeline/run_mission.sh" "$@"
+    bash "$SCRIPT_DIR/run_mission.sh" "$@"
 fi

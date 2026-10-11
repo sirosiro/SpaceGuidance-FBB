@@ -4,11 +4,20 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../.." && pwd)"
 
+# Priority: scenario-local pilot.py, fallback: examples/mission01_baseline_pilot.py
+if [ -f "$DIR/pilot.py" ]; then
+    PILOT_SCRIPT="$DIR/pilot.py"
+else
+    PILOT_SCRIPT="$ROOT/examples/mission01_baseline_pilot.py"
+fi
+
 echo "=========================================================="
 echo "  SpaceGuidance-FBB: Stage 1 Asteroid Pipeline Challenge  "
 echo "=========================================================="
 
 pkill -9 -f space_guidance_daemon 2>/dev/null || true
+pkill -9 -f "pilot.py" 2>/dev/null || true
+pkill -9 -f "mission01_baseline_pilot.py" 2>/dev/null || true
 rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
 
 echo "[1/2] Starting Simulation Daemon..."
@@ -19,7 +28,7 @@ trap "echo '[Cleaning up daemon]'; kill -SIGINT $DAEMON_PID 2>/dev/null || true"
 
 sleep 0.5
 
-echo "[2/2] Launching Baseline Pilot..."
-python3 "$ROOT/examples/mission01_baseline_pilot.py"
+echo "[2/2] Launching Autopilot ($PILOT_SCRIPT)..."
+python3 "$PILOT_SCRIPT" "$@"
 
 echo "Mission Completed."

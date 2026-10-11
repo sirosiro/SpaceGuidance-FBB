@@ -141,9 +141,9 @@
     <line x1="38" y1="0" x2="160" y2="-40" stroke="#ec4899" stroke-width="1.2" />
     <circle cx="160" cy="-40" r="3" fill="#ec4899" />
     <text x="168" y="-46" fill="#ec4899" font-size="12" font-weight="700">INTERNAL REACTION WHEEL (RW)</text>
-    <text x="168" y="-32" fill="#e2e8f0" font-size="10" font-weight="600">• 燃料消費ゼロ: 電気駆動ブラシレスフライホイール</text>
-    <text x="168" y="-18" fill="#94a3b8" font-size="9">• 慣性モーメント: Iw = 0.02 kg·m² | 回転限界: ±6,000 RPM</text>
-    <text x="168" y="-4" fill="#94a3b8" font-size="9">• 角運動量保存則: τ_body = -τ_wheel (作用・反作用)</text>
+    <text x="168" y="-32" fill="#e2e8f0" font-size="10" font-weight="600">• Zero Propellant: Brushless Electric Flywheel</text>
+    <text x="168" y="-18" fill="#94a3b8" font-size="9">• Flywheel Inertia: Iw = 0.02 kg·m² | Max Speed: ±6,000 RPM</text>
+    <text x="168" y="-4" fill="#94a3b8" font-size="9">• Momentum Conservation: τ_body = -τ_wheel (Action-Reaction)</text>
   </g>
 
   <!-- =================================================================== -->
@@ -157,7 +157,7 @@
   <line x1="550" y1="550" x2="630" y2="590" stroke="#38bdf8" stroke-width="1.2" />
   <circle cx="630" cy="590" r="3" fill="#38bdf8" />
   <text x="640" y="585" fill="#38bdf8" font-size="11" font-weight="700">MAIN PROPULSION (Dual Engines)</text>
-  <text x="640" y="600" fill="#94a3b8" font-size="9.5">前進推力 Fx: Max 50 N (燃料消費: 推力比例)</text>
+  <text x="640" y="600" fill="#94a3b8" font-size="9.5">Forward Thrust Fx: Max 50 N (Proportional Propellant Burn)</text>
 
   <!-- =================================================================== -->
   <!-- RCS PODS (4 Pods: Horizontal + Vertical Roll Nozzles) -->
@@ -201,8 +201,8 @@
     <line x1="-10" y1="8" x2="-60" y2="70" stroke="#f59e0b" stroke-width="1.2" />
     <circle cx="-60" cy="70" r="3" fill="#f59e0b" />
     <text x="-65" y="66" fill="#f59e0b" font-size="11" font-weight="700" text-anchor="end">STERN PORT RCS [Pod 3] + ROLL NOZZLES</text>
-    <text x="-65" y="79" fill="#e2e8f0" font-size="9.5" text-anchor="end">天頂(+Z) / 天底(-Z) ロールノズル内蔵</text>
-    <text x="-65" y="92" fill="#94a3b8" font-size="9" text-anchor="end">偶力噴射によりインサイドバンク姿勢を能動生成</text>
+    <text x="-65" y="79" fill="#e2e8f0" font-size="9.5" text-anchor="end">Dorsal (+Z) / Ventral (-Z) Roll Nozzles</text>
+    <text x="-65" y="92" fill="#94a3b8" font-size="9" text-anchor="end">Couple thrust generates dynamic inside bank</text>
   </g>
 
   <!-- [POD 4: Stern Starboard RCS + VERTICAL ROLL NOZZLES] -->
@@ -218,8 +218,8 @@
     <line x1="10" y1="8" x2="60" y2="70" stroke="#f59e0b" stroke-width="1.2" />
     <circle cx="60" cy="70" r="3" fill="#f59e0b" />
     <text x="65" y="66" fill="#f59e0b" font-size="11" font-weight="700">STERN STARBOARD RCS [Pod 4] + ROLL NOZZLES</text>
-    <text x="65" y="79" fill="#e2e8f0" font-size="9.5">天頂(+Z) / 天底(-Z) ロールノズル内蔵</text>
-    <text x="65" y="92" fill="#94a3b8" font-size="9">偶力噴射によりインサイドバンク姿勢を能動生成</text>
+    <text x="65" y="79" fill="#e2e8f0" font-size="9.5">Dorsal (+Z) / Ventral (-Z) Roll Nozzles</text>
+    <text x="65" y="92" fill="#94a3b8" font-size="9">Couple thrust generates dynamic inside bank</text>
   </g>
 
   <!-- =================================================================== -->
@@ -227,16 +227,16 @@
   <!-- =================================================================== -->
   <g transform="translate(40, 540)">
     <rect x="0" y="0" width="370" height="140" rx="6" fill="#0b1220" stroke="#1e293b" stroke-width="1.2" />
-    <text x="14" y="24" fill="#38bdf8" font-size="12" font-weight="700">HYBRID ACTUATION STRATEGY (二刀流ハイブリッド制御)</text>
+    <text x="14" y="24" fill="#38bdf8" font-size="12" font-weight="700">HYBRID ACTUATION STRATEGY</text>
     
-    <text x="14" y="46" fill="#ec4899" font-size="10" font-weight="700">1. リアクションホイール (Reaction Wheel: 優先):</text>
-    <text x="24" y="60" fill="#94a3b8" font-size="9.5">通常旋回はフライホイールで全制御。推進剤消費ゼロで超高精度追従。</text>
+    <text x="14" y="46" fill="#ec4899" font-size="10" font-weight="700">1. Reaction Wheel Primary Control:</text>
+    <text x="24" y="60" fill="#94a3b8" font-size="9.5">Nominal turns driven by flywheel: Zero propellant burn.</text>
 
-    <text x="14" y="80" fill="#f59e0b" font-size="10" font-weight="700">2. RCS 脱飽和アンローディング (Desaturation):</text>
-    <text x="24" y="94" fill="#94a3b8" font-size="9.5">ホイールが 5,000 RPM に達した際、RCS スラスタで姿勢を保持しホイールを減速。</text>
+    <text x="14" y="80" fill="#f59e0b" font-size="10" font-weight="700">2. RCS Momentum Desaturation:</text>
+    <text x="24" y="94" fill="#94a3b8" font-size="9.5">When wheel exceeds 5,000 RPM, RCS fires counter-pulse to brake wheel.</text>
 
-    <text x="14" y="114" fill="#38bdf8" font-size="10" font-weight="700">3. ロールノズル連動バンク (Option B 正当化):</text>
-    <text x="24" y="128" fill="#94a3b8" font-size="9.5">主翼端の上下ノズル偶力噴射でバンク角を形成、主推力ベクトルを旋回中心へ指向。</text>
+    <text x="14" y="114" fill="#38bdf8" font-size="10" font-weight="700">3. Coordinated Roll Banking:</text>
+    <text x="24" y="128" fill="#94a3b8" font-size="9.5">Wingtip vertical thrusters bank hull inwards, vectoring main thrust.</text>
   </g>
 
 </svg>

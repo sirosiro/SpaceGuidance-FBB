@@ -184,7 +184,7 @@ export default function SpaceOrbitViewer3D() {
       const rawBank = sm.bank;
 
       // Smooth camera roll damping (subtle natural horizon reaction, max 6 deg)
-      const targetRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (telemetry.omega || 0) * 0.15)) : 0.0);
+      const targetRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (tlm.omega || 0) * 0.15)) : 0.0);
       st.smoothRoll += (targetRoll - st.smoothRoll) * 0.08;
 
       // Camera preset parameters
@@ -196,22 +196,22 @@ export default function SpaceOrbitViewer3D() {
       let baseDist = 9.0;
 
       if (effectiveMode === 'chase') {
-        // 機体後方上 (Rear-Top Chase looking +X)
+        // Rear-Top Chase looking +X
         baseAzimuth = 0.0;
         baseElevation = 0.26;
         baseDist = 9.0;
       } else if (effectiveMode === 'nose') {
-        // 正面上 (Front-Top looking back towards approaching ship)
+        // Front-Top looking back towards approaching ship
         baseAzimuth = Math.PI;
         baseElevation = 0.20;
         baseDist = 7.5;
       } else if (effectiveMode === 'hero') {
-        // 右下煽り視点 (Dramatic Low-Angle Hero Shot)
+        // Dramatic Low-Angle Hero Shot
         baseAzimuth = -0.75;
         baseElevation = -0.28;
         baseDist = 6.2;
       } else if (effectiveMode === 'orbit') {
-        // ラウンド自動巡回 (Continuous 360 Fly-Around)
+        // Continuous 360 Fly-Around
         baseAzimuth = (now * 0.00045) % (Math.PI * 2);
         baseElevation = 0.24 + 0.12 * Math.sin(now * 0.0003);
         baseDist = 8.8;
@@ -407,7 +407,7 @@ export default function SpaceOrbitViewer3D() {
         const isNext = (!isPast && rx <= shipX + ringSpacing);
 
         let ringColor = isNext ? '#38bdf8' : (isPast ? '#059669' : '#0284c7');
-        if (isNext && Math.abs(telemetry.cross_track_err) > 0.4) {
+        if (isNext && Math.abs(tlm.cross_track_err || 0) > 0.4) {
           ringColor = '#ef4444';
         }
 
@@ -491,7 +491,7 @@ export default function SpaceOrbitViewer3D() {
       // ------------------------------------------------------------------------
       // 4. Draw True 3D Spacecraft Polyhedral Model with Yaw & Bank Roll
       // ------------------------------------------------------------------------
-      const isGhost = telemetry.carrier_lost || telemetry.fdir_mode === 1;
+      const isGhost = tlm.carrier_lost || tlm.fdir_mode === 1;
       const shipColor = isGhost ? '#f59e0b' : '#38bdf8';
       ctx.strokeStyle = shipColor;
       ctx.shadowColor = shipColor;
@@ -564,7 +564,7 @@ export default function SpaceOrbitViewer3D() {
       draw3DEdge(V.wingR, V.keel);
 
       // Internal Reaction Wheel Flywheel Disk (Center of Mass)
-      const wheelAngle = (now * 0.001 * ((telemetry.wheel_rpm || 0) * 0.1)) % (Math.PI * 2);
+      const wheelAngle = (now * 0.001 * ((tlm.wheel_rpm || 0) * 0.1)) % (Math.PI * 2);
       const rwRadius = 0.45;
       const rwSegments = 8;
       const rwPts = [];
@@ -572,7 +572,7 @@ export default function SpaceOrbitViewer3D() {
         const a = wheelAngle + (i * Math.PI * 2 / rwSegments);
         rwPts.push(transformShipPoint(-0.4 + Math.cos(a) * rwRadius * 0.6, Math.sin(a) * rwRadius, 0.1));
       }
-      ctx.strokeStyle = Math.abs(telemetry.wheel_rpm || 0) > 5000 ? '#ef4444' : '#ec4899';
+      ctx.strokeStyle = Math.abs(tlm.wheel_rpm || 0) > 5000 ? '#ef4444' : '#ec4899';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       for (let i = 0; i < rwSegments; i++) {
@@ -616,35 +616,54 @@ export default function SpaceOrbitViewer3D() {
         draw3DEdge(sensorL, sensorR);
       }
 
-      // Main Engine Thruster Plumes (Strictly Proportional to Thrust Output)
-      const actualFx = (telemetry.thrust_x !== undefined) ? telemetry.thrust_x : ((telemetry.vel_x || 0) > 0.05 ? 0.15 : 0.0);
-      if (actualFx > 0.005 && telemetry.fuel > 0) {
-        // Forward Acceleration: Jet plume scales with throttle magnitude
-        const throttle = Math.min(1.0, actualFx / 0.25);
-        const plumeLen = throttle * (1.8 + Math.random() * 0.7);
+      // Main Engine Thruster Plumes (Active Forward Thrust & Cruise Burn)
+      const hasFuel = (tlm.fuel === undefined || tlm.fuel > 0);
+      const isCruising = ((tlm.vel_x || 0) > 0.05);
+      const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : (isCruising ? 0.15 : 0.0);
 
-        ctx.strokeStyle = throttle > 0.5 ? '#38bdf8' : '#38bdf8';
+      if ((actualFx > 0.005 || (isCruising && actualFx >= -0.005)) && hasFuel) {
+        // Forward Acceleration / Cruise Thrust:
+        // Even during steady turns or cruise, produce prominent twin plasma plumes
+        const cmdPower = (actualFx > 0.005) ? actualFx : 0.08;
+        const throttle = Math.min(1.0, Math.max(0.20, cmdPower / 0.25));
+        const plumeLen = 0.6 + throttle * (1.6 + Math.random() * 0.5);
+        const jitter = (Math.random() - 0.5) * 0.12 * throttle;
+
+        // Outer Plasma Sheath (Bright Cyan Blue)
+        ctx.strokeStyle = '#38bdf8';
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 8 + throttle * 14;
-        ctx.lineWidth = 1.2 + throttle * 2.0;
+        ctx.shadowBlur = 10 + throttle * 15;
+        ctx.lineWidth = 1.8 + throttle * 2.2;
         ctx.setLineDash([]);
 
-        const pTipL = transformShipPoint(-1.6 - plumeLen, -0.4, (Math.random() - 0.5) * 0.2 * throttle);
-        const pTipR = transformShipPoint(-1.6 - plumeLen, 0.4, (Math.random() - 0.5) * 0.2 * throttle);
+        const pTipL = transformShipPoint(-1.6 - plumeLen, -0.4, (Math.random() - 0.5) * 0.15 * throttle);
+        const pTipR = transformShipPoint(-1.6 - plumeLen, 0.4, (Math.random() - 0.5) * 0.15 * throttle);
         draw3DEdge(V.nozzleL, pTipL);
         draw3DEdge(V.nozzleR, pTipR);
 
-        // Inner hot core
-        ctx.strokeStyle = '#f97316';
+        // Core Plasma Flame (Hyper-Hot Orange/White)
+        ctx.strokeStyle = throttle > 0.5 ? '#ffffff' : '#fb923c';
         ctx.shadowColor = '#f97316';
-        ctx.lineWidth = 1.0 + throttle * 1.2;
-        const pTipMid = transformShipPoint(-1.6 - plumeLen * 1.3, 0.0, (Math.random() - 0.5) * 0.25 * throttle);
+        ctx.shadowBlur = 8 + throttle * 12;
+        ctx.lineWidth = 1.2 + throttle * 1.5;
+        const pTipMid = transformShipPoint(-1.6 - plumeLen * 1.25, 0.0, jitter);
         draw3DEdge(V.nozzleL, pTipMid);
         draw3DEdge(V.nozzleR, pTipMid);
-      } else if (actualFx < -0.005 && telemetry.fuel > 0) {
-        // Reverse Braking: Forward retrograde plumes from bow RCS/reverse nozzles
+
+        // Twin nozzle flare crossbars for high visual presence
+        const flareSpread = 0.25 + throttle * 0.15;
+        const pFlL1 = transformShipPoint(-1.7, -0.4 - flareSpread, 0);
+        const pFlL2 = transformShipPoint(-1.7, -0.4 + flareSpread, 0);
+        const pFlR1 = transformShipPoint(-1.7, 0.4 - flareSpread, 0);
+        const pFlR2 = transformShipPoint(-1.7, 0.4 + flareSpread, 0);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 1.0;
+        draw3DEdge(pFlL1, pFlL2);
+        draw3DEdge(pFlR1, pFlR2);
+      } else if (actualFx < -0.005 && hasFuel) {
+        // Reverse Braking: Forward retrograde plumes from bow nozzles
         const throttle = Math.min(1.0, Math.abs(actualFx) / 0.25);
-        const revLen = throttle * (1.2 + Math.random() * 0.5);
+        const revLen = 0.4 + throttle * (1.2 + Math.random() * 0.5);
 
         ctx.strokeStyle = '#f59e0b';
         ctx.shadowColor = '#ef4444';
@@ -659,8 +678,8 @@ export default function SpaceOrbitViewer3D() {
       }
 
       // RCS Cold-Gas Plumes (Proportional to Actual Firing Commands: Torque & Lateral)
-      const effTorque = (telemetry.torque !== undefined) ? telemetry.torque : 0.0;
-      const effLat = (telemetry.thrust_y !== undefined) ? telemetry.thrust_y : 0.0;
+      const effTorque = (tlm.torque !== undefined) ? tlm.torque : 0.0;
+      const effLat = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
 
       const drawRcsJet = (bx, by, bz, dirY, dirX = 0, power = 0.15) => {
         const normPower = Math.min(1.0, Math.max(0.2, power / 0.25));
@@ -812,11 +831,11 @@ export default function SpaceOrbitViewer3D() {
       }
     },
       [
-        { id: 'chase', label: 'CHASE (後方上)' },
-        { id: 'nose', label: 'FRONT (正面上)' },
-        { id: 'hero', label: 'HERO (右下煽り)' },
-        { id: 'orbit', label: 'PATROL (360°巡回)' },
-        { id: 'cinema', label: cameraPreset === 'cinema' ? `CINEMA [CAM ${cinemaIndex + 1}/4]` : 'CINEMA (自)' }
+        { id: 'chase', label: 'CHASE' },
+        { id: 'nose', label: 'FRONT' },
+        { id: 'hero', label: 'HERO' },
+        { id: 'orbit', label: 'PATROL' },
+        { id: 'cinema', label: cameraPreset === 'cinema' ? `CINEMA [CAM ${cinemaIndex + 1}/4]` : 'CINEMA (AUTO)' }
       ].map(preset =>
         React.createElement('button', {
           key: preset.id,
