@@ -1,0 +1,242 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 720" width="100%" height="100%" style="background:#070b14; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;">
+  <defs>
+    <!-- Background Grid -->
+    <pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse">
+      <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#10192d" stroke-width="0.8"/>
+    </pattern>
+    <pattern id="majorGrid" width="100" height="100" patternUnits="userSpaceOnUse">
+      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#192744" stroke-width="1.2"/>
+    </pattern>
+
+    <!-- Glow Filters -->
+    <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-orange" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-magenta" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="mainPlume" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
+      <stop offset="60%" stop-color="#0284c7" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="rcsPlumeH" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.9" />
+      <stop offset="70%" stop-color="#d97706" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="rcsPlumeHRev" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.9" />
+      <stop offset="70%" stop-color="#d97706" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Markers -->
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#f59e0b" />
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#22c55e" />
+    </marker>
+    <marker id="arrow-magenta" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#ec4899" />
+    </marker>
+  </defs>
+
+  <!-- Grids -->
+  <rect width="1000" height="720" fill="url(#grid)" />
+  <rect width="1000" height="720" fill="url(#majorGrid)" />
+
+  <!-- Outer Frame & Header -->
+  <rect x="20" y="20" width="960" height="680" rx="8" fill="none" stroke="#1e293b" stroke-width="1.5" />
+  <rect x="20" y="20" width="960" height="48" rx="8" fill="#0b1220" stroke="#1e293b" stroke-width="1.5" />
+  <text x="40" y="50" fill="#38bdf8" font-size="16" font-weight="700" letter-spacing="1.5">SPACEGUIDANCE INSPECTOR // COMPLETE HYBRID ATTITUDE &amp; PROPULSION TOPOLOGY</text>
+  <text x="960" y="50" fill="#64748b" font-size="12" text-anchor="end" font-weight="600">OPTION B: PHYSICAL JUSTIFICATION + REACTION WHEEL</text>
+
+  <!-- Coordinate Legend (Top Right) -->
+  <g transform="translate(860, 115)">
+    <circle cx="0" cy="0" r="28" fill="#0b1220" stroke="#334155" stroke-width="1.2" />
+    <!-- +X Axis (Up/Forward) -->
+    <line x1="0" y1="0" x2="0" y2="-22" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-cyan)" />
+    <text x="0" y="-26" fill="#38bdf8" font-size="10" font-weight="700" text-anchor="middle">+X (Forward/Roll)</text>
+    <!-- +Y Axis (Left/Port) -->
+    <line x1="0" y1="0" x2="-22" y2="0" stroke="#22c55e" stroke-width="2" marker-end="url(#arrow-green)" />
+    <text x="-26" y="4" fill="#22c55e" font-size="10" font-weight="700" text-anchor="end">+Y (Port/Pitch)</text>
+    <!-- Center Dot (+Z Yaw Out of Screen) -->
+    <circle cx="0" cy="0" r="3" fill="#ec4899" />
+    <text x="8" y="16" fill="#ec4899" font-size="9" font-weight="600">+Z (Dorsal ⊙)</text>
+  </g>
+
+  <!-- =================================================================== -->
+  <!-- OPTICAL SENSOR BAR (Forward Lookahead) -->
+  <!-- =================================================================== -->
+  <polygon points="500,190 340,90 660,90" fill="#22c55e" fill-opacity="0.04" stroke="#22c55e" stroke-width="0.8" stroke-dasharray="3,3" />
+  <line x1="340" y1="90" x2="660" y2="90" stroke="#22c55e" stroke-width="3.5" filter="url(#glow-green)" />
+  <rect x="330" y="85" width="340" height="10" rx="3" fill="#0f2e1b" stroke="#22c55e" stroke-width="1" />
+
+  <!-- 8 Optical Sensors (CH 0 to CH 7) -->
+  <g>
+    <circle cx="360" cy="90" r="4.5" fill="#4ade80" /><text x="360" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH7</text>
+    <circle cx="400" cy="90" r="4.5" fill="#4ade80" /><text x="400" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH6</text>
+    <circle cx="440" cy="90" r="4.5" fill="#4ade80" /><text x="440" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH5</text>
+    <circle cx="480" cy="90" r="4.5" fill="#4ade80" /><text x="480" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH4</text>
+    <circle cx="520" cy="90" r="4.5" fill="#4ade80" /><text x="520" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH3</text>
+    <circle cx="560" cy="90" r="4.5" fill="#4ade80" /><text x="560" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH2</text>
+    <circle cx="600" cy="90" r="4.5" fill="#4ade80" /><text x="600" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH1</text>
+    <circle cx="640" cy="90" r="4.5" fill="#4ade80" /><text x="640" y="78" fill="#4ade80" font-size="9" font-weight="700" text-anchor="middle">CH0</text>
+  </g>
+  <line x1="500" y1="90" x2="500" y2="190" stroke="#22c55e" stroke-width="1.2" stroke-dasharray="2,2" />
+  <text x="510" y="145" fill="#22c55e" font-size="10" font-weight="600">Ahead: +0.50m</text>
+
+  <!-- =================================================================== -->
+  <!-- SPACECRAFT HULL -->
+  <!-- =================================================================== -->
+  <polygon points="500,190 320,470 430,490 500,475 570,490 680,470" fill="#08101e" stroke="#38bdf8" stroke-width="2.5" filter="url(#glow-cyan)" />
+
+  <!-- Cockpit Canopy -->
+  <polygon points="500,240 465,330 535,330" fill="#0e2442" stroke="#38bdf8" stroke-width="1.5" />
+  <line x1="500" y1="240" x2="500" y2="330" stroke="#38bdf8" stroke-width="1" />
+
+  <!-- Structural Ribs -->
+  <line x1="500" y1="240" x2="320" y2="470" stroke="#1e3a5f" stroke-width="1.2" />
+  <line x1="500" y1="240" x2="680" y2="470" stroke="#1e3a5f" stroke-width="1.2" />
+  <line x1="465" y1="330" x2="430" y2="490" stroke="#1e3a5f" stroke-width="1.2" />
+  <line x1="535" y1="330" x2="570" y2="490" stroke="#1e3a5f" stroke-width="1.2" />
+
+  <!-- =================================================================== -->
+  <!-- INTERNAL REACTION WHEEL ASSEMBLY (Center of Mass) -->
+  <!-- =================================================================== -->
+  <g transform="translate(500, 385)">
+    <!-- Outer RW Casing / Stator -->
+    <circle cx="0" cy="0" r="38" fill="#110e20" stroke="#ec4899" stroke-width="2" stroke-dasharray="4,2" />
+    <!-- Flywheel Rotor Disk -->
+    <circle cx="0" cy="0" r="28" fill="#1f1435" stroke="#ec4899" stroke-width="2.5" filter="url(#glow-magenta)" />
+    <!-- Flywheel Spokes -->
+    <line x1="-28" y1="0" x2="28" y2="0" stroke="#ec4899" stroke-width="1.8" />
+    <line x1="0" y1="-28" x2="0" y2="28" stroke="#ec4899" stroke-width="1.8" />
+    <!-- Motor Hub -->
+    <circle cx="0" cy="0" r="10" fill="#070b14" stroke="#f472b6" stroke-width="2" />
+    <circle cx="0" cy="0" r="3.5" fill="#ffffff" />
+
+    <!-- Spin Momentum Arrows (Curved) -->
+    <path d="M -18,-18 A 25 25 0 0 1 18,-18" fill="none" stroke="#f472b6" stroke-width="2" marker-end="url(#arrow-magenta)" />
+    <path d="M 18,18 A 25 25 0 0 1 -18,18" fill="none" stroke="#f472b6" stroke-width="2" marker-end="url(#arrow-magenta)" />
+
+    <!-- Callout to Right -->
+    <line x1="38" y1="0" x2="160" y2="-40" stroke="#ec4899" stroke-width="1.2" />
+    <circle cx="160" cy="-40" r="3" fill="#ec4899" />
+    <text x="168" y="-46" fill="#ec4899" font-size="12" font-weight="700">INTERNAL REACTION WHEEL (RW)</text>
+    <text x="168" y="-32" fill="#e2e8f0" font-size="10" font-weight="600">• 燃料消費ゼロ: 電気駆動ブラシレスフライホイール</text>
+    <text x="168" y="-18" fill="#94a3b8" font-size="9">• 慣性モーメント: Iw = 0.02 kg·m² | 回転限界: ±6,000 RPM</text>
+    <text x="168" y="-4" fill="#94a3b8" font-size="9">• 角運動量保存則: τ_body = -τ_wheel (作用・反作用)</text>
+  </g>
+
+  <!-- =================================================================== -->
+  <!-- MAIN PROPULSION (Dual Aft Engines) -->
+  <!-- =================================================================== -->
+  <rect x="440" y="490" width="22" height="16" rx="2" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5" />
+  <rect x="538" y="490" width="22" height="16" rx="2" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5" />
+  <polygon points="442,506 460,506 451,570" fill="url(#mainPlume)" filter="url(#glow-cyan)" />
+  <polygon points="540,506 558,506 549,570" fill="url(#mainPlume)" filter="url(#glow-cyan)" />
+
+  <line x1="550" y1="550" x2="630" y2="590" stroke="#38bdf8" stroke-width="1.2" />
+  <circle cx="630" cy="590" r="3" fill="#38bdf8" />
+  <text x="640" y="585" fill="#38bdf8" font-size="11" font-weight="700">MAIN PROPULSION (Dual Engines)</text>
+  <text x="640" y="600" fill="#94a3b8" font-size="9.5">前進推力 Fx: Max 50 N (燃料消費: 推力比例)</text>
+
+  <!-- =================================================================== -->
+  <!-- RCS PODS (4 Pods: Horizontal + Vertical Roll Nozzles) -->
+  <!-- =================================================================== -->
+
+  <!-- [POD 1: Bow Port RCS] -->
+  <g transform="translate(425, 255)">
+    <rect x="-8" y="-12" width="16" height="24" rx="2" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" />
+    <circle cx="0" cy="0" r="2.5" fill="#f59e0b" />
+    <polygon points="-8,-4 -8,4 -32,0" fill="url(#rcsPlumeHRev)" filter="url(#glow-orange)" />
+    <line x1="12" y1="0" x2="36" y2="0" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrow-orange)" />
+    <line x1="-8" y1="-8" x2="-80" y2="-40" stroke="#f59e0b" stroke-width="1.2" />
+    <circle cx="-80" cy="-40" r="3" fill="#f59e0b" />
+    <text x="-85" y="-45" fill="#f59e0b" font-size="11" font-weight="700" text-anchor="end">BOW PORT RCS [Pod 1]</text>
+    <text x="-85" y="-32" fill="#94a3b8" font-size="9" text-anchor="end">+Y Lateral Assist / +Yaw Torque</text>
+  </g>
+
+  <!-- [POD 2: Bow Starboard RCS] -->
+  <g transform="translate(575, 255)">
+    <rect x="-8" y="-12" width="16" height="24" rx="2" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" />
+    <circle cx="0" cy="0" r="2.5" fill="#f59e0b" />
+    <polygon points="8,-4 8,4 32,0" fill="url(#rcsPlumeH)" filter="url(#glow-orange)" />
+    <line x1="-12" y1="0" x2="-36" y2="0" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrow-orange)" />
+    <line x1="8" y1="-8" x2="80" y2="-40" stroke="#f59e0b" stroke-width="1.2" />
+    <circle cx="80" cy="-40" r="3" fill="#f59e0b" />
+    <text x="85" y="-45" fill="#f59e0b" font-size="11" font-weight="700">BOW STARBOARD RCS [Pod 2]</text>
+    <text x="85" y="-32" fill="#94a3b8" font-size="9">-Y Lateral Assist / -Yaw Torque</text>
+  </g>
+
+  <!-- [POD 3: Stern Port RCS + VERTICAL ROLL NOZZLES] -->
+  <g transform="translate(320, 465)">
+    <rect x="-10" y="-14" width="20" height="28" rx="2" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" />
+    <polygon points="-10,-4 -10,4 -32,0" fill="url(#rcsPlumeHRev)" filter="url(#glow-orange)" />
+    <!-- Vertical Roll Nozzle Markers (Top ⊙ / Bottom ⊗) -->
+    <circle cx="0" cy="-6" r="3" fill="#f59e0b" />
+    <text x="-2" y="-5" fill="#000" font-size="5" font-weight="900">⊙</text>
+    <circle cx="0" cy="6" r="3" fill="#f59e0b" />
+    <text x="-2" y="7" fill="#000" font-size="5" font-weight="900">⊗</text>
+
+    <!-- Callout with Roll explanation -->
+    <line x1="-10" y1="8" x2="-60" y2="70" stroke="#f59e0b" stroke-width="1.2" />
+    <circle cx="-60" cy="70" r="3" fill="#f59e0b" />
+    <text x="-65" y="66" fill="#f59e0b" font-size="11" font-weight="700" text-anchor="end">STERN PORT RCS [Pod 3] + ROLL NOZZLES</text>
+    <text x="-65" y="79" fill="#e2e8f0" font-size="9.5" text-anchor="end">天頂(+Z) / 天底(-Z) ロールノズル内蔵</text>
+    <text x="-65" y="92" fill="#94a3b8" font-size="9" text-anchor="end">偶力噴射によりインサイドバンク姿勢を能動生成</text>
+  </g>
+
+  <!-- [POD 4: Stern Starboard RCS + VERTICAL ROLL NOZZLES] -->
+  <g transform="translate(680, 465)">
+    <rect x="-10" y="-14" width="20" height="28" rx="2" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" />
+    <polygon points="10,-4 10,4 32,0" fill="url(#rcsPlumeH)" filter="url(#glow-orange)" />
+    <!-- Vertical Roll Nozzle Markers -->
+    <circle cx="0" cy="-6" r="3" fill="#f59e0b" />
+    <text x="-2" y="-5" fill="#000" font-size="5" font-weight="900">⊙</text>
+    <circle cx="0" cy="6" r="3" fill="#f59e0b" />
+    <text x="-2" y="7" fill="#000" font-size="5" font-weight="900">⊗</text>
+
+    <line x1="10" y1="8" x2="60" y2="70" stroke="#f59e0b" stroke-width="1.2" />
+    <circle cx="60" cy="70" r="3" fill="#f59e0b" />
+    <text x="65" y="66" fill="#f59e0b" font-size="11" font-weight="700">STERN STARBOARD RCS [Pod 4] + ROLL NOZZLES</text>
+    <text x="65" y="79" fill="#e2e8f0" font-size="9.5">天頂(+Z) / 天底(-Z) ロールノズル内蔵</text>
+    <text x="65" y="92" fill="#94a3b8" font-size="9">偶力噴射によりインサイドバンク姿勢を能動生成</text>
+  </g>
+
+  <!-- =================================================================== -->
+  <!-- CONTROL VECTOR & GNC ARCHITECTURE EXPLANATION BOX (Bottom Left) -->
+  <!-- =================================================================== -->
+  <g transform="translate(40, 540)">
+    <rect x="0" y="0" width="370" height="140" rx="6" fill="#0b1220" stroke="#1e293b" stroke-width="1.2" />
+    <text x="14" y="24" fill="#38bdf8" font-size="12" font-weight="700">HYBRID ACTUATION STRATEGY (二刀流ハイブリッド制御)</text>
+    
+    <text x="14" y="46" fill="#ec4899" font-size="10" font-weight="700">1. リアクションホイール (Reaction Wheel: 優先):</text>
+    <text x="24" y="60" fill="#94a3b8" font-size="9.5">通常旋回はフライホイールで全制御。推進剤消費ゼロで超高精度追従。</text>
+
+    <text x="14" y="80" fill="#f59e0b" font-size="10" font-weight="700">2. RCS 脱飽和アンローディング (Desaturation):</text>
+    <text x="24" y="94" fill="#94a3b8" font-size="9.5">ホイールが 5,000 RPM に達した際、RCS スラスタで姿勢を保持しホイールを減速。</text>
+
+    <text x="14" y="114" fill="#38bdf8" font-size="10" font-weight="700">3. ロールノズル連動バンク (Option B 正当化):</text>
+    <text x="24" y="128" fill="#94a3b8" font-size="9.5">主翼端の上下ノズル偶力噴射でバンク角を形成、主推力ベクトルを旋回中心へ指向。</text>
+  </g>
+
+</svg>
