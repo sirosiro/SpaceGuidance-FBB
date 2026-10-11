@@ -23,7 +23,7 @@ void SpacePhysicsEngine::init_stage1_asteroid_track() {
     }
 }
 
-void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, double torque, double dt) {
+void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, double rcs_torque, double wheel_torque, double dt) {
     // Zero-friction, microgravity rigid-body dynamics (F = m*a, tau = I*alpha)
     // Convert body-frame thruster forces to inertial frame
     double cos_a = std::cos(state_.angle);
@@ -42,13 +42,35 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
     state_.pos.x += state_.vel.x * dt;
     state_.pos.y += state_.vel.y * dt;
 
-    // Rotational motion
-    double alpha = torque / inertia_;
+    // Reaction Wheel Dynamics
+    // Flywheel inertia Iw = 0.02 kg*m^2, Max Speed = 6000 RPM (~628.3 rad/s)
+    const double wheel_inertia = 0.02;
+    const double max_wheel_rad_s = 6000.0 * (2.0 * M_PI / 60.0);
+    double current_wheel_rad_s = state_.wheel_rpm * (2.0 * M_PI / 60.0);
+
+    // Saturation protection
+    double actual_wheel_torque = wheel_torque;
+    if (current_wheel_rad_s >= max_wheel_rad_s && wheel_torque > 0.0) {
+        actual_wheel_torque = 0.0;
+    } else if (current_wheel_rad_s <= -max_wheel_rad_s && wheel_torque < 0.0) {
+        actual_wheel_torque = 0.0;
+    }
+
+    // Accelerate internal flywheel
+    double wheel_alpha = actual_wheel_torque / wheel_inertia;
+    current_wheel_rad_s += wheel_alpha * dt;
+    current_wheel_rad_s = std::clamp(current_wheel_rad_s, -max_wheel_rad_s, max_wheel_rad_s);
+    state_.wheel_rpm = current_wheel_rad_s * (60.0 / (2.0 * M_PI));
+
+    // Spacecraft Rotational motion (Newton's 3rd Law counter-torque)
+    // Net body torque = RCS thruster torque - Reaction Wheel motor torque
+    double net_torque = rcs_torque - actual_wheel_torque;
+    double alpha = net_torque / inertia_;
     state_.omega += alpha * dt;
     state_.angle += state_.omega * dt;
 
-    // Fuel consumption: proportional to thrust magnitude
-    double thrust_mag = std::abs(thrust_forward) + std::abs(thrust_lateral) + std::abs(torque);
+    // Fuel consumption: ONLY thrusters consume propellant! Reaction wheel consumes zero fuel!
+    double thrust_mag = std::abs(thrust_forward) + std::abs(thrust_lateral) + std::abs(rcs_torque);
     state_.fuel = std::max(0.0, state_.fuel - (thrust_mag * 0.0005 * dt));
 }
 

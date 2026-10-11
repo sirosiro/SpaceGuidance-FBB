@@ -16,6 +16,7 @@ struct SpacecraftState {
     double omega = 0.0;// Angular velocity (rad/s)
     double fuel = 100.0;// Fuel percentage / Delta-V budget (m/s)
     bool is_docked = false;
+    double wheel_rpm = 0.0; // Reaction Wheel spin speed (RPM)
 };
 
 struct PipelinePoint {
@@ -31,7 +32,7 @@ public:
     void init_stage1_asteroid_track();
 
     // Step physics with applied thruster forces (Newtons) and torque (N*m)
-    void step(double thrust_forward, double thrust_lateral, double torque, double dt = 0.01);
+    void step(double thrust_forward, double thrust_lateral, double rcs_torque, double wheel_torque = 0.0, double dt = 0.01);
 
     // Compute 8-channel optical line sensor ADC values (packed into 32-bit uint)
     uint32_t compute_sensor_adc() const;

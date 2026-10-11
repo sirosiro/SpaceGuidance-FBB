@@ -4,8 +4,47 @@
             "type": "branch",
             "data": [
                 {
+                    "type": "leaf",
+                    "data": {
+                        "views": [
+                            "sg-orbit-viewer"
+                        ],
+                        "activeView": "sg-orbit-viewer",
+                        "id": "7"
+                    },
+                    "size": 1129.1304988432676
+                },
+                {
                     "type": "branch",
                     "data": [
+                        {
+                            "type": "branch",
+                            "data": [
+                                {
+                                    "type": "leaf",
+                                    "data": {
+                                        "views": [
+                                            "sg-telemetry-gauge"
+                                        ],
+                                        "activeView": "sg-telemetry-gauge",
+                                        "id": "6"
+                                    },
+                                    "size": 360
+                                },
+                                {
+                                    "type": "leaf",
+                                    "data": {
+                                        "views": [
+                                            "sg-chaos-fdir"
+                                        ],
+                                        "activeView": "sg-chaos-fdir",
+                                        "id": "8"
+                                    },
+                                    "size": 361.86950115673244
+                                }
+                            ],
+                            "size": 304
+                        },
                         {
                             "type": "leaf",
                             "data": {
@@ -15,55 +54,16 @@
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 470
-                        },
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
-                                    "sg-orbit-viewer"
-                                ],
-                                "activeView": "sg-orbit-viewer",
-                                "id": "7"
-                            },
-                            "size": 471
+                            "size": 619
                         }
                     ],
-                    "size": 862
-                },
-                {
-                    "type": "branch",
-                    "data": [
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
-                                    "sg-chaos-fdir"
-                                ],
-                                "activeView": "sg-chaos-fdir",
-                                "id": "8"
-                            },
-                            "size": 470
-                        },
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
-                                    "sg-telemetry-gauge"
-                                ],
-                                "activeView": "sg-telemetry-gauge",
-                                "id": "6"
-                            },
-                            "size": 471
-                        }
-                    ],
-                    "size": 863
+                    "size": 721.8695011567324
                 }
             ],
-            "size": 941
+            "size": 923
         },
-        "width": 1725,
-        "height": 941,
+        "width": 1851,
+        "height": 923,
         "orientation": "HORIZONTAL"
     },
     "panels": {

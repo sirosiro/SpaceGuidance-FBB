@@ -21,7 +21,7 @@ struct ShmSpaceGuidance {
     uint32_t safety_limit;     // 0x20
     uint32_t watchdog_kick;    // 0x24
     uint32_t chaos_fault_inj;  // 0x28
-    uint32_t reserved0;        // 0x2C (Padding for 8-byte alignment)
+    uint32_t wheel_torque_cmd; // 0x2C (Reaction Wheel torque command: Q16.16)
 
     // Telemetry export for Web UI / DPPA (8-byte aligned)
     double pos_x;              // 0x30
@@ -32,8 +32,9 @@ struct ShmSpaceGuidance {
     double omega;              // 0x58
     double fuel;               // 0x60
     double cross_track_err;    // 0x68
-    uint32_t fdir_mode;        // 0x70
-    uint32_t reserved1;        // 0x74
+    double wheel_rpm;          // 0x70 (Reaction Wheel flywheel speed: RPM)
+    uint32_t fdir_mode;        // 0x78
+    uint32_t reserved1;        // 0x7C
 };
 
 int main(int argc, char** argv) {
@@ -80,14 +81,30 @@ int main(int argc, char** argv) {
         // Read commands from shared memory
         double fx = static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0 * 50.0;
         double fy = static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0 * 50.0;
-        double tau = static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0;
+        double tau_rcs = static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0;
+        double tau_wheel = static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0; // Max 20.0 Nm wheel torque
 
         // Step physics (dt = 10ms)
-        physics.step(fx, fy, tau, 0.01);
+        physics.step(fx, fy, tau_rcs, tau_wheel, 0.01);
 
         // Update sensor readings
         uint32_t adc = physics.compute_sensor_adc();
         shm->sensor_raw = adc;
+
+        // Emulate FPGA RTL line_sensor_filter centroid calculation (Q16.16)
+        uint32_t sum_weights = 0;
+        uint32_t weighted_pos = 0;
+        for (int i = 0; i < 8; ++i) {
+            uint32_t ch = (adc >> (i * 4)) & 0x0F;
+            sum_weights += ch;
+            weighted_pos += ch * i;
+        }
+        if (sum_weights > 8) {
+            int32_t centroid_q16 = static_cast<int32_t>(((static_cast<uint64_t>(weighted_pos) << 16) / sum_weights) - 229376);
+            shm->sensor_edge = static_cast<uint32_t>(centroid_q16);
+        } else {
+            shm->sensor_edge = 0;
+        }
 
         // Export telemetry to shared memory
         const auto& state = physics.get_state();
@@ -99,9 +116,10 @@ int main(int argc, char** argv) {
         shm->omega = state.omega;
         shm->fuel  = state.fuel;
         shm->cross_track_err = physics.get_cross_track_error();
+        shm->wheel_rpm = state.wheel_rpm;
 
         // Write periodically to JSON file for REST API
-        if (++tick_cnt % 10 == 0) {
+        if (++tick_cnt % 2 == 0) { // 50Hz smooth telemetry stream
             std::ofstream jf("/tmp/space_guidance_telemetry.json");
             jf << "{"
                << "\"pos_x\":" << state.pos.x << ","
@@ -113,7 +131,12 @@ int main(int argc, char** argv) {
                << "\"fuel\":" << state.fuel << ","
                << "\"cross_track_err\":" << shm->cross_track_err << ","
                << "\"sensor_raw\":" << adc << ","
-               << "\"fdir_mode\":" << shm->fdir_mode
+               << "\"fdir_mode\":" << shm->fdir_mode << ","
+               << "\"thrust_x\":" << (static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0) << ","
+               << "\"thrust_y\":" << (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0) << ","
+               << "\"torque\":" << (static_cast<int32_t>(shm->torque_cmd) / 65536.0) << ","
+               << "\"wheel_rpm\":" << state.wheel_rpm << ","
+               << "\"wheel_torque\":" << (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0)
                << "}\n";
         }
 
