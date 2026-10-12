@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include "space_physics.hpp"
@@ -40,16 +41,34 @@ struct ShmSpaceGuidance {
 int main(int argc, char** argv) {
     std::cout << "[SpaceGuidance Daemon] Initializing simulation daemon..." << std::endl;
 
-    // Create / open shared memory file
-    const char* shm_path = "/tmp/fbb_space_guidance_shm";
-    int fd = open(shm_path, O_RDWR | O_CREAT | O_TRUNC, 0666);
+    // Create / open shared memory file (F-BB standard: /tmp/vfpga_reg)
+    const char* shm_env = getenv("FBB_SHM_PATH");
+    const char* shm_path = shm_env ? shm_env : "/tmp/vfpga_reg";
+    int fd = open(shm_path, O_RDWR | O_CREAT, 0666);
+    if (fd < 0) {
+        // Fallback to legacy path if /tmp/vfpga_reg cannot be opened
+        shm_path = "/tmp/fbb_space_guidance_shm";
+        fd = open(shm_path, O_RDWR | O_CREAT, 0666);
+    }
     if (fd < 0) {
         std::cerr << "Failed to open shared memory: " << shm_path << std::endl;
         return 1;
     }
-    if (ftruncate(fd, sizeof(ShmSpaceGuidance)) != 0) {
-        std::cerr << "Failed to truncate shared memory file" << std::endl;
-        return 1;
+
+    // Ensure shared memory file size is at least 4096 bytes (matches DTS 0x1000 size)
+    struct stat st;
+    size_t target_size = 4096;
+    if (fstat(fd, &st) == 0 && st.st_size < (off_t)target_size) {
+        if (ftruncate(fd, target_size) != 0) {
+            std::cerr << "Failed to truncate shared memory file" << std::endl;
+            return 1;
+        }
+    }
+
+    // Maintain backwards compatibility via symlink if paths differ
+    if (strcmp(shm_path, "/tmp/fbb_space_guidance_shm") != 0) {
+        unlink("/tmp/fbb_space_guidance_shm");
+        if (symlink(shm_path, "/tmp/fbb_space_guidance_shm") == 0) {}
     }
 
     auto* shm = static_cast<ShmSpaceGuidance*>(mmap(nullptr, sizeof(ShmSpaceGuidance),

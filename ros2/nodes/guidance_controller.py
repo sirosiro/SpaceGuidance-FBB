@@ -14,13 +14,21 @@ class SpaceGuidanceHardware:
     SHM_LAYOUT = "=12I9d2I" # 12 uint32 + 9 doubles + 2 uint32 = 128 bytes
     SIZE = struct.calcsize(SHM_LAYOUT)
 
-    def __init__(self, dev_path="/tmp/fbb_space_guidance_shm"):
+    def __init__(self, dev_path=None):
+        if dev_path is None:
+            dev_path = os.getenv("FBB_SHM_PATH", "/tmp/vfpga_reg")
+            if not os.path.exists(dev_path) and os.path.exists("/tmp/fbb_space_guidance_shm"):
+                dev_path = "/tmp/fbb_space_guidance_shm"
         self.dev_path = dev_path
         if not os.path.exists(dev_path):
             with open(dev_path, "wb") as f:
-                f.write(b"\x00" * self.SIZE)
+                f.write(b"\x00" * max(self.SIZE, 4096))
         self.f = open(dev_path, "r+b")
-        self.mm = mmap.mmap(self.f.fileno(), self.SIZE)
+        file_size = os.path.getsize(dev_path)
+        if file_size < self.SIZE:
+            self.f.truncate(self.SIZE)
+            file_size = self.SIZE
+        self.mm = mmap.mmap(self.f.fileno(), file_size)
 
     def read_registers(self):
         self.mm.seek(0)

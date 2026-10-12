@@ -4,15 +4,61 @@
             "type": "branch",
             "data": [
                 {
-                    "type": "leaf",
-                    "data": {
-                        "views": [
-                            "sg-orbit-viewer"
-                        ],
-                        "activeView": "sg-orbit-viewer",
-                        "id": "7"
-                    },
-                    "size": 1061
+                    "type": "branch",
+                    "data": [
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "registerMonitor"
+                                ],
+                                "activeView": "registerMonitor",
+                                "id": "4"
+                            },
+                            "size": 481
+                        },
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "dtsVisualizer",
+                                    "registerTracer"
+                                ],
+                                "activeView": "registerTracer",
+                                "id": "2"
+                            },
+                            "size": 472
+                        }
+                    ],
+                    "size": 342
+                },
+                {
+                    "type": "branch",
+                    "data": [
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "sg-orbit-viewer"
+                                ],
+                                "activeView": "sg-orbit-viewer",
+                                "id": "7"
+                            },
+                            "size": 580
+                        },
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "uartTerminal_vfpga_uart_1"
+                                ],
+                                "activeView": "uartTerminal_vfpga_uart_1",
+                                "id": "3"
+                            },
+                            "size": 373
+                        }
+                    ],
+                    "size": 985
                 },
                 {
                     "type": "branch",
@@ -29,7 +75,7 @@
                                         "activeView": "sg-telemetry-gauge",
                                         "id": "6"
                                     },
-                                    "size": 338
+                                    "size": 343
                                 },
                                 {
                                     "type": "leaf",
@@ -40,10 +86,10 @@
                                         "activeView": "sg-chaos-fdir",
                                         "id": "8"
                                     },
-                                    "size": 340
+                                    "size": 346
                                 }
                             ],
-                            "size": 302
+                            "size": 314
                         },
                         {
                             "type": "leaf",
@@ -54,19 +100,35 @@
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 614
+                            "size": 639
                         }
                     ],
-                    "size": 678
+                    "size": 689
                 }
             ],
-            "size": 916
+            "size": 953
         },
-        "width": 1739,
-        "height": 916,
+        "width": 2016,
+        "height": 953,
         "orientation": "HORIZONTAL"
     },
     "panels": {
+        "dtsVisualizer": {
+            "id": "dtsVisualizer",
+            "contentComponent": "dtsVisualizer",
+            "params": {
+                "_componentName": "dtsVisualizer"
+            },
+            "title": "DTS Visualizer & AI"
+        },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
+        },
         "sg-orbit-viewer": {
             "id": "sg-orbit-viewer",
             "contentComponent": "sg-orbit-viewer",
@@ -74,6 +136,15 @@
                 "_componentName": "sg-orbit-viewer"
             },
             "title": "SG 3D Cyber Orbit Viewer"
+        },
+        "uartTerminal_vfpga_uart_1": {
+            "id": "uartTerminal_vfpga_uart_1",
+            "contentComponent": "uartTerminal",
+            "params": {
+                "deviceName": "serial",
+                "_componentName": "uartTerminal"
+            },
+            "title": "UART: serial"
         },
         "sg-telemetry-gauge": {
             "id": "sg-telemetry-gauge",
@@ -98,7 +169,15 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
+        },
+        "registerMonitor": {
+            "id": "registerMonitor",
+            "contentComponent": "registerMonitor",
+            "params": {
+                "_componentName": "registerMonitor"
+            },
+            "title": "Registers"
         }
     },
-    "activeGroup": "1"
+    "activeGroup": "2"
 }

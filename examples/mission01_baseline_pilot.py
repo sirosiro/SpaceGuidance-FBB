@@ -22,7 +22,40 @@ import math
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ros2", "nodes"))
 from guidance_controller import SpaceGuidanceHardware
 
+class UartTee:
+    """Terminal (stdout) と F-BB 仮想 UART (/dev/ttyPS1) へログを複製出力するハンドラ"""
+    def __init__(self, uart_dev="/dev/ttyPS1"):
+        self.stdout = sys.__stdout__
+        self.uart_fd = None
+        try:
+            self.uart_fd = os.open(uart_dev, os.O_RDWR | os.O_NOCTTY)
+        except Exception:
+            self.uart_fd = None
+
+    def write(self, data):
+        self.stdout.write(data)
+        if self.uart_fd is not None:
+            try:
+                # \r\n を単一の \n に正規化（PTY 側での二重改行 \n\n を防止）
+                formatted = data.replace("\r\n", "\n").replace("\r", "")
+                os.write(self.uart_fd, formatted.encode("utf-8"))
+            except Exception:
+                pass
+
+    def flush(self):
+        self.stdout.flush()
+
+    def close(self):
+        if self.uart_fd is not None:
+            try:
+                os.close(self.uart_fd)
+            except Exception:
+                pass
+            self.uart_fd = None
+
 def run_pilot():
+    tee = UartTee()
+    sys.stdout = tee
     hw = SpaceGuidanceHardware()
     print("[Pilot] Space Guidance System Online. Engaging Stage 1 Autopilot...")
     print("[Pilot] 9 Checkpoint Gates active along 50m asteroid pipeline corridor.")
@@ -213,6 +246,9 @@ def run_pilot():
     finally:
         hw.write_commands(0.0, 0.0, 0.0, 0.0)
         hw.close()
+        if tee:
+            tee.close()
+        sys.stdout = sys.__stdout__
 
 if __name__ == "__main__":
     run_pilot()

@@ -18,4 +18,10 @@
             "WATCHDOG_KICK   @ 0x24",
             "CHAOS_FAULT_INJ @ 0x28";
     };
+
+    uart0: serial@e0001000 {
+        compatible = "xlnx,xuartps";
+        reg = <0xe0001000 0x1000>;
+        label = "/dev/ttyPS1";
+    };
 };
