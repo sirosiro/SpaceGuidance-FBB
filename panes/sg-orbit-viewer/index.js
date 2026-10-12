@@ -377,117 +377,347 @@ export default function SpaceOrbitViewer3D() {
 
       // ------------------------------------------------------------------------
       // 3. Draw 3D Asteroid Pipeline Corridor (Hexagonal Rings + Guide Rails)
+            // ------------------------------------------------------------------------
+      // 3. Draw Track / World Structures based on Active Stage ID
       // ------------------------------------------------------------------------
       const ringSpacing = 2.5;
       const hexRadius = 3.6;
       const hexAngles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
+      const stageId = tlm.stage_id || 1;
 
-      // Main Guidance Trajectory Line
-      ctx.strokeStyle = '#00f0ff';
-      ctx.shadowColor = '#00f0ff';
-      ctx.shadowBlur = 8;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      let firstPoint = true;
-      for (let px = 0.0; px <= 50.0; px += 0.5) {
-        const py = getPipelineY(px);
-        const pt = project3D(px, py, 0.0);
-        if (pt) {
-          if (firstPoint) { ctx.moveTo(pt.sx, pt.sy); firstPoint = false; }
-          else { ctx.lineTo(pt.sx, pt.sy); }
-        }
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      if (stageId === 2) {
+        // --------------------------------------------------------------------
+        // Stage 2: 100m High-Tension Carbon Nanotube Tether Cable & Rings
+        // --------------------------------------------------------------------
+        const cableLength = 100.0;
+        const isRuptured = !!tlm.cable_snapped;
+        const cableTension = tlm.cable_tension || 10000;
+        const cableColor = isRuptured ? '#ef4444' : (cableTension > 13000 ? '#f97316' : '#38bdf8');
 
-      // Hexagonal Portal Rings
-      for (let rx = 0.0; rx <= 50.0; rx += ringSpacing) {
-        const ry = getPipelineY(rx);
-        const isPast = (rx < shipX - 1.0);
-        const isNext = (!isPast && rx <= shipX + ringSpacing);
-
-        let ringColor = isNext ? '#38bdf8' : (isPast ? '#059669' : '#0284c7');
-        if (isNext && Math.abs(tlm.cross_track_err || 0) > 0.4) {
-          ringColor = '#ef4444';
-        }
-
-        const isGate = (rx > 0 && Math.abs(rx % 5.0) < 0.1 && rx < 49.0);
-        const gateIdx = isGate ? Math.round(rx / 5.0) : 0;
-
-        ctx.strokeStyle = ringColor;
-        ctx.shadowColor = ringColor;
-        ctx.shadowBlur = isNext ? 12 : (isGate ? 8 : 4);
-        ctx.lineWidth = isNext ? 2.8 : (isGate ? 2.0 : 1.0);
-
-        const hexPoints = [];
-        for (const a of hexAngles) {
-          const hx = rx;
-          const hy = ry + hexRadius * Math.sin(a);
-          const hz = hexRadius * Math.cos(a);
-          const hp = project3D(hx, hy, hz);
-          if (hp) hexPoints.push(hp);
-        }
-
-        if (hexPoints.length === 6) {
-          ctx.beginPath();
-          ctx.moveTo(hexPoints[0].sx, hexPoints[0].sy);
-          for (let i = 1; i < 6; i++) ctx.lineTo(hexPoints[i].sx, hexPoints[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-
-          // Gate Header HUD Label
-          if (isGate) {
-            const topPt = hexPoints[0];
-            if (topPt) {
-              ctx.save();
-              ctx.fillStyle = isPast ? '#10b981' : (isNext ? '#38bdf8' : '#94a3b8');
-              ctx.font = 'bold 11px monospace';
-              ctx.textAlign = 'center';
-              ctx.shadowColor = isNext ? '#38bdf8' : '#000000';
-              ctx.shadowBlur = 4;
-              ctx.fillText(`GATE ${String(gateIdx).padStart(2, '0')}`, topPt.sx, topPt.sy - 8);
-              ctx.restore();
-            }
-          }
-
-          // Ground struts
-          const bottomPt = hexPoints[4];
-          const pGround = project3D(rx, ry, groundZ);
-          if (pGround) {
-            ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 1;
-            ctx.shadowBlur = 0;
-            ctx.beginPath();
-            ctx.moveTo(bottomPt.sx, bottomPt.sy);
-            ctx.lineTo(pGround.sx, pGround.sy);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Longitudinal Tunnel Rails
-      const railOffsets = [
-        { dy: 0, dz: hexRadius },
-        { dy: -hexRadius, dz: 0 },
-        { dy: hexRadius, dz: 0 }
-      ];
-      ctx.strokeStyle = '#0369a1';
-      ctx.lineWidth = 1.0;
-      for (const ro of railOffsets) {
+        // Draw tether cable with dynamic transverse string wave
+        ctx.strokeStyle = cableColor;
+        ctx.shadowColor = cableColor;
+        ctx.shadowBlur = isRuptured ? 16 : 8;
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
-        let firstR = true;
-        for (let rx = 0.0; rx <= 50.0; rx += 1.0) {
-          const ry = getPipelineY(rx) + ro.dy;
-          const rz = ro.dz;
-          const rp = project3D(rx, ry, rz);
-          if (rp) {
-            if (firstR) { ctx.moveTo(rp.sx, rp.sy); firstR = false; }
-            else { ctx.lineTo(rp.sx, rp.sy); }
+        let firstCablePt = true;
+        for (let px = 0.0; px <= cableLength; px += 1.0) {
+          const vibOffset = (tlm.cable_vibration || 0.0) * Math.sin((px / cableLength) * Math.PI);
+          const pt = project3D(px, vibOffset, 0.0);
+          if (pt) {
+            if (firstCablePt) { ctx.moveTo(pt.sx, pt.sy); firstCablePt = false; }
+            else { ctx.lineTo(pt.sx, pt.sy); }
           }
         }
         ctx.stroke();
-      }
+        ctx.shadowBlur = 0;
 
+        // Draw altitude beacon rings every 10m (0m .. 100m)
+        for (let rx = 0.0; rx <= cableLength; rx += 10.0) {
+          const isPassed = rx < shipX - 1.0;
+          const isTarget = (rx >= cableLength - 0.1);
+          const ringColor = isTarget ? '#eab308' : (isPassed ? '#059669' : '#0284c7');
+          const ringRad = isTarget ? 4.5 : 2.5;
+
+          ctx.strokeStyle = ringColor;
+          ctx.shadowColor = ringColor;
+          ctx.shadowBlur = isTarget ? 14 : 4;
+          ctx.lineWidth = isTarget ? 2.8 : 1.2;
+
+          const circlePts = [];
+          for (let i = 0; i < 12; i++) {
+            const a = (i * Math.PI * 2) / 12;
+            const pt = project3D(rx, ringRad * Math.sin(a), ringRad * Math.cos(a));
+            if (pt) circlePts.push(pt);
+          }
+          if (circlePts.length === 12) {
+            ctx.beginPath();
+            ctx.moveTo(circlePts[0].sx, circlePts[0].sy);
+            for (let i = 1; i < 12; i++) ctx.lineTo(circlePts[i].sx, circlePts[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+
+            const topPt = circlePts[0];
+            if (topPt) {
+              ctx.save();
+              ctx.fillStyle = isTarget ? '#fde047' : (isPassed ? '#10b981' : '#94a3b8');
+              ctx.font = 'bold 11px monospace';
+              ctx.textAlign = 'center';
+              ctx.fillText(isTarget ? 'GEO ORBIT DOCK' : `BEACON ${Math.round(rx/10)} (${rx.toFixed(0)}m)`, topPt.sx, topPt.sy - 8);
+              ctx.restore();
+            }
+          }
+        }
+      } else if (stageId === 3) {
+        // --------------------------------------------------------------------
+        // Stage 3: 60m ISS Modular Box Truss Structure with Inspection Nodes
+        // --------------------------------------------------------------------
+        const trussLength = 60.0;
+        const halfW = 1.6;
+        const halfH = 1.6;
+        const cornerOffsets = [
+          { dy: -halfW, dz: -halfH },
+          { dy: halfW, dz: -halfH },
+          { dy: halfW, dz: halfH },
+          { dy: -halfW, dz: halfH }
+        ];
+
+        // 4 Main Longitudinal Steel Chords / Guide Rails
+        for (let c = 0; c < 4; c++) {
+          ctx.strokeStyle = (c === 2 || c === 3) ? '#0284c7' : '#475569';
+          ctx.lineWidth = (c === 2) ? 2.5 : 1.2;
+          ctx.beginPath();
+          let firstP = true;
+          for (let rx = 0.0; rx <= trussLength; rx += 2.0) {
+            const pt = project3D(rx, cornerOffsets[c].dy, cornerOffsets[c].dz);
+            if (pt) {
+              if (firstP) { ctx.moveTo(pt.sx, pt.sy); firstP = false; }
+              else { ctx.lineTo(pt.sx, pt.sy); }
+            }
+          }
+          ctx.stroke();
+        }
+
+        // Cross Bulkheads and Diagonal Bracing every 5m
+        for (let bx = 0.0; bx <= trussLength; bx += 5.0) {
+          const bPts = [];
+          for (const co of cornerOffsets) {
+            const pt = project3D(bx, co.dy, co.dz);
+            if (pt) bPts.push(pt);
+          }
+          if (bPts.length === 4) {
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+            ctx.moveTo(bPts[0].sx, bPts[0].sy);
+            ctx.lineTo(bPts[1].sx, bPts[1].sy);
+            ctx.lineTo(bPts[2].sx, bPts[2].sy);
+            ctx.lineTo(bPts[3].sx, bPts[3].sy);
+            ctx.closePath();
+            // Diagonal brace
+            ctx.moveTo(bPts[0].sx, bPts[0].sy);
+            ctx.lineTo(bPts[2].sx, bPts[2].sy);
+            ctx.stroke();
+          }
+        }
+
+        // 4 Critical Inspection Joints (15m, 30m, 45m, 60m)
+        const joints = [
+          { x: 15.0, name: 'JOINT 01: S1 TRUSS' },
+          { x: 30.0, name: 'JOINT 02: SARJ ROTARY' },
+          { x: 45.0, name: 'JOINT 03: P1 TRUSS' },
+          { x: 60.0, name: 'TERMINAL: DOCK LATCH' }
+        ];
+
+        for (const j of joints) {
+          const isPassed = j.x < shipX - 0.5;
+          const isClose = Math.abs(shipX - j.x) <= 0.6;
+          const jColor = isClose ? '#facc15' : (isPassed ? '#10b981' : '#38bdf8');
+
+          ctx.strokeStyle = jColor;
+          ctx.shadowColor = jColor;
+          ctx.shadowBlur = isClose ? 16 : 6;
+          ctx.lineWidth = isClose ? 3.0 : 1.8;
+
+          const jPts = [];
+          for (let i = 0; i < 8; i++) {
+            const a = (i * Math.PI * 2) / 8;
+            const pt = project3D(j.x, 2.8 * Math.sin(a), 2.8 * Math.cos(a));
+            if (pt) jPts.push(pt);
+          }
+          if (jPts.length === 8) {
+            ctx.beginPath();
+            ctx.moveTo(jPts[0].sx, jPts[0].sy);
+            for (let i = 1; i < 8; i++) ctx.lineTo(jPts[i].sx, jPts[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+
+            ctx.save();
+            ctx.fillStyle = jColor;
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(j.name, jPts[0].sx, jPts[0].sy - 10);
+            ctx.restore();
+          }
+        }
+        ctx.shadowBlur = 0;
+      } else if (stageId === 4) {
+        // --------------------------------------------------------------------
+        // Stage 4: 50m Deep Space Laser Docking Corridor & Target Station
+        // --------------------------------------------------------------------
+        const dockDist = 50.0;
+
+        // Central Optical Laser Beam from Station (50m) to Entry Point (0m)
+        ctx.strokeStyle = '#22c55e';
+        ctx.shadowColor = '#22c55e';
+        ctx.shadowBlur = 14;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const pBeamStart = project3D(0.0, 0.0, 0.0);
+        const pBeamEnd = project3D(dockDist, 0.0, 0.0);
+        if (pBeamStart && pBeamEnd) {
+          ctx.moveTo(pBeamStart.sx, pBeamStart.sy);
+          ctx.lineTo(pBeamEnd.sx, pBeamEnd.sy);
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+
+        // Funnel-shaped Approach Corridor Checkpoints
+        const checkpoints = [
+          { x: 10.0, r: 4.5, name: 'CORRIDOR 40m' },
+          { x: 20.0, r: 3.6, name: 'CORRIDOR 30m' },
+          { x: 30.0, r: 2.7, name: 'GATEWAY 20m' },
+          { x: 40.0, r: 1.8, name: 'APPROACH 10m' },
+          { x: 48.0, r: 1.2, name: 'FINAL CONE 2m' }
+        ];
+
+        for (const cp of checkpoints) {
+          const isPassed = cp.x < shipX - 0.5;
+          const cpColor = isPassed ? '#10b981' : '#06b6d4';
+          ctx.strokeStyle = cpColor;
+          ctx.lineWidth = 1.4;
+
+          const cpPts = [];
+          for (let i = 0; i < 12; i++) {
+            const a = (i * Math.PI * 2) / 12;
+            const pt = project3D(cp.x, cp.r * Math.sin(a), cp.r * Math.cos(a));
+            if (pt) cpPts.push(pt);
+          }
+          if (cpPts.length === 12) {
+            ctx.beginPath();
+            ctx.moveTo(cpPts[0].sx, cpPts[0].sy);
+            for (let i = 1; i < 12; i++) ctx.lineTo(cpPts[i].sx, cpPts[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+
+            ctx.save();
+            ctx.fillStyle = cpColor;
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(cp.name, cpPts[0].sx, cpPts[0].sy - 6);
+            ctx.restore();
+          }
+        }
+
+        // Rotating Docking Station Port Ring at X=50m
+        const targetAngle = (Date.now() / 1000.0) * 0.15; // Realistic slow spin
+        const portRad = 3.2;
+        ctx.strokeStyle = '#eab308';
+        ctx.shadowColor = '#eab308';
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 2.8;
+
+        const portPts = [];
+        for (let i = 0; i < 16; i++) {
+          const a = (i * Math.PI * 2) / 16;
+          const pt = project3D(dockDist, portRad * Math.sin(a), portRad * Math.cos(a));
+          if (pt) portPts.push(pt);
+        }
+        if (portPts.length === 16) {
+          ctx.beginPath();
+          ctx.moveTo(portPts[0].sx, portPts[0].sy);
+          for (let i = 1; i < 16; i++) ctx.lineTo(portPts[i].sx, portPts[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+
+          // Rotating crosshairs on docking target
+          for (let k = 0; k < 4; k++) {
+            const ca = targetAngle + (k * Math.PI / 2);
+            const pArm = project3D(dockDist, portRad * Math.sin(ca), portRad * Math.cos(ca));
+            const pCenter = project3D(dockDist, 0, 0);
+            if (pArm && pCenter) {
+              ctx.strokeStyle = '#f59e0b';
+              ctx.lineWidth = 1.5;
+              ctx.beginPath();
+              ctx.moveTo(pCenter.sx, pCenter.sy);
+              ctx.lineTo(pArm.sx, pArm.sy);
+              ctx.stroke();
+            }
+          }
+
+          ctx.save();
+          ctx.fillStyle = '#fde047';
+          ctx.font = 'bold 12px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('TARGET PORT #01 [ROTATING]', portPts[0].sx, portPts[0].sy - 12);
+          ctx.restore();
+        }
+        ctx.shadowBlur = 0;
+      } else {
+        // --------------------------------------------------------------------
+        // Stage 1: Asteroid Surface Pipeline with Hexagonal Safety Ring Tunnel
+        // --------------------------------------------------------------------
+        for (let rx = 0.0; rx <= 50.0; rx += ringSpacing) {
+          const ry = getPipelineY(rx);
+          const isPassed = rx < shipX - 1.0;
+          const isNext = Math.abs(rx - shipX) < ringSpacing;
+          const isGate = (rx > 0 && Math.abs(rx % 5.0) < 0.1 && rx < 49.0);
+          const gateIdx = isGate ? Math.round(rx / 5.0) : 0;
+          const isTarget = (rx >= 49.0);
+
+          let ringColor = '#0284c7';
+          if (isTarget) ringColor = '#eab308';
+          else if (isPassed) ringColor = '#059669';
+          else if (isNext) ringColor = '#38bdf8';
+
+          ctx.strokeStyle = ringColor;
+          ctx.shadowColor = ringColor;
+          ctx.shadowBlur = isNext ? 12 : (isGate ? 8 : 4);
+          ctx.lineWidth = isNext ? 2.8 : (isGate ? 2.0 : 1.0);
+
+          const hexPoints = [];
+          for (const a of hexAngles) {
+            const hx = rx;
+            const hy = ry + hexRadius * Math.sin(a);
+            const hz = hexRadius * Math.cos(a);
+            const hp = project3D(hx, hy, hz);
+            if (hp) hexPoints.push(hp);
+          }
+
+          if (hexPoints.length === 6) {
+            ctx.beginPath();
+            ctx.moveTo(hexPoints[0].sx, hexPoints[0].sy);
+            for (let i = 1; i < 6; i++) ctx.lineTo(hexPoints[i].sx, hexPoints[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+
+            if (isGate) {
+              const topPt = hexPoints[0];
+              if (topPt) {
+                ctx.save();
+                ctx.fillStyle = isPassed ? '#10b981' : (isNext ? '#38bdf8' : '#94a3b8');
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`GATE ${String(gateIdx).padStart(2, '0')}`, topPt.sx, topPt.sy - 8);
+                ctx.restore();
+              }
+            }
+          }
+        }
+
+        // Longitudinal Tunnel Rails
+        const railOffsets = [
+          { dy: 0, dz: hexRadius },
+          { dy: -hexRadius, dz: 0 },
+          { dy: hexRadius, dz: 0 }
+        ];
+        ctx.strokeStyle = '#0369a1';
+        ctx.lineWidth = 1.0;
+        for (const ro of railOffsets) {
+          ctx.beginPath();
+          let firstR = true;
+          for (let rx = 0.0; rx <= 50.0; rx += 1.0) {
+            const ry = getPipelineY(rx) + ro.dy;
+            const rz = ro.dz;
+            const rp = project3D(rx, ry, rz);
+            if (rp) {
+              if (firstR) { ctx.moveTo(rp.sx, rp.sy); firstR = false; }
+              else { ctx.lineTo(rp.sx, rp.sy); }
+            }
+          }
+          ctx.stroke();
+        }
+      }
       // ------------------------------------------------------------------------
       // 4. Draw True 3D Spacecraft Polyhedral Model with Yaw & Bank Roll
       // ------------------------------------------------------------------------
@@ -965,15 +1195,54 @@ export default function SpaceOrbitViewer3D() {
         gap: '12px'
       }
     },
-      React.createElement('span', null, `POS: (${telemetry.pos_x.toFixed(2)}m, ${telemetry.pos_y.toFixed(2)}m)`),
-      React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(2)} m/s`),
-      React.createElement('span', null, `ERR: ${(telemetry.cross_track_err || 0).toFixed(3)}m`),
-      React.createElement('span', {
-        style: {
-          color: Math.abs(telemetry.wheel_rpm || 0) > 5000 ? '#ef4444' : '#ec4899',
-          fontWeight: 'bold'
-        }
-      }, `RW: ${(telemetry.wheel_rpm || 0).toFixed(0)} RPM ${Math.abs(telemetry.wheel_rpm || 0) > 5000 ? '[DESAT]' : ''}`)
+      telemetry.stage_id === 2 ? (
+        React.createElement(React.Fragment, null,
+          React.createElement('span', { style: { color: '#38bdf8', fontWeight: 'bold' } }, 'STAGE 2: CLIMBER'),
+          React.createElement('span', null, `ALT: ${telemetry.pos_x.toFixed(1)}m / 100m`),
+          React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(2)} m/s`),
+          React.createElement('span', {
+            style: { color: (telemetry.cable_tension || 10000) > 13000 ? '#ef4444' : '#10b981', fontWeight: 'bold' }
+          }, `TENSION: ${Math.round(telemetry.cable_tension || 10000)}N`),
+          React.createElement('span', {
+            style: { color: Math.abs(telemetry.cable_vibration || 0) > 0.05 ? '#f59e0b' : '#94a3b8' }
+          }, `VIB: ${(Math.abs(telemetry.cable_vibration || 0) * 100).toFixed(1)}cm`),
+          telemetry.cable_snapped ? React.createElement('span', { style: { color: '#ef4444', fontWeight: 'bold' } }, '[RUPTURED]') : null
+        )
+      ) : telemetry.stage_id === 3 ? (
+        React.createElement(React.Fragment, null,
+          React.createElement('span', { style: { color: '#38bdf8', fontWeight: 'bold' } }, 'STAGE 3: ISS TRUSS'),
+          React.createElement('span', null, `RAIL: ${telemetry.pos_x.toFixed(1)}m / 60m`),
+          React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(2)} m/s`),
+          React.createElement('span', {
+            style: { color: Math.abs(telemetry.cross_track_err || 0) > 250 ? '#ef4444' : '#10b981', fontWeight: 'bold' }
+          }, `RAIL LOAD: ${(telemetry.cross_track_err || 0).toFixed(1)}N / 300N`),
+          React.createElement('span', null, `BATT: ${(telemetry.fuel || 100).toFixed(1)}%`)
+        )
+      ) : telemetry.stage_id === 4 ? (
+        React.createElement(React.Fragment, null,
+          React.createElement('span', { style: { color: '#38bdf8', fontWeight: 'bold' } }, 'STAGE 4: LASER DOCKING'),
+          React.createElement('span', null, `RANGE: ${(50.0 - telemetry.pos_x).toFixed(2)}m`),
+          React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(3)} m/s`),
+          React.createElement('span', {
+            style: { color: Math.abs(telemetry.cross_track_err || 0) > 0.03 ? '#ef4444' : '#10b981', fontWeight: 'bold' }
+          }, `ALIGN: ${(Math.abs(telemetry.cross_track_err || 0) * 100.0).toFixed(2)}cm`),
+          React.createElement('span', {
+            style: { color: (50.0 - telemetry.pos_x) <= 0.05 ? '#10b981' : '#f59e0b', fontWeight: 'bold' }
+          }, (50.0 - telemetry.pos_x) <= 0.05 ? '[LATCH ENGAGED]' : '[APPROACH]')
+        )
+      ) : (
+        React.createElement(React.Fragment, null,
+          React.createElement('span', null, `POS: (${telemetry.pos_x.toFixed(2)}m, ${telemetry.pos_y.toFixed(2)}m)`),
+          React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(2)} m/s`),
+          React.createElement('span', null, `ERR: ${(telemetry.cross_track_err || 0).toFixed(3)}m`),
+          React.createElement('span', {
+            style: {
+              color: Math.abs(telemetry.wheel_rpm || 0) > 5000 ? '#ef4444' : '#ec4899',
+              fontWeight: 'bold'
+            }
+          }, `RW: ${(telemetry.wheel_rpm || 0).toFixed(0)} RPM ${Math.abs(telemetry.wheel_rpm || 0) > 5000 ? '[DESAT]' : ''}`)
+        )
+      )
     )
   );
 }

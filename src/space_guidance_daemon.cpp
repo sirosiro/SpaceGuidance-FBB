@@ -35,18 +35,31 @@ struct ShmSpaceGuidance {
     double cross_track_err;    // 0x68
     double wheel_rpm;          // 0x70 (Reaction Wheel flywheel speed: RPM)
     uint32_t fdir_mode;        // 0x78
-    uint32_t reserved1;        // 0x7C
+    uint32_t stage_id;         // 0x7C (Active Mission Stage ID: 1, 2, 3, 4)
 };
 
 int main(int argc, char** argv) {
-    std::cout << "[SpaceGuidance Daemon] Initializing simulation daemon..." << std::endl;
+    int stage_id = 1;
+    for (int i = 1; i < argc; ++i) {
+        if (strncmp(argv[i], "--stage=", 8) == 0) {
+            stage_id = atoi(argv[i] + 8);
+        } else if (strcmp(argv[i], "--stage") == 0 && i + 1 < argc) {
+            stage_id = atoi(argv[++i]);
+        }
+    }
+    if (const char* stage_env = getenv("SPACE_GUIDANCE_STAGE")) {
+        stage_id = atoi(stage_env);
+    } else if (const char* fbb_stage = getenv("FBB_STAGE")) {
+        stage_id = atoi(fbb_stage);
+    }
+
+    std::cout << "[SpaceGuidance Daemon] Initializing simulation daemon for Stage " << stage_id << "..." << std::endl;
 
     // Create / open shared memory file (F-BB standard: /tmp/vfpga_reg)
     const char* shm_env = getenv("FBB_SHM_PATH");
     const char* shm_path = shm_env ? shm_env : "/tmp/vfpga_reg";
     int fd = open(shm_path, O_RDWR | O_CREAT, 0666);
     if (fd < 0) {
-        // Fallback to legacy path if /tmp/vfpga_reg cannot be opened
         shm_path = "/tmp/fbb_space_guidance_shm";
         fd = open(shm_path, O_RDWR | O_CREAT, 0666);
     }
@@ -55,7 +68,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Ensure shared memory file size is at least 4096 bytes (matches DTS 0x1000 size)
     struct stat st;
     size_t target_size = 4096;
     if (fstat(fd, &st) == 0 && st.st_size < (off_t)target_size) {
@@ -65,7 +77,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Maintain backwards compatibility via symlink if paths differ
     if (strcmp(shm_path, "/tmp/fbb_space_guidance_shm") != 0) {
         unlink("/tmp/fbb_space_guidance_shm");
         if (symlink(shm_path, "/tmp/fbb_space_guidance_shm") == 0) {}
@@ -78,54 +89,68 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Zero out shared memory on every startup to ensure clean initial coordinates (pos_x=0)
     memset(shm, 0, sizeof(ShmSpaceGuidance));
 
-    SpacePhysicsEngine physics(100.0, 25.0);
-    std::cout << "[SpaceGuidance Daemon] Ready. Running physics at 100Hz." << std::endl;
+    SpacePhysicsEngine physics(100.0, 25.0, stage_id);
+    std::cout << "[SpaceGuidance Daemon] Ready. Running physics for Stage " << stage_id << " at 100Hz." << std::endl;
 
-    // Default initialization
     shm->cr_ctrl = 1;
     shm->safety_limit = 0x00010000;
     shm->fuel = 100.0;
+    shm->stage_id = stage_id;
 
-    // Immediately write clean initial telemetry JSON
     {
         std::ofstream jf("/tmp/space_guidance_telemetry.json");
-        jf << "{\"pos_x\":0.0,\"pos_y\":0.0,\"vel_x\":0.0,\"vel_y\":0.0,\"angle\":0.0,\"omega\":0.0,\"fuel\":100.0,\"cross_track_err\":0.0,\"sensor_raw\":0,\"fdir_mode\":0}\n";
+        jf << "{\"stage_id\":" << stage_id 
+           << ",\"pos_x\":0.0,\"pos_y\":0.0,\"vel_x\":0.0,\"vel_y\":0.0,\"angle\":0.0,\"omega\":0.0,\"fuel\":100.0,\"cross_track_err\":0.0,\"sensor_raw\":0,\"fdir_mode\":0}\n";
     }
 
     int tick_cnt = 0;
     while (shm->cr_ctrl & 0x01) {
-        // Read commands from shared memory
         double fx = static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0 * 50.0;
         double fy = static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0 * 50.0;
         double tau_rcs = static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0;
-        double tau_wheel = static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0; // Max 20.0 Nm wheel torque
+        double tau_wheel = static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0;
 
-        // Step physics (dt = 10ms)
         physics.step(fx, fy, tau_rcs, tau_wheel, 0.01);
 
-        // Update sensor readings
         uint32_t adc = physics.compute_sensor_adc();
         shm->sensor_raw = adc;
 
-        // Emulate FPGA RTL line_sensor_filter centroid calculation (Q16.16)
-        uint32_t sum_weights = 0;
-        uint32_t weighted_pos = 0;
-        for (int i = 0; i < 8; ++i) {
-            uint32_t ch = (adc >> (i * 4)) & 0x0F;
-            sum_weights += ch;
-            weighted_pos += ch * i;
-        }
-        if (sum_weights > 8) {
-            int32_t centroid_q16 = static_cast<int32_t>(((static_cast<uint64_t>(weighted_pos) << 16) / sum_weights) - 229376);
-            shm->sensor_edge = static_cast<uint32_t>(centroid_q16);
+        if (stage_id == 2) {
+            // Stage 2: Encoder position / mark count
+            uint32_t mark_cnt = static_cast<uint32_t>(physics.get_state().pos.x);
+            shm->sensor_edge = mark_cnt;
+        } else if (stage_id == 3) {
+            // Stage 3: Encoder position / joint index
+            uint32_t joint_mask = 0;
+            double px = physics.get_state().pos.x;
+            if (px >= 14.5 && px <= 15.5) joint_mask |= 1;
+            if (px >= 29.5 && px <= 30.5) joint_mask |= 2;
+            if (px >= 44.5 && px <= 45.5) joint_mask |= 4;
+            if (px >= 59.5 && px <= 60.5) joint_mask |= 8;
+            shm->sensor_edge = (joint_mask << 16) | static_cast<uint16_t>(px * 100.0);
+        } else if (stage_id == 4) {
+            // Stage 4: QPD lateral offset in Q16.16
+            int32_t offset_q16 = static_cast<int32_t>(physics.get_state().pos.y * 65536.0);
+            shm->sensor_edge = static_cast<uint32_t>(offset_q16);
         } else {
-            shm->sensor_edge = 0;
+            // Stage 1: Line sensor centroid calculation (Q16.16)
+            uint32_t sum_weights = 0;
+            uint32_t weighted_pos = 0;
+            for (int i = 0; i < 8; ++i) {
+                uint32_t ch = (adc >> (i * 4)) & 0x0F;
+                sum_weights += ch;
+                weighted_pos += ch * i;
+            }
+            if (sum_weights > 8) {
+                int32_t centroid_q16 = static_cast<int32_t>(((static_cast<uint64_t>(weighted_pos) << 16) / sum_weights) - 229376);
+                shm->sensor_edge = static_cast<uint32_t>(centroid_q16);
+            } else {
+                shm->sensor_edge = 0;
+            }
         }
 
-        // Export telemetry to shared memory
         const auto& state = physics.get_state();
         shm->pos_x = state.pos.x;
         shm->pos_y = state.pos.y;
@@ -136,11 +161,12 @@ int main(int argc, char** argv) {
         shm->fuel  = state.fuel;
         shm->cross_track_err = physics.get_cross_track_error();
         shm->wheel_rpm = state.wheel_rpm;
+        shm->stage_id = stage_id;
 
-        // Write periodically to JSON file for REST API
-        if (++tick_cnt % 2 == 0) { // 50Hz smooth telemetry stream
+        if (++tick_cnt % 2 == 0) {
             std::ofstream jf("/tmp/space_guidance_telemetry.json");
             jf << "{"
+               << "\"stage_id\":" << stage_id << ","
                << "\"pos_x\":" << state.pos.x << ","
                << "\"pos_y\":" << state.pos.y << ","
                << "\"vel_x\":" << state.vel.x << ","
@@ -149,7 +175,11 @@ int main(int argc, char** argv) {
                << "\"omega\":" << state.omega << ","
                << "\"fuel\":" << state.fuel << ","
                << "\"cross_track_err\":" << shm->cross_track_err << ","
+               << "\"cable_tension\":" << state.cable_tension << ","
+               << "\"cable_vibration\":" << state.cable_vibration << ","
+               << "\"cable_snapped\":" << (state.is_cable_snapped ? 1 : 0) << ","
                << "\"sensor_raw\":" << adc << ","
+               << "\"sensor_edge\":" << shm->sensor_edge << ","
                << "\"fdir_mode\":" << shm->fdir_mode << ","
                << "\"thrust_x\":" << (static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0) << ","
                << "\"thrust_y\":" << (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0) << ","
