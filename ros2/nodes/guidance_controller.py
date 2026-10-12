@@ -11,7 +11,7 @@ class SpaceGuidanceHardware:
     - F-BB shared memory emulation (/tmp/fbb_space_guidance_shm)
     - Physical AMD Xilinx Zynq UIO device (/dev/uio0)
     """
-    SHM_LAYOUT = "=12I9d2I" # 12 uint32 + 9 doubles + 2 uint32 = 128 bytes
+    SHM_LAYOUT = "=12I9d2Ii3I" # 12 uint32 + 9 doubles + 2 uint32 + 1 int32 + 3 uint32 = 144 bytes
     SIZE = struct.calcsize(SHM_LAYOUT)
 
     def __init__(self, dev_path=None):
@@ -52,7 +52,12 @@ class SpaceGuidanceHardware:
             "fuel": unpacked[18],
             "cross_track_err": unpacked[19],
             "wheel_rpm": unpacked[20],
-            "fdir_mode": unpacked[21]
+            "fdir_mode": unpacked[21],
+            "stage_id": unpacked[22],
+            "official_score": unpacked[23],
+            "passed_gates": unpacked[24],
+            "mission_status": unpacked[25],
+            "total_gates": unpacked[26]
         }
 
     def write_commands(self, thrust_x, thrust_y, torque=0.0, wheel_torque=0.0, fdir_mode=0):

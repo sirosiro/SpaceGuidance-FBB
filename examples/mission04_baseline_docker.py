@@ -49,22 +49,15 @@ def run_pilot():
     print("[Pilot] Range: 50m Approach Corridor. Target: Rotating Port #01.")
     print("[Pilot] Sensors: 4-Quadrant Photodiode (QPD) + Minimum-Impulse RCS.\n")
 
-    # =========================================================================
-    # 🎯 TUNE ZONE 1: 6-DoF 視線誘導 (Line-of-Sight) ゲイン
-    # =========================================================================
-    kp_los = 0.85              # 光軸中心引き込みゲイン (横並進補正)
-    kd_los = 0.45              # 光軸ドリフト速度ダンピング
-    kp_roll = 0.60             # 自転ステーション同期ロール追従ゲイン
-
-    # =========================================================================
-    # 🛑 TUNE ZONE 2: 最終ドッキング減速カーブ
-    # =========================================================================
-    v_contact_target = 0.015   # 目標接触速度 (0.005 ~ 0.020 m/s の極小速度)
+    kp_los = 1.40              # 光軸中心引き込みゲイン (横並進補正)
+    kd_los = 0.85              # 光軸ドリフト速度ダンピング
+    kp_att = 2.00              # 姿勢角アライメントゲイン
+    kd_att = 1.20              # 角速度ダンピング
+    v_contact_target = 0.018   # 目標接触速度 (0.005 ~ 0.035 m/s)
 
     start_time = time.time()
     checkpoint_dist = [40.0, 30.0, 20.0, 10.0, 5.0, 2.0, 1.0]
     checked = [False] * len(checkpoint_dist)
-    total_score = 0
 
     try:
         while True:
@@ -73,6 +66,8 @@ def run_pilot():
             dist = 50.0 - tlm["pos_x"] # ポートまでの残り距離 (m)
             approach_vel = tlm["vel_x"] # 接近速度 (m/s)
             qpd_err = tlm["cross_track_err"] # QPD光軸オフセット (m)
+            angle = tlm["angle"]
+            omega = tlm["omega"]
             fuel = tlm["fuel"]
 
             # チェックポイント通過報告
@@ -80,50 +75,61 @@ def run_pilot():
                 if not checked[c_idx] and dist <= c_d:
                     checked[c_idx] = True
                     align_cm = abs(qpd_err) * 100.0
-                    pts = 1000 if align_cm < 1.0 else (800 if align_cm < 3.0 else 400)
-                    total_score += pts
-                    print(f"[RANGE {c_d:4.1f}m] Align Err: {align_cm:4.1f}cm | Vel: {approach_vel:.3f}m/s | Alignment: +{pts} pts | Total: {total_score} pts")
+                    print(f"[NAV RANGE {c_d:4.1f}m] Align Err: {align_cm:4.1f}cm | Vel: {approach_vel:.3f}m/s")
 
             # ドッキング接触判定
             if dist <= 0.05:
                 elapsed = time.time() - start_time
                 print(f"\n============================================================")
                 print(f"🏁 [DOCKING CONTACT] Port Latch Engaged!")
-                print(f"⏱️ Contact Speed: {approach_vel:.4f} m/s (Target: 0.005-0.020 m/s)")
+                print(f"⏱️ Contact Speed: {approach_vel:.4f} m/s (Target: 0.005-0.035 m/s)")
                 print(f"🎯 Final Alignment Offset: {abs(qpd_err)*100.0:.2f} cm")
                 print(f"🔋 Delta-V / Fuel Left: {fuel:.1f}% | Elapsed Time: {elapsed:.2f}s")
 
-                speed_ok = (0.005 <= approach_vel <= 0.025)
+                speed_ok = (0.005 <= approach_vel <= 0.035)
                 align_ok = (abs(qpd_err) <= 0.02)
-                if speed_ok and align_ok:
-                    bonus = 3000
-                    print("✅ SOFT DOCKING SUCCESSFUL! [PERFECT CONTACT] +3000 pts")
-                elif speed_ok:
-                    bonus = 1500
-                    print("⚠️ DOCKED with slight angular stress. +1500 pts")
-                else:
-                    bonus = 0
-                    print("❌ HARD CONTACT! Docking ring velocity over limits.")
-
-                fuel_bonus = int(fuel * 10.0)
-                final_score = total_score + bonus + fuel_bonus
-                print(f"📊 Final Score: {final_score} pts (Corridor: {total_score}, Contact: +{bonus}, Fuel: +{fuel_bonus})")
-                rank = "GRADE S (Elite Astronaut)" if final_score >= 8000 else ("GRADE A" if final_score >= 6500 else "GRADE B")
-                print(f"🏆 Rank: {rank}")
-                print(f"============================================================\n")
+                time.sleep(0.15)
+                print("\n======================================================================")
+                print("      STAGE 4 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
+                print("======================================================================")
+                print(f"  Docking Time         : {time.time() - start_time:.2f} s")
+                print(f"  Remaining RCS Prop   : {fuel:.1f}%")
+                print(f"  Contact Velocity     : {approach_vel:.3f} m/s")
+                if os.path.exists("/tmp/space_guidance_telemetry.json"):
+                    try:
+                        with open("/tmp/space_guidance_telemetry.json", "r") as jf:
+                            t = json.load(jf)
+                        print(f"  Official Score       : {t.get('score', 0):,} pts")
+                        print(f"  Approach Score       : {t.get('checkpoint_score', 0):,} pts")
+                        print(f"  Contact Bonus        : {t.get('bonus_score', 0):,} pts")
+                        print(f"  Ranges Cleared       : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 7)}")
+                        print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
+                        print(f"  Referee Event        : {t.get('last_event', '')}")
+                    except Exception as e:
+                        print(f"  Telemetry Read Err   : {e}")
+                print("======================================================================\n")
+                break
                 break
 
-            # 誘導制御: 距離に応じた理想接近速度 (根号プロファイル)
-            desired_vel = max(v_contact_target, min(1.5, math.sqrt(max(0.01, dist * 0.15))))
-            f_forward = (desired_vel - approach_vel) * 0.8
-            f_forward = max(-0.5, min(0.8, f_forward))
+            # 誘導制御
+            if dist < 3.0:
+                desired_vel = max(v_contact_target, dist * 0.18)
+                f_forward = (desired_vel - approach_vel) * 3.5
+            else:
+                desired_vel = max(v_contact_target, min(2.5, math.sqrt(dist * 0.25)))
+                f_forward = (desired_vel - approach_vel) * 1.8
+            f_forward = max(-1.0, min(1.0, f_forward))
 
             # 横光軸引き込み
             f_lateral = - (qpd_err * kp_los + tlm["vel_y"] * kd_los)
-            f_lateral = max(-0.5, min(0.5, f_lateral))
+            f_lateral = max(-0.8, min(0.8, f_lateral))
 
-            hw.write_commands(thrust_x=f_forward, thrust_y=f_lateral, torque=0.0)
-            time.sleep(0.02)
+            # 姿勢制御
+            tau_cmd = - (angle * kp_att + omega * kd_att)
+            tau_cmd = max(-0.6, min(0.6, tau_cmd))
+
+            hw.write_commands(thrust_x=f_forward, thrust_y=f_lateral, torque=tau_cmd)
+            time.sleep(0.01)
 
     except KeyboardInterrupt:
         print("\n[Pilot] User aborted mission.")

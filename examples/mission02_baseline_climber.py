@@ -66,7 +66,6 @@ def run_pilot():
     beacon_spacing = 10.0
     total_beacons = 9
     checked_beacons = [False] * total_beacons
-    total_score = 0
     start_time = time.time()
     current_drive_cmd = 0.0
 
@@ -95,22 +94,27 @@ def run_pilot():
                 print(f"🏁 [MISSION COMPLETE] Docked at GEO Orbital Platform! (Alt: {altitude:.2f}m)")
                 print(f"⏱️ Clear Time: {elapsed:.2f}s | 🔋 Battery/Fuel Left: {fuel:.1f}%")
 
-                fuel_bonus = int(fuel * 10.0)
-                time_bonus = max(0, int((55.0 - elapsed) * 50.0))
-                stability_bonus = max(0, int((15000.0 - tension) * 0.1))
-                final_score = total_score + fuel_bonus + time_bonus + stability_bonus
-
-                print(f"📊 Final Score: {final_score} pts (Beacons: {total_score}, Fuel: +{fuel_bonus}, Time: +{time_bonus}, Stability: +{stability_bonus})")
-                if final_score >= 8000:
-                    rank = "GRADE S (Master Climber)"
-                elif final_score >= 6500:
-                    rank = "GRADE A (Certified)"
-                elif final_score >= 5000:
-                    rank = "GRADE B (Standard)"
-                else:
-                    rank = "GRADE C (Pass)"
-                print(f"🏆 Rank: {rank}")
-                print(f"============================================================\n")
+                time.sleep(0.15)
+                print("\n======================================================================")
+                print("      STAGE 2 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
+                print("======================================================================")
+                print(f"  Climb Flight Time    : {elapsed:.2f} s")
+                print(f"  Remaining Battery    : {fuel:.1f}%")
+                print(f"  Cable Tension        : {tension:.0f} N (Limit: 15,000 N)")
+                if os.path.exists("/tmp/space_guidance_telemetry.json"):
+                    try:
+                        with open("/tmp/space_guidance_telemetry.json", "r") as jf:
+                            t = json.load(jf)
+                        print(f"  Official Score       : {t.get('score', 0):,} pts")
+                        print(f"  Beacon Score         : {t.get('checkpoint_score', 0):,} pts")
+                        print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
+                        print(f"  Beacons Reached      : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 9)}")
+                        print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
+                        print(f"  Referee Event        : {t.get('last_event', '')}")
+                    except Exception as e:
+                        print(f"  Telemetry Read Err   : {e}")
+                print("======================================================================\n")
+                break
                 break
 
             # 5. 10mおきのビーコン通過スコアリング
@@ -119,20 +123,7 @@ def run_pilot():
                 if not checked_beacons[b_idx] and altitude >= target_alt:
                     checked_beacons[b_idx] = True
                     dev = abs(vibration)
-                    if dev <= 0.02:
-                        pts = 1000
-                        tag = "PERFECT"
-                    elif dev <= 0.06:
-                        pts = 800
-                        tag = "GREAT"
-                    elif dev <= 0.12:
-                        pts = 500
-                        tag = "GOOD"
-                    else:
-                        pts = -200
-                        tag = "SHAKE"
-                    total_score += pts
-                    print(f"[BEACON {b_idx+1:02d}] Alt={target_alt:4.1f}m | Vib={dev*100:4.1f}cm | Tension={tension:5.0f}N | {tag:<7} +{pts:4d} pts | Total: {total_score:5d} pts")
+                    print(f"[NAV BEACON {b_idx+1:02d}] Alt={target_alt:4.1f}m | Vib={dev*100:4.1f}cm | Tension={tension:5.0f}N")
 
             # 6. 昇降モータ制御 (S字ジャーク制限付き)
             target_force = (target_velocity - velocity) * kp_speed + 0.10

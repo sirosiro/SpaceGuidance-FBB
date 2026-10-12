@@ -56,7 +56,6 @@ def run_pilot():
 
     inspection_joints = [15.0, 30.0, 45.0, 60.0]
     joint_scanned = [False] * len(inspection_joints)
-    total_score = 0
     start_time = time.time()
     last_print_dist = 0.0
 
@@ -89,9 +88,8 @@ def run_pilot():
                 print(f"[JOINT {next_j_idx+1:02d}] At {j_pos:.1f}m -> Latching Electromagnetic Gripper...")
                 hw.write_commands(0.0, 0.0, 0.0, 0.0, fdir_mode=1)
                 time.sleep(latch_settle_time)
-                print(f"[JOINT {next_j_idx+1:02d}] Laser Scan Complete! Gripper unlatched. +1500 pts")
+                print(f"[JOINT {next_j_idx+1:02d}] Laser Scan Complete! Gripper unlatched.")
                 joint_scanned[next_j_idx] = True
-                total_score += 1500
                 continue
 
             # ゴール完了判定 (全ジョイントスキャン完了かつ60m到達)
@@ -101,13 +99,26 @@ def run_pilot():
                 print(f"🏁 [MISSION COMPLETE] ISS Truss Survey Complete! (Distance: {pos_x:.2f}m)")
                 print(f"⏱️ Clear Time: {elapsed:.2f}s | 🔋 Battery Left: {fuel:.1f}%")
 
-                fuel_bonus = int(fuel * 10.0)
-                time_bonus = max(0, int((45.0 - elapsed) * 50.0))
-                final_score = total_score + fuel_bonus + time_bonus
-                print(f"📊 Final Score: {final_score} pts (Joints: {total_score}, Fuel: +{fuel_bonus}, Time: +{time_bonus})")
-                rank = "GRADE S (Master Inspector)" if final_score >= 8000 else ("GRADE A" if final_score >= 6500 else "GRADE B")
-                print(f"🏆 Rank: {rank}")
-                print(f"============================================================\n")
+                time.sleep(0.15)
+                print("\n======================================================================")
+                print("      STAGE 3 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
+                print("======================================================================")
+                print(f"  Inspection Time      : {elapsed:.2f} s")
+                print(f"  Remaining Battery    : {fuel:.1f}%")
+                if os.path.exists("/tmp/space_guidance_telemetry.json"):
+                    try:
+                        with open("/tmp/space_guidance_telemetry.json", "r") as jf:
+                            t = json.load(jf)
+                        print(f"  Official Score       : {t.get('score', 0):,} pts")
+                        print(f"  Joints Score         : {t.get('checkpoint_score', 0):,} pts")
+                        print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
+                        print(f"  Joints Inspected     : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 4)}")
+                        print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
+                        print(f"  Referee Event        : {t.get('last_event', '')}")
+                    except Exception as e:
+                        print(f"  Telemetry Read Err   : {e}")
+                print("======================================================================\n")
+                break
                 break
 
             # 進捗ログ表示 (5m毎)

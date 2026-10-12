@@ -30,8 +30,6 @@
 * **配置**: 機体尾部後端にツイン配置（`Nozzle L`, `Nozzle R`）。
 * **レジスタ換算式**:
   $$F_x = \frac{\text{thrust\_cmd\_x}}{65,536} \times 50.0\text{ N} \quad (-50.0\text{ N} \le F_x \le +50.0\text{ N})$$
-  * 正値（$+u_x$）: 前進加速（尾部メインノズルからプラズマ噴射）
-  * 負値（$-u_x$）: 逆噴射制動（機首レトロスラスタから逆噴射）
 * **最大並進加速度**:
   $$a_{x,\max} = \frac{F_{x,\max}}{M} = \frac{50.0\text{ N}}{100.0\text{ kg}} = 0.50\text{ m/s}^2$$
 
@@ -39,8 +37,6 @@
 * **配置**: 機首・翼端の4箇所スラスタポッド。
 * **レジスタ換算式**:
   $$F_y = \frac{\text{thrust\_cmd\_y}}{65,536} \times 50.0\text{ N} \quad (-50.0\text{ N} \le F_y \le +50.0\text{ N})$$
-  * 正値（$+u_y$）: 左舷（$+Y$方向）並進加速
-  * 負値（$-u_y$）: 右舷（$-Y$方向）並進加速
 * **最大横加速度**:
   $$a_{y,\max} = \frac{F_{y,\max}}{M} = \frac{50.0\text{ N}}{100.0\text{ kg}} = 0.50\text{ m/s}^2$$
 
@@ -62,7 +58,6 @@
 
 #### ⑤ 推進剤（燃料）消費モデル
 $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| \right) \times 0.0005 \quad [\%/\text{s}]$$
-* **ポイント**: リアクションホイール駆動時は $\tau_{\text{rcs}} = 0$ となるため推進剤消費は完全に $0.0\%/\text{s}$ を維持し、燃料ボーナスを最大化できます。
 
 ### (3) センサ系
 * **8ch 光学センサアレイバー**:
@@ -76,7 +71,7 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| \righ
 ## 3. ゲームプレイループとハッキングガイド
 
 ### (1) 編集対象ファイル
-プレイヤーがアルゴリズムやパラメータをチューニングする対象ファイルは以下です：
+プレイヤーがアルゴリズムやパラメータをチューニングする対象ファイル：
 ```text
 /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
 ```
@@ -85,37 +80,40 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| \righ
 1. VS Code で `scenario/01_asteroid_pipeline/pilot.py` を開きます。
 2. 後述の **TUNE ZONE 1〜3** のゲインや巡航速度を書き換えて保存（`Ctrl + S`）します。
 3. Webダッシュボード（`http://localhost:8080`）の **`Chaos & Fault Injection`** パネルにある **`[Restart Scenario]`** ボタンをクリックします。
-4. 新しいパラメータで即座に探査機が発進し、3Dビューアおよびコンソールでスコアの変化を確認できます！
+4. 新しいパラメータで即座に探査機が発進し、3Dビューアおよびコンソールでスコアの変化を確認できます。
 
 ### (3) 初期状態へのリセット方法
-原本からワンコマンドで復元できます：
 ```bash
 cp /workspaces/SpaceGuidance-FBB/examples/mission01_baseline_pilot.py /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
 ```
 
 ---
 
-## 4. アーケード採点・評価システム (Scoring Rules)
+## 4. アーケード採点・公式審判システム (Official Referee SSOT)
 
-ゴール到達時に以下の3つの要素から総合スコアが算出され、フライトランクが判定されます：
+公平な競技性を保証するため、採点および合否判定は Python 側ではなく中央デーモン（`space_guidance_daemon.cpp`）の **`OfficialReferee` エンジン** が 100Hz 周期でオーソリテーティブに実施します。
 
-$$\text{Final Score} = \text{Total Gate Score} + \text{Fuel Bonus} + \text{Time Bonus}$$
+$$\text{Final Score} = \text{Checkpoint Score} + \text{Fuel Bonus} + \text{Time Bonus}$$
 
-| 評価項目 | 判定基準 | 獲得ポイント | 説明 |
-| :--- | :--- | :--- | :--- |
-| **ゲート通過精度**<br>(全9ゲート) | **PERFECT** (偏差 $\le 3\text{cm}$) | **$+1,000 \text{ pts}$** | ゲート中心をほぼピンポイントで通過 |
-| | **GREAT** (偏差 $\le 12\text{cm}$) | **$+800 \text{ pts}$** | わずかなズレで良好に通過 |
-| | **GOOD** (偏差 $\le 20\text{cm}$) | **$+500 \text{ pts}$** | ゲート枠内を安全に通過 |
-| | **CLIP** (偏差 $\le 30\text{cm}$) | **$-300 \text{ pts}$** | ⚠️ ゲート枠に接触（減点ペナルティ） |
-| | **MISS** (偏差 $> 30\text{cm}$) | **$0 \text{ pts}$** | ❌ ゲート通過失敗 |
-| **残燃料ボーナス** | 残推進剤\% $\times 10$ | **最大 $+1,000 \text{ pts}$** | リアクションホイールを活用し燃料を節約するほど加算 |
-| **クリアタイムボーナス** | $50.0\text{s}$ 未満クリア | **$(50.0 - \text{Time}) \times 50 \text{ pts}$** | 巡航速度を高めて素早くゴールすると大幅加算 |
+### (1) ゲート通過精度配点 (全9ゲート: X=5m, 10m, ..., 45m)
+| 判定レーティング | 許容偏差基準 | 獲得ポイント | 説明 |
+| :--- | :--- | :---: | :--- |
+| **PASS [PERFECT]** | 偏差 $\le 5.0\text{ cm}$ | **$+1,000 \text{ pts}$** | ゲート中心を完璧に捉えて通過 |
+| **PASS [GREAT]** | 偏差 $\le 12.0\text{ cm}$ | **$+800 \text{ pts}$** | わずかなズレで良好に通過 |
+| **PASS [GOOD]** | 偏差 $\le 20.0\text{ cm}$ | **$+500 \text{ pts}$** | ゲート枠内を安全に通過 |
+| **CLIP [PENALTY]** | 偏差 $\le 40.0\text{ cm}$ | **$-300 \text{ pts}$** | ゲート外枠に接触（減点ペナルティ） |
+| **MISS [PENALTY]** | 偏差 $> 40.0\text{ cm}$ | **$-1,000 \text{ pts}$** | ゲート通過失敗・枠外逸脱（大減点） |
 
-### フライトランク基準
-* **GRADE S**: **$8,000 \text{ pts}$ 以上**（極限の精密制御とハイスピード巡航、リアクションホイール完全活用が必須のマスターランク）
-* **GRADE A**: **$6,500 \sim 7,999 \text{ pts}$**（ベースライン設定。ふらつきを抑えて全ゲートGOOD以上で完走）
-* **GRADE B**: **$5,000 \sim 6,499 \text{ pts}$**
-* **GRADE C**: **$5,000 \text{ pts}$ 未満**
+### (2) ボーナス配点
+* **残燃料ボーナス**: 残推進剤 $\% \times 10.0$（最大 $+1,000\text{ pts}$、リアクションホイール活用で最大化）
+* **クリアタイムボーナス**: $50.0\text{s}$ 未満でゴール到達時：
+  $$\text{Time Bonus} = \max(0, (50.0 - \text{Elapsed Time}) \times 40.0)$$
+
+### (3) フライトランク認定基準
+* 🏆 **GRADE S (Elite Pilot)**: **$8,000 \text{ pts}$ 以上**（全ゲートPERFECT級、ハイスピード巡航、燃料無消費）
+* 🥇 **GRADE A (Certified)**: **$6,500 \sim 7,999 \text{ pts}$**（標準クリア）
+* 🥈 **GRADE B (Standard)**: **$4,500 \sim 6,499 \text{ pts}$**
+* 🥉 **GRADE C (Pass)**: **$4,500 \text{ pts}$ 未満**
 
 ---
 
@@ -134,7 +132,7 @@ kvlat = 0.60 # 横滑り速度ダンピング (横揺れの収束を早める)
 
 ### 🚀 TUNE ZONE 2: 目標巡航速度
 ```python
-target_vx = 1.2  # 目標巡航速度 (m/s)
+target_vx = 1.2  # 目標巡航速度 (m/s) [タイム短縮と遠心力制御のトレードオフ]
 ```
 
 ### 🔋 TUNE ZONE 3: ハイブリッド制御 & リアクションホイール脱飽和
@@ -146,21 +144,4 @@ if in_desat:
 else:
     if abs(wheel_rpm) > 5200.0:
         in_desat = True
-```
-
----
-
-## 6. クイックスタート (Quick Start)
-
-### F-BB 統合ラボ環境での起動 (推奨)
-```bash
-cd /workspaces/FPGA-BoardlessBench
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
-```
-ブラウザで [http://localhost:8080](http://localhost:8080) を開き、3D ビューア・テレメトリ・UART コンソールで自律飛行を観戦・デバッグできます。
-
-### スタンドアローン高速実行 (CLI モード)
-```bash
-cd /workspaces/SpaceGuidance-FBB
-bash scenario/01_asteroid_pipeline/run_mission.sh
 ```

@@ -6,66 +6,79 @@
 
 ## 1. ミッション概要 (Mission Overview)
 
-推進剤（Delta-V）残量の極めて乏しい無人深宇宙補給船が、自転運動する宇宙ステーションのドッキングポートへ向けて最終アプローチを行い、誘導レーザーの十字光軸をターゲットの中心に合致させながら、接触速度ほぼゼロ（$\le 0.02\text{m/s}$）でソフトドッキングを果たす最高難易度ミッションです。
+推進剤（Delta-V）残量の極めて乏しい無人深宇宙補給船が、自転運動する宇宙ステーションのドッキングポートへ向けて最終アプローチ（50m回廊）を行い、誘導レーザーの十字光軸をターゲットの中心に合致させながら、接触速度ほぼゼロ（$0.005 \sim 0.035\text{ m/s}$）でソフトドッキングを果たす最高難易度ミッションです。
 
-完全摩擦ゼロの 6自由度空間（$X, Y, Z, \text{Roll}, \text{Pitch}, \text{Yaw}$）では、姿勢を回転させると機体の主ノズル噴射方向が変わり、並進運動と回転運動が複雑に連成（クロスカップリング）します。限られた推進剤を節約しながら、自転するターゲットポートと位置・姿勢・角速度を同時に一致させる高度な宇宙航法技術が求められます。
-
----
-
-## 2. 物理・力学モデル構想 (Physics Model)
-
-### (1) 6自由度オイラー剛体運動方程式
-機体座標系におけるオイラーの運動方程式およびクォータニオン運動学：
-
-$$M \dot{\mathbf{v}} + \boldsymbol{\omega} \times (M \mathbf{v}) = \mathbf{F}_{\text{rcs}}$$
-
-$$\mathbf{I} \dot{\boldsymbol{\omega}} + \boldsymbol{\omega} \times (\mathbf{I} \boldsymbol{\omega}) = \boldsymbol{\tau}_{\text{rcs}} + \boldsymbol{\tau}_{\text{wheel}}$$
-
-$$\dot{\mathbf{q}} = \frac{1}{2} \mathbf{q} \otimes \begin{pmatrix} 0 \\ \boldsymbol{\omega} \end{pmatrix}$$
-
-### (2) ドッキング成功判定基準 (Docking Constraints)
-* **相対位置偏差**: $|\Delta \mathbf{r}| \le 0.02\text{ m}$ ($2\text{cm}$ 以内)
-* **相対姿勢角偏差**: $|\Delta \boldsymbol{\theta}| \le 0.5^\circ$ ($0.5$度以内)
-* **接触軸方向相対速度**: $0.005\text{ m/s} \le v_{\text{contact}} \le 0.020\text{ m/s}$（ハードクラッシュおよび跳ね返りの防止）
+完全摩擦ゼロの空間では、姿勢を回転させると主ノズルの噴射方向が変わり、並進運動と回転運動が複雑に連成します。限られた推進剤を節約しながら、7段階の接近レンジゲートを通過し、ポート直前で安全なソフトコンタクトを成立させることが求められます。
 
 ---
 
-## 3. ハードウェア (PL) と ソフトウェア (PS) の役割分担構想
+## 2. 機体仕様・ドッキング物理モデル (Hardware Specs & Docking Physics)
 
-| レイヤー | コンポーネント | 役割と責務 |
-| :--- | :--- | :--- |
-| **PL (FPGA RTL)** | **4分割フォトダイオード (QPD) 光軸演算** | 十字誘導レーザーの受光量から光軸重心変位（$\Delta x, \Delta y$）を超高速にハードウェア算出 |
-| | **最小インパルス PWM RCS ジェネレータ** | ソレノイドバルブの最小開弁時間（$10\text{ms}$）制約を守りつつ極小インパルスを生成する PWM 回路 |
-| | **衝突防止レーダー＆緊急逆噴射ラッチ** | 接近速度が安全減速エンベロープを超過した場合の即時全開逆噴射インターロック |
-| **PS (Python)** | **6-DoF 視線誘導 (Line-of-Sight Guidance)** | Clohessy-Wiltshire (CW) 方程式に基づくステーション相対ランデブー軌道生成 |
-| | **スラスタ最適配分 (Thruster Allocation)** | 12基の RCS ノズルから目標推力・トルクを燃料消費最小で発生させる線形計画法 (LP) 配分 |
-| | **自転同期ロール追従制御** | ステーションの自転角速度（$\omega_z$）に合わせて補給船をバレルロール同期させる制御 |
+物理エンジンは 100Hz（$\Delta t = 0.01\text{s}$）周期で機体の運動方程式を数値積分します。
 
----
-
-## 4. 攻略チューニングゾーン構想 (Tune Zones Memo)
-
-* **🎯 TUNE ZONE 1: 6-DoF LOS 誘導ゲイン (`los_kp`, `los_kd`)**:
-  * ターゲット光軸への引き込み力とダンピングのバランス。
-* **🚀 TUNE ZONE 2: スラスタ配分ウェイト (`fuel_vs_time_weight`)**:
-  * 燃料最小化（パルス節約）とアプローチ時間（ドッキング制限時間）のトレードオフ調整。
-* **🛑 TUNE ZONE 3: 最終ドッキング減速カーブ (`final_braking_profile`)**:
-  * ポート直前 1m から接触速度 $0.015\text{ m/s}$ へ滑らかに整定させる減速プロファイル。
+### (1) 機体物理諸元
+* **補給船乾燥質量 ($M$)**: $100.0\text{ kg}$
+* **アプローチ回廊長**: $50.0\text{ m}$
+* **接近チェックポイント**: 全7箇所（残り距離 $40\text{m}, 30\text{m}, 20\text{m}, 10\text{m}, 5\text{m}, 2\text{m}, 1\text{m}$）
+* **ソフトドッキング接触許容速度**: $0.005\text{ m/s} \le v_{\text{contact}} \le 0.035\text{ m/s}$
+* **光軸整定許容偏差**: $|\Delta y| \le 0.02\text{ m}$ ($2.0\text{cm}$ 以内)
 
 ---
 
-## 5. 採点・評価システム構想 (Scoring Memo)
+## 3. ゲームプレイループとハッキングガイド
 
-$$\text{Score} = \text{Docking Precision Score} + \text{Delta-V Fuel Bonus} + \text{Soft Contact Bonus}$$
+### (1) 編集対象ファイル
+```text
+/workspaces/SpaceGuidance-FBB/scenario/04_laser_docking/pilot.py
+```
+（原本への初期化・リセットは `/workspaces/SpaceGuidance-FBB/examples/mission04_baseline_docker.py` からコピー可能）
 
-* **ドッキング精度**: 接触時の光軸中心ズレ（mm単位）および角度ズレ（0.1度単位）に応じた採点。
-* **残燃料ボーナス**: 推進剤消費量（$\Delta V$）の節約度合いに応じた大幅加算。
-* **ソフトコンタクトボーナス**: 接触速度が理想速度（$0.01\text{m/s}$）にどれだけ近いか。
+### (2) 攻略用 TUNE ZONE
+```python
+# 視線誘導 (Line-of-Sight) & 姿勢安定化ゲイン
+kp_los = 1.2             # 光軸引き込み比例ゲイン
+kd_los = 0.8             # 横速度ダンピングゲイン
+kp_att = 0.6             # 姿勢角復元ゲイン
+kd_att = 0.4             # 角速度ダンピングゲイン
+v_contact_target = 0.018 # 目標最終接触速度 (m/s) [0.005〜0.035m/s に整定]
+```
 
 ---
 
-## 6. 実装準備メモ (Implementation Roadmap)
-* [ ] `scenario/04_laser_docking/config.dts` の作成（QPD レーザー、6-DoF スラスタレジスタ）
-* [ ] `src/space_physics.cpp` への 6-DoF オイラー運動力学エンジンの拡張
-* [ ] `panes/sg-orbit-viewer` への自転ステーションポート＆レーザー光軸オーバーレイの実装
-* [ ] `examples/mission04_baseline_docker.py` の原本作成
+## 4. 採点基準 & 公式審判システム (Official Referee SSOT)
+
+ドッキングポート接触時（残り距離 $\le 0.05\text{m}$）に公式審判（`OfficialReferee`）により総合判定されます：
+
+$$\text{Final Score} = \text{Approach Score} + \text{Soft Contact Bonus} + \text{Fuel Bonus}$$
+
+### (1) 配点内訳
+1. **7段階レンジ接近整定精度 (40m, 30m, 20m, 10m, 5m, 2m, 1m)**:
+   * 光軸偏差 $< 1.0\text{cm}$: **$+1,000 \text{ pts}$**
+   * 光軸偏差 $< 3.0\text{cm}$: **$+800 \text{ pts}$**
+   * 光軸偏差 $\ge 3.0\text{cm}$: **$+500 \text{ pts}$**
+   * *(全7ゲート高精度通過で最大 7,000 pts)*
+2. **ソフトコンタクトボーナス**:
+   * 速度 $0.005 \sim 0.035\text{ m/s}$ かつ 光軸偏差 $\le 2\text{cm}$: **$+3,000 \text{ pts}$**（PERFECT CONTACT）
+   * 速度 $0.005 \sim 0.035\text{ m/s}$ のみ適合: **$+1,500 \text{ pts}$**
+   * 速度超過または粗い接触: **$+500 \text{ pts}$**
+3. **推進剤残量ボーナス**:
+   $$\text{Fuel Bonus} = \text{Fuel}(\%) \times 10.0$$
+
+### (2) フライトランク認定基準
+* 🏆 **GRADE S (Elite Astronaut)**: **8,000 pts 以上**（光軸偏差1cm以内かつ完全ソフトドッキング）
+* 🥇 **GRADE A (Certified)**: 6,500 pts 以上
+* 🥈 **GRADE B (Standard)**: 5,000 pts 以上
+* 🥉 **GRADE C (Pass)**: 5,000 pts 未満
+
+---
+
+## 5. クイックスタート
+
+```bash
+# Web 3D 観戦モード (F-BB 統合ラボ)
+cd /workspaces/FPGA-BoardlessBench
+./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/04_laser_docking
+
+# CLI 高速実行モード
+/workspaces/SpaceGuidance-FBB/scenario/04_laser_docking/run_mission.sh
+```

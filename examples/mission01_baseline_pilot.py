@@ -79,8 +79,6 @@ def run_pilot():
     # チェックポイント（枠）定義: 全長50m中に 5m 刻みで計9箇所配置
     gate_x_list = [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0]
     passed_gates = set()
-    stats = {"perfect": 0, "great": 0, "good": 0, "clip": 0, "miss": 0}
-    total_gate_score = 0
     desat_count = 0
     in_desat = False
 
@@ -98,6 +96,7 @@ def run_pilot():
             omega = tlm["omega"]
             fuel = tlm["fuel"]
             wheel_rpm = tlm["wheel_rpm"]
+            cross_track_err = tlm["cross_track_err"]
             carrier_lost = (tlm["sr_status"] & 0x08) != 0 # 通信途絶フラグ
 
             # 2. センサエッジ（ライン重心位置）の取得とロバスト処理
@@ -114,71 +113,35 @@ def run_pilot():
                 d_error = 0.0
                 prev_error = 0.0
 
-            # 3. 各チェックポイント（枠）の通過判定とスコア計測
+            # 3. 各チェックポイント（枠）の通過報告
             for gate_x in gate_x_list:
                 if gate_x not in passed_gates and pos_x >= gate_x:
                     passed_gates.add(gate_x)
                     gate_idx = int(gate_x / 5.0)
-
-                    # パイプライン中心線からの物理横ズレ量 (m)
-                    dev_m = tlm["cross_track_err"]
-                    dev_cm = dev_m * 100.0
-
-                    # 枠サイズ: 機体幅0.4mの2倍（内径0.8m, 半径R=0.40m, 機体半幅r=0.20m）
-                    if dev_m <= 0.05:
-                        pts = 1000
-                        rating = "PASS [PERFECT]"
-                        stats["perfect"] += 1
-                    elif dev_m <= 0.12:
-                        pts = 800
-                        rating = "PASS [GREAT]  "
-                        stats["great"] += 1
-                    elif dev_m <= 0.20:
-                        pts = 500
-                        rating = "PASS [GOOD]   "
-                        stats["good"] += 1
-                    elif dev_m <= 0.40:
-                        pts = -300
-                        rating = "CLIP [PENALTY]"
-                        stats["clip"] += 1
-                    else:
-                        pts = -1000
-                        rating = "GATE [MISSED] "
-                        stats["miss"] += 1
-
-                    total_gate_score += pts
-                    sign = "+" if pts >= 0 else ""
-                    print(f"[GATE {gate_idx:02d}] X={gate_x:4.1f}m | Dev: {dev_m:5.2f}m ({dev_cm:5.1f}cm) | RW: {wheel_rpm:5.0f} RPM | {rating} {sign}{pts:5d} pts | Total: {total_gate_score:5d} pts")
-
+                    dev_m = abs(cross_track_err)
+                    print(f"[NAV GATE {gate_idx:02d}] Reached X={gate_x:4.1f}m | Dev: {dev_m*100:4.1f}cm | RW: {wheel_rpm:5.0f} RPM")
             # 4. ゴール到達判定 (Stage 1 は 50m パイプライン)
-            if pos_x >= 48.0:
+            if pos_x >= 49.0:
                 elapsed = time.time() - start_time
-                fuel_bonus = int(fuel * 10.0)
-                time_bonus = max(0, int((50.0 - elapsed) * 40.0))
-                final_score = total_gate_score + fuel_bonus + time_bonus
-
-                if final_score >= 8000 and stats["miss"] == 0 and stats["clip"] == 0:
-                    grade = "S"
-                elif final_score >= 6500 and stats["miss"] == 0:
-                    grade = "A"
-                elif final_score >= 4500:
-                    grade = "B"
-                else:
-                    grade = "C"
-
+                time.sleep(0.15)
                 print("\n======================================================================")
-                print(" [MISSION ACCOMPLISHED: STAGE 1 ASTEROID PIPELINE EVALUATION]")
+                print("      STAGE 1 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
                 print("======================================================================")
-                print(f"  Clear Time       : {elapsed:.2f} s")
-                print(f"  Remaining Fuel   : {fuel:.1f}%")
-                print(f"  Flywheel RPM     : {wheel_rpm:.0f} RPM (Limit: 6,000 RPM)")
-                print(f"  Gate Clearance   : {len(passed_gates)} / {len(gate_x_list)} Gates")
-                print(f"  Gate Breakdown   : Perfect: {stats['perfect']}, Great: {stats['great']}, Good: {stats['good']}, Clip: {stats['clip']}, Miss: {stats['miss']}")
-                print(f"  Gate Total Score : {total_gate_score:,} pts")
-                print(f"  Fuel Bonus       : {fuel_bonus:,} pts (Fuel% x 10)")
-                print(f"  Time Bonus       : {time_bonus:,} pts")
-                print(f"  FINAL SCORE      : {final_score:,} pts")
-                print(f"  FLIGHT RANK      : GRADE {grade}")
+                print(f"  Autopilot Flight Time: {elapsed:.2f} s")
+                print(f"  Remaining Fuel       : {fuel:.1f}%")
+                print(f"  Flywheel RPM         : {wheel_rpm:.0f} RPM (Limit: 6,000 RPM)")
+                if os.path.exists("/tmp/space_guidance_telemetry.json"):
+                    try:
+                        with open("/tmp/space_guidance_telemetry.json", "r") as jf:
+                            t = json.load(jf)
+                        print(f"  Official Score       : {t.get('score', 0):,} pts")
+                        print(f"  Gate Score           : {t.get('checkpoint_score', 0):,} pts")
+                        print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
+                        print(f"  Gate Clearance       : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 9)} Gates")
+                        print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
+                        print(f"  Referee Event        : {t.get('last_event', '')}")
+                    except Exception as e:
+                        print(f"  Telemetry Read Err   : {e}")
                 print("======================================================================\n")
                 break
 
