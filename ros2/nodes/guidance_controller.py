@@ -3,6 +3,60 @@ import mmap
 import struct
 import time
 import os
+import sys
+
+class UartTee:
+    """
+    Sim-to-Real Telemetry Mirror (Terminal + Zynq PS UART)
+
+    標準出力 (sys.stdout) をターミナル画面に表示すると同時に、
+    物理実機互換のシリアルポート（AMD Xilinx Zynq PS UART1: /dev/ttyPS1 等）
+    へ透過的に複製出力（Tee）するストリームハンドラ。
+    コンテキストマネージャ (with 構文) および直接インスタンス化の両方に対応。
+    """
+    def __init__(self, uart_dev="/dev/ttyPS1", auto_redirect=True):
+        self.uart_dev = uart_dev
+        self.auto_redirect = auto_redirect
+        self.stdout = sys.__stdout__
+        self.uart_fd = None
+        try:
+            self.uart_fd = os.open(uart_dev, os.O_RDWR | os.O_NOCTTY)
+        except Exception:
+            self.uart_fd = None
+
+        if self.auto_redirect:
+            sys.stdout = self
+
+    def write(self, data):
+        self.stdout.write(data)
+        if self.uart_fd is not None:
+            try:
+                # \r\n を単一の \n に正規化（PTY 側での二重改行 \n\n を防止）
+                formatted = data.replace("\r\n", "\n").replace("\r", "")
+                os.write(self.uart_fd, formatted.encode("utf-8"))
+            except Exception:
+                pass
+
+    def flush(self):
+        self.stdout.flush()
+
+    def close(self):
+        if self.auto_redirect and sys.stdout is self:
+            sys.stdout = self.stdout
+        if self.uart_fd is not None:
+            try:
+                os.close(self.uart_fd)
+            except Exception:
+                pass
+            self.uart_fd = None
+
+    def __enter__(self):
+        if not self.auto_redirect:
+            sys.stdout = self
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
 class SpaceGuidanceHardware:
     """
@@ -14,7 +68,7 @@ class SpaceGuidanceHardware:
     SHM_LAYOUT = "=12I9d2Ii3I" # 12 uint32 + 9 doubles + 2 uint32 + 1 int32 + 3 uint32 = 144 bytes
     SIZE = struct.calcsize(SHM_LAYOUT)
 
-    def __init__(self, dev_path=None):
+    def __init__(self, dev_path=None, telemetry_uart=None):
         if dev_path is None:
             dev_path = os.getenv("FBB_SHM_PATH", "/tmp/vfpga_reg")
             if not os.path.exists(dev_path) and os.path.exists("/tmp/fbb_space_guidance_shm"):
@@ -29,6 +83,7 @@ class SpaceGuidanceHardware:
             self.f.truncate(self.SIZE)
             file_size = self.SIZE
         self.mm = mmap.mmap(self.f.fileno(), file_size)
+        self.uart_tee = UartTee(telemetry_uart) if telemetry_uart else None
 
     def read_registers(self):
         self.mm.seek(0)
@@ -92,5 +147,8 @@ class SpaceGuidanceHardware:
         self.mm.write(struct.pack("=I", 1))
 
     def close(self):
+        if hasattr(self, 'uart_tee') and self.uart_tee:
+            self.uart_tee.close()
+            self.uart_tee = None
         self.mm.close()
         self.f.close()

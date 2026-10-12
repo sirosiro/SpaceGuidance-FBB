@@ -33,6 +33,84 @@ graph LR
 
 ## 3. アーキテクチャと Sim-to-Real (Zynq-7000 / Kria 適合性)
 
+### 技術スタック・責務分担アーキテクチャ全体図 (Full Technology Stack)
+
+SpaceGuidance-FBB では、ベースプラットフォームである **FPGA-BoardlessBench (F-BB)** の基盤機能と、競技プラグインである **SpaceGuidance-FBB (SG-FBB)** の実装機能が明確に疎結合化されています。下図では、各コンポーネントの担当領域を目印（バッジ）および色分けで示しています。
+
+```mermaid
+flowchart TB
+    %% 凡例 (Legend)
+    subgraph LEGEND["凡例 / 責務分担 (Responsibility Separation)"]
+        direction LR
+        LEG_FBB["[F-BB] ホスト基盤プラットフォーム<br/>(シミュレーション環境・通信バス・基盤UI)"]:::fbb
+        LEG_SG["[SG-FBB] 宇宙探査プラグイン<br/>(3D描画・物理力学・公式審判・RTL回路・自律誘導)"]:::sg
+    end
+
+    subgraph UI["1. Web Cockpit & Visualization Layer (ブラウザ・表示系)"]
+        DASH["[F-BB] Web Dashboard ホスト<br/>(DPPA 動的ペインローダー / React レイアウト)"]:::fbb
+        ORBIT["[SG-FBB] 3D Cyber Orbit Viewer<br/>(Three.js ワイヤーフレーム 3D エンジン)"]:::sg
+        FDIR_UI["[SG-FBB] Official Referee Scorecard<br/>(公式スコア・ランクバッジ・審判イベント)"]:::sg
+        TLM_UI["[SG-FBB] Telemetry & C&W Gauges<br/>(計器盤・レッドアラート警報灯)"]:::sg
+    end
+
+    subgraph SW["2. Autopilot & Guidance Layer (Python / 操縦・自律誘導系)"]
+        PILOT["[SG-FBB] Autopilot Scripts (pilot.py)<br/>(PD誘導・S字ジャーク制限・6-DoF 視線誘導)"]:::sg
+        FDIR_SW["[SG-FBB] FDIR & 自律縮退復旧<br/>(センサ喪失推測航法・SEU検出・安全モード)"]:::sg
+        DESAT["[SG-FBB] 脱飽和マネージャー<br/>(リアクションホイール角運動量アンローディング)"]:::sg
+        ROS2["[SG-FBB] ハードウェアクライアント<br/>(guidance_controller.py / SpaceGuidanceHardware)"]:::sg
+    end
+
+    subgraph SIM["3. Physics Simulation & Referee Engine (C++17 / 物理・公式審判)"]
+        PHYS["[SG-FBB] Space Physics Engine (space_physics.cpp)<br/>(100Hz 剛体力学・弾性テザー弦波・3Dレール・6-DoF)"]:::sg
+        REF["[SG-FBB] Official Referee Engine (SSOT)<br/>(オーソリテーティブなゲート通過・採点・ランク判定)"]:::sg
+        DAEMON["[SG-FBB] Space Guidance Daemon (space_guidance_daemon.cpp)<br/>(100Hz シミュレーションメインループ)"]:::sg
+    end
+
+    subgraph IPC["4. Inter-Process Communication & Data Bus (IPC / データバス)"]
+        HTTP_WS["[F-BB] HTTP / WebSocket サーバー<br/>(Node.js Express / Socket.IO :8080)"]:::fbb
+        JSON_TLM["[SG-FBB] Telemetry JSON ストリーム<br/>(/tmp/space_guidance_telemetry.json)"]:::sg
+        SHM["[F-BB] POSIX 共有メモリ基盤<br/>(/tmp/vfpga_reg: 144バイト MMIO エミュレーション)"]:::fbb
+    end
+
+    subgraph HW["5. Hardware & Sim-to-Real Layer (FPGA RTL / ハードウェア防護)"]
+        UIO["[F-BB] Linux UIO サブシステム<br/>(Sim-to-Real 透過ドライバ /dev/uio0)"]:::fbb
+        AXI["[F-BB] AXI4-Lite バス規格<br/>(32-bit MMIO バス相互接続)"]:::fbb
+        TOP["[SG-FBB] AXI4-Lite Top IP<br/>(space_guidance_top.v)"]:::sg
+        FILTER["[SG-FBB] 光学センサ重心フィルタ<br/>(line_sensor_filter.v)"]:::sg
+        PWM["[SG-FBB] RCS 最小インパルス PWM<br/>(rcs_thruster_pwm.v)"]:::sg
+        SAFETY["[SG-FBB] インターロック & WDT<br/>(safety_interlock.v)"]:::sg
+        SIM_HDL["[F-BB] Verilator シミュレータ / AMD Zynq PL 実機<br/>(周期精度 C++ モデル / 実機シリコン)"]:::fbb
+    end
+
+    %% Connections
+    UI <-->|"HTTP / Socket.IO (:8080)"| HTTP_WS
+    HTTP_WS <-->|"テレメトリ JSON 読み出し"| JSON_TLM
+    DAEMON -->|"50Hz JSON 書き出し"| JSON_TLM
+
+    PILOT --> ROS2
+    FDIR_SW --> ROS2
+    DESAT --> ROS2
+
+    ROS2 <-->|"レジスタ読み出し / 指令書き込み"| SHM
+    DAEMON <-->|"100Hz 双方向更新"| SHM
+
+    PHYS <--> DAEMON
+    REF <--> DAEMON
+
+    SHM <-->|"透過エミュレーション / 実機 UIO"| UIO
+    UIO <-->|"AXI4-Lite バスアクセス"| AXI
+    AXI <--> TOP
+    TOP --> FILTER
+    TOP --> PWM
+    TOP --> SAFETY
+    TOP <--> SIM_HDL
+
+    %% スタイル定義 (Style Definitions)
+    classDef fbb fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef sg fill:#2e1065,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
+```
+
+
 本プラグインのハードウェア（PL論理）およびソフトウェア（PS CPU）のフットプリントは、AMD Xilinx Zynq-7000 (Z-7010 / Zybo, Cora) や Kria KV260 実機において、**1行のコード変更もなしにそのまま動作する設計（100% Sim-to-Real 透明性）** を保証しています。
 
 ```

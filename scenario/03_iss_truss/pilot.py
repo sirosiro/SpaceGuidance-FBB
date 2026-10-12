@@ -10,40 +10,11 @@ import math
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(script_dir, "..", "..", "ros2", "nodes")))
 sys.path.append(os.path.abspath(os.path.join(script_dir, "..", "ros2", "nodes")))
-from guidance_controller import SpaceGuidanceHardware
-
-class UartTee:
-    def __init__(self, uart_dev="/dev/ttyPS1"):
-        self.stdout = sys.__stdout__
-        self.uart_fd = None
-        try:
-            self.uart_fd = os.open(uart_dev, os.O_RDWR | os.O_NOCTTY)
-        except Exception:
-            self.uart_fd = None
-
-    def write(self, data):
-        self.stdout.write(data)
-        if self.uart_fd is not None:
-            try:
-                formatted = data.replace("\r\n", "\n").replace("\r", "")
-                os.write(self.uart_fd, formatted.encode("utf-8"))
-            except Exception:
-                pass
-
-    def flush(self):
-        self.stdout.flush()
-
-    def close(self):
-        if self.uart_fd is not None:
-            try:
-                os.close(self.uart_fd)
-            except Exception:
-                pass
-            self.uart_fd = None
+from guidance_controller import SpaceGuidanceHardware, UartTee
 
 def run_pilot():
-    tee = UartTee()
-    sys.stdout = tee
+    # 実機互換テレメトリ出力: ターミナル画面と Zynq PS UART1 (/dev/ttyPS1) へ同時複製配信
+    tee = UartTee("/dev/ttyPS1")
     hw = SpaceGuidanceHardware()
     print("[Pilot] Stage 3: ISS Truss Inspector System Online.")
     print("[Pilot] 60m 3D Truss Rail Corridor. 4 Critical Inspection Joints.")
@@ -147,7 +118,6 @@ def run_pilot():
         hw.close()
         if tee:
             tee.close()
-        sys.stdout = sys.__stdout__
 
 if __name__ == "__main__":
     run_pilot()
