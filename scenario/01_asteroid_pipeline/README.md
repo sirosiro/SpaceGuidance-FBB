@@ -87,6 +87,71 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| \righ
 cp /workspaces/SpaceGuidance-FBB/examples/mission01_baseline_pilot.py /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
 ```
 
+### (4) pilot.py 自律操縦ロジック・制御ループ全体図 (50Hz / 20ms)
+
+探査機が 50Hz 周期（20ms）で自律実行しているテレメトリ取得、幾何重心の微分計算、PD姿勢誘導、リアクションホイールと RCS の脱飽和、および並進推力配分の処理フローです。後述の **TUNE ZONE 1〜3** がどの計算ブロックに作用しているかを明確に示しています。
+
+```mermaid
+flowchart TD
+    %% スタイル定義
+    classDef start_end fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#f8fafc;
+    classDef io fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef compute fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;
+    classDef branch fill:#312e81,stroke:#a855f7,stroke-width:2px,color:#f8fafc;
+    classDef rw fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+    classDef rcs fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#f8fafc;
+
+    START(["起動: run_pilot()<br/>UartTee('/dev/ttyPS1') & SpaceGuidanceHardware()"]):::start_end --> INIT["パラメータ・状態初期化<br/>kp, kd, kw, klat, target_vx / 制御周期 50Hz (dt=20ms)"]:::compute
+    
+    INIT --> LOOP_START{"50Hz メイン制御ループ"}:::branch
+
+    %% 1. センシング
+    subgraph SENSE["1. テレメトリ取得 & 安全監視 (Sensing & Safety)"]
+        LOOP_START --> READ["hw.read_registers()<br/>位置(x,y), 速度(vx,vy), 姿勢角θ, 角速度ω, ホイールRPM, 燃料"]:::io
+        READ --> WDT["hw.kick_watchdog()<br/>ハードウェア非常停止(E-STOP)の防止"]:::io
+        WDT --> EDGE["光学センサ偏差 & 微分計算<br/>重心偏差: e = raw_edge / 65536<br/>微分値: de = (e - prev_e) / dt"]:::compute
+    end
+
+    %% 2. ゴール・審判
+    subgraph GOAL_CHECK["2. 審判チェックポイント & 終了判定 (Referee Check)"]
+        EDGE --> GATE["ゲート通過報告 (X=5m〜45m)"]:::compute
+        GATE --> GOAL{"X >= 49.0m<br/>(ゴール到達?)"}:::branch
+        GOAL -- YES --> FINISH["公式審判スコア表示 (SSOT)<br/>Official Grade, Score, Bonus"]:::io --> CLEANUP
+    end
+
+    %% 3. 運動学変換 & PD
+    subgraph GUIDANCE["3. 座標変換 & PD誘導 (Guidance & PD Control)"]
+        GOAL -- NO --> BODY_TRANS["機体座標系 (Body Frame) 速度計算<br/>v_fwd = vx*cosθ + vy*sinθ (進行方向速度)<br/>v_lat = -vx*sinθ + vy*cosθ (横滑り速度)"]:::compute
+        BODY_TRANS --> PD_TORQUE["【TUNE ZONE 1】 目標姿勢トルク計算 (PD Control)<br/>target_torque = (kp*e + kd*de) - kw*ω"]:::compute
+    end
+
+    %% 4. ハイブリッド姿勢制御 (RW vs RCS)
+    subgraph HYBRID["4. ハイブリッド姿勢制御・脱飽和 (Hybrid AOCS Allocation)"]
+        PD_TORQUE --> CHECK_DESAT{"【TUNE ZONE 3】 脱飽和判定<br/>|wheel_rpm| > 5200 RPM ?"}:::branch
+        
+        CHECK_DESAT -- "通常域 (RPM 正常)" --> RW_MODE["リアクションホイール優先 (電気駆動・燃料0)<br/>wheel_torque_cmd = -target_torque<br/>rcs_torque_cmd = 0.0"]:::rw
+        
+        CHECK_DESAT -- "飽和域 (RPM 超過)" --> RCS_MODE["RCS脱飽和アンローディング (推進剤消費)<br/>・RCS が姿勢維持を肩代わり<br/>・ホイールに逆制動トルク印加して減速"]:::rcs
+    end
+
+    %% 5. 並進推力 & 出力
+    subgraph ACTUATION["5. 並進推力配分 & ハードウェア指令出力 (Actuation)"]
+        RW_MODE --> TRANS_CMD
+        RCS_MODE --> TRANS_CMD
+        
+        TRANS_CMD["並進スラスタ指令計算<br/>・【TUNE ZONE 1】 横移動 RCS: lat_cmd = klat*e - kvlat*v_lat (不感帯3cm)<br/>・【TUNE ZONE 2】 前進メイン: thrust_x = 0.2 * (target_vx - v_fwd)"]:::compute
+        
+        TRANS_CMD --> WRITE["hw.write_commands(...)<br/>thrust_x, thrust_y, torque, wheel_torque, fdir_mode"]:::io
+        WRITE --> SLEEP["time.sleep(dt=0.02)"]:::io
+        SLEEP --> LOOP_START
+    end
+
+    subgraph CLEANUP["終了・安全保護 (Safe Shutdown)"]
+        CLEANUP_EXEC["hw.write_commands(0, 0, 0, 0)<br/>全スラスタ・ホイール停止<br/>hw.close() & tee.close()"]:::start_end
+    end
+```
+
+
 ---
 
 ## 4. アーケード採点・公式審判システム (Official Referee SSOT)
