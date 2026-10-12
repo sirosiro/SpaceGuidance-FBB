@@ -387,14 +387,146 @@ export default function SpaceOrbitViewer3D() {
 
       if (stageId === 2) {
         // --------------------------------------------------------------------
-        // Stage 2: 100m High-Tension Carbon Nanotube Tether Cable & Rings
+        // Stage 2: 100m High-Tension Carbon Nanotube Tether Cable & Environments
+        // [Origin: GEO Orbital Habitat Station (0m) -> Terminal: Asteroid Mining Base (100m)]
         // --------------------------------------------------------------------
         const cableLength = 100.0;
         const isRuptured = !!tlm.cable_snapped;
         const cableTension = tlm.cable_tension || 10000;
         const cableColor = isRuptured ? '#ef4444' : (cableTension > 13000 ? '#f97316' : '#38bdf8');
 
-        // Draw tether cable with dynamic transverse string wave
+        // ====================================================================
+        // A. STARTING TERMINUS (0m): Geostationary Orbital Station (GEO Station)
+        // ====================================================================
+        const stationRot = (now * 0.0003) % (Math.PI * 2);
+        const geoX = -2.5;
+        const torusR = 9.0;
+        const torusInnerR = 7.2;
+
+        // 1. Massive Rotating Habitat Torus Ring in Y-Z plane
+        ctx.strokeStyle = '#0284c7';
+        ctx.shadowColor = '#0284c7';
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = 1.6;
+
+        const torusOuterPts = [];
+        const torusInnerPts = [];
+        const torusSegs = 20;
+        for (let i = 0; i < torusSegs; i++) {
+          const a = stationRot + (i * Math.PI * 2 / torusSegs);
+          const pOut = project3D(geoX, torusR * Math.sin(a), torusR * Math.cos(a));
+          const pIn  = project3D(geoX, torusInnerR * Math.sin(a), torusInnerR * Math.cos(a));
+          if (pOut) torusOuterPts.push(pOut);
+          if (pIn) torusInnerPts.push(pIn);
+        }
+
+        if (torusOuterPts.length === torusSegs && torusInnerPts.length === torusSegs) {
+          // Outer ring
+          ctx.beginPath();
+          ctx.moveTo(torusOuterPts[0].sx, torusOuterPts[0].sy);
+          for (let i = 1; i < torusSegs; i++) ctx.lineTo(torusOuterPts[i].sx, torusOuterPts[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+
+          // Inner ring
+          ctx.beginPath();
+          ctx.moveTo(torusInnerPts[0].sx, torusInnerPts[0].sy);
+          for (let i = 1; i < torusSegs; i++) ctx.lineTo(torusInnerPts[i].sx, torusInnerPts[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+
+          // Window modules & cross bulkheads
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1.0;
+          for (let i = 0; i < torusSegs; i += 2) {
+            ctx.beginPath();
+            ctx.moveTo(torusOuterPts[i].sx, torusOuterPts[i].sy);
+            ctx.lineTo(torusInnerPts[i].sx, torusInnerPts[i].sy);
+            ctx.stroke();
+          }
+        }
+
+        // 2. 4 Structural Spoke Trusses connecting Hub to Torus
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1.4;
+        const hubCenter = project3D(geoX, 0, 0);
+        for (let k = 0; k < 4; k++) {
+          const a = stationRot + (k * Math.PI / 2);
+          const pSpokeEnd = project3D(geoX, torusInnerR * Math.sin(a), torusInnerR * Math.cos(a));
+          if (hubCenter && pSpokeEnd) {
+            ctx.beginPath();
+            ctx.moveTo(hubCenter.sx, hubCenter.sy);
+            ctx.lineTo(pSpokeEnd.sx, pSpokeEnd.sy);
+            ctx.stroke();
+          }
+        }
+
+        // 3. Central Mooring Core & Tether Anchor Sleeve (X from -6m to +0.5m)
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.0;
+        const pAnchorEntry = project3D(0.0, 0, 0);
+        const pAnchorBack  = project3D(-6.0, 0, 0);
+        const hubCollarPts = [];
+        for (let i = 0; i < 8; i++) {
+          const a = (i * Math.PI * 2 / 8);
+          const pt = project3D(0.2, 2.2 * Math.sin(a), 2.2 * Math.cos(a));
+          if (pt) hubCollarPts.push(pt);
+        }
+        if (hubCollarPts.length === 8) {
+          ctx.beginPath();
+          ctx.moveTo(hubCollarPts[0].sx, hubCollarPts[0].sy);
+          for (let i = 1; i < 8; i++) ctx.lineTo(hubCollarPts[i].sx, hubCollarPts[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+        }
+
+        // 4. Giant Photovoltaic Solar Array Wings (Upper & Lower Z)
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 1.2;
+        const solarZOffsets = [
+          { z1: 3.5, z2: 10.5 },
+          { z1: -10.5, z2: -3.5 }
+        ];
+        for (const s of solarZOffsets) {
+          const sp1 = project3D(geoX - 1.2, -2.4, s.z1);
+          const sp2 = project3D(geoX - 1.2, 2.4, s.z1);
+          const sp3 = project3D(geoX - 1.2, 2.4, s.z2);
+          const sp4 = project3D(geoX - 1.2, -2.4, s.z2);
+          if (sp1 && sp2 && sp3 && sp4) {
+            ctx.beginPath();
+            ctx.moveTo(sp1.sx, sp1.sy);
+            ctx.lineTo(sp2.sx, sp2.sy);
+            ctx.lineTo(sp3.sx, sp3.sy);
+            ctx.lineTo(sp4.sx, sp4.sy);
+            ctx.closePath();
+            ctx.stroke();
+            // Solar rib grid
+            const sm1 = project3D(geoX - 1.2, 0, s.z1);
+            const sm2 = project3D(geoX - 1.2, 0, s.z2);
+            if (sm1 && sm2) {
+              ctx.moveTo(sm1.sx, sm1.sy);
+              ctx.lineTo(sm2.sx, sm2.sy);
+              ctx.stroke();
+            }
+          }
+        }
+
+        // GEO Station HUD Label
+        if (torusOuterPts.length > 0) {
+          const topTorus = project3D(geoX, 0, torusR);
+          if (topTorus) {
+            ctx.save();
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('GEO ORBITAL STATION [ALPHA ANCHOR]', topTorus.sx, topTorus.sy - 10);
+            ctx.restore();
+          }
+        }
+
+        // ====================================================================
+        // B. 100m High-Tension Carbon Nanotube Tether Cable (String Wave)
+        // ====================================================================
         ctx.strokeStyle = cableColor;
         ctx.shadowColor = cableColor;
         ctx.shadowBlur = isRuptured ? 16 : 8;
@@ -412,17 +544,16 @@ export default function SpaceOrbitViewer3D() {
         ctx.stroke();
         ctx.shadowBlur = 0;
 
-        // Draw altitude beacon rings every 10m (0m .. 100m)
-        for (let rx = 0.0; rx <= cableLength; rx += 10.0) {
+        // Draw altitude beacon rings every 10m (10m .. 90m)
+        for (let rx = 10.0; rx <= 90.0; rx += 10.0) {
           const isPassed = rx < shipX - 1.0;
-          const isTarget = (rx >= cableLength - 0.1);
-          const ringColor = isTarget ? '#eab308' : (isPassed ? '#059669' : '#0284c7');
-          const ringRad = isTarget ? 4.5 : 2.5;
+          const ringColor = isPassed ? '#059669' : '#0284c7';
+          const ringRad = 2.5;
 
           ctx.strokeStyle = ringColor;
           ctx.shadowColor = ringColor;
-          ctx.shadowBlur = isTarget ? 14 : 4;
-          ctx.lineWidth = isTarget ? 2.8 : 1.2;
+          ctx.shadowBlur = 4;
+          ctx.lineWidth = 1.2;
 
           const circlePts = [];
           for (let i = 0; i < 12; i++) {
@@ -440,14 +571,141 @@ export default function SpaceOrbitViewer3D() {
             const topPt = circlePts[0];
             if (topPt) {
               ctx.save();
-              ctx.fillStyle = isTarget ? '#fde047' : (isPassed ? '#10b981' : '#94a3b8');
-              ctx.font = 'bold 11px monospace';
+              ctx.fillStyle = isPassed ? '#10b981' : '#94a3b8';
+              ctx.font = '10px monospace';
               ctx.textAlign = 'center';
-              ctx.fillText(isTarget ? 'GEO ORBIT DOCK' : `BEACON ${Math.round(rx/10)} (${rx.toFixed(0)}m)`, topPt.sx, topPt.sy - 8);
+              ctx.fillText(`BEACON ${Math.round(rx/10)} (${rx.toFixed(0)}m)`, topPt.sx, topPt.sy - 8);
               ctx.restore();
             }
           }
         }
+
+        // ====================================================================
+        // C. GOAL TERMINUS (100m): Asteroid Mining Base (小惑星採掘基地)
+        // ====================================================================
+        const astX = 110.0;
+        const astBaseR = 12.0;
+
+        // 1. 3D Wireframe Irregular Asteroid Rock Face
+        ctx.strokeStyle = '#78716c';
+        ctx.lineWidth = 1.0;
+        ctx.shadowBlur = 0;
+
+        const latCount = 7;
+        const lonCount = 12;
+        const astGrid = [];
+
+        for (let la = 0; la < latCount; la++) {
+          const lat = -Math.PI / 2 + (la + 0.5) * Math.PI / latCount;
+          const ringPts = [];
+          for (let lo = 0; lo < lonCount; lo++) {
+            const lon = lo * 2 * Math.PI / lonCount;
+            // Craggy surface perturbation
+            const rDispl = astBaseR + 2.4 * Math.sin(lat * 3) * Math.cos(lon * 2) + 1.2 * Math.sin(lon * 4 + 1.0);
+            const px = astX + rDispl * Math.cos(lat) * Math.cos(lon);
+            const py = rDispl * Math.cos(lat) * Math.sin(lon);
+            const pz = rDispl * Math.sin(lat);
+            const pt = project3D(px, py, pz);
+            ringPts.push(pt);
+          }
+          astGrid.push(ringPts);
+
+          // Draw latitude line
+          ctx.beginPath();
+          let fPt = true;
+          for (let lo = 0; lo < lonCount; lo++) {
+            const p = ringPts[lo];
+            if (p) {
+              if (fPt) { ctx.moveTo(p.sx, p.sy); fPt = false; }
+              else { ctx.lineTo(p.sx, p.sy); }
+            }
+          }
+          if (ringPts[0] && !fPt) ctx.lineTo(ringPts[0].sx, ringPts[0].sy);
+          ctx.stroke();
+        }
+
+        // Draw longitude meridian lines on asteroid
+        for (let lo = 0; lo < lonCount; lo++) {
+          ctx.beginPath();
+          let fPt = true;
+          for (let la = 0; la < latCount; la++) {
+            const p = astGrid[la][lo];
+            if (p) {
+              if (fPt) { ctx.moveTo(p.sx, p.sy); fPt = false; }
+              else { ctx.lineTo(p.sx, p.sy); }
+            }
+          }
+          ctx.stroke();
+        }
+
+        // 2. High-Tension Cable Anchor Rig & Steel Gantry Tower (X from 98m to 104m)
+        ctx.strokeStyle = '#eab308';
+        ctx.shadowColor = '#eab308';
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2.4;
+
+        // Terminal Docking Clamp Ring at X=100.0m
+        const dockCollarPts = [];
+        for (let i = 0; i < 12; i++) {
+          const a = (i * Math.PI * 2 / 12);
+          const pt = project3D(100.0, 3.8 * Math.sin(a), 3.8 * Math.cos(a));
+          if (pt) dockCollarPts.push(pt);
+        }
+        if (dockCollarPts.length === 12) {
+          ctx.beginPath();
+          ctx.moveTo(dockCollarPts[0].sx, dockCollarPts[0].sy);
+          for (let i = 1; i < 12; i++) ctx.lineTo(dockCollarPts[i].sx, dockCollarPts[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+        }
+
+        // 4 Anchor Footings bolted into Asteroid Rock face
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.6;
+        for (let k = 0; k < 4; k++) {
+          const a = k * Math.PI / 2 + Math.PI / 4;
+          const pClamp = project3D(100.0, 3.8 * Math.sin(a), 3.8 * Math.cos(a));
+          const pAnchorRock = project3D(104.5, 6.5 * Math.sin(a), 6.5 * Math.cos(a));
+          if (pClamp && pAnchorRock) {
+            ctx.beginPath();
+            ctx.moveTo(pClamp.sx, pClamp.sy);
+            ctx.lineTo(pAnchorRock.sx, pAnchorRock.sy);
+            ctx.stroke();
+          }
+        }
+
+        // 3. Mining Excavation Core Drill Rig & Geodesic Habitat Domes
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.2;
+        // Mining Dome at surface
+        const domeCenter = { x: 102.5, y: 5.5, z: 3.5, r: 2.4 };
+        const domePts = [];
+        for (let i = 0; i < 8; i++) {
+          const a = i * Math.PI * 2 / 8;
+          const pt = project3D(domeCenter.x, domeCenter.y + domeCenter.r * Math.cos(a), domeCenter.z + domeCenter.r * Math.sin(a));
+          if (pt) domePts.push(pt);
+        }
+        if (domePts.length === 8) {
+          ctx.beginPath();
+          ctx.moveTo(domePts[0].sx, domePts[0].sy);
+          for (let i = 1; i < 8; i++) ctx.lineTo(domePts[i].sx, domePts[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+        }
+
+        // Terminal Label
+        if (dockCollarPts.length > 0) {
+          const topDock = dockCollarPts[0];
+          if (topDock) {
+            ctx.save();
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('ASTEROID MINING BASE [TERMINAL PORT]', topDock.sx, topDock.sy - 12);
+            ctx.restore();
+          }
+        }
+        ctx.shadowBlur = 0;
       } else if (stageId === 3) {
         // --------------------------------------------------------------------
         // Stage 3: 60m ISS Modular Box Truss Structure with Inspection Nodes
@@ -722,13 +980,6 @@ export default function SpaceOrbitViewer3D() {
       // 4. Draw True 3D Spacecraft Polyhedral Model with Yaw & Bank Roll
       // ------------------------------------------------------------------------
       const isGhost = tlm.carrier_lost || tlm.fdir_mode === 1;
-      const shipColor = isGhost ? '#f59e0b' : '#38bdf8';
-      ctx.strokeStyle = shipColor;
-      ctx.shadowColor = shipColor;
-      ctx.shadowBlur = isGhost ? 4 : 12;
-      ctx.lineWidth = 2.0;
-      if (isGhost) ctx.setLineDash([4, 4]);
-
       const cosSY = Math.cos(shipYaw);
       const sinSY = Math.sin(shipYaw);
       const cosSB = Math.cos(rawBank);
@@ -745,22 +996,6 @@ export default function SpaceOrbitViewer3D() {
         return project3D(wx, wy, wz);
       };
 
-      const V = {
-        nose: transformShipPoint(2.2, 0, 0),
-        wingL: transformShipPoint(-1.3, -1.8, 0),
-        wingR: transformShipPoint(-1.3, 1.8, 0),
-        canopy: transformShipPoint(-0.2, 0, 0.65),
-        finL: transformShipPoint(-1.4, -0.7, 0.8),
-        finR: transformShipPoint(-1.4, 0.7, 0.8),
-        nozzleL: transformShipPoint(-1.6, -0.4, 0),
-        nozzleR: transformShipPoint(-1.6, 0.4, 0),
-        keel: transformShipPoint(-0.4, 0, -0.4),
-        rcsBowL: transformShipPoint(0.8, -0.65, 0),
-        rcsBowR: transformShipPoint(0.8, 0.65, 0),
-        rcsSternL: transformShipPoint(-1.3, -1.8, 0),
-        rcsSternR: transformShipPoint(-1.3, 1.8, 0)
-      };
-
       const draw3DEdge = (p1, p2) => {
         if (p1 && p2) {
           ctx.beginPath();
@@ -770,217 +1005,345 @@ export default function SpaceOrbitViewer3D() {
         }
       };
 
-      // Delta Hull Outline
-      draw3DEdge(V.nose, V.wingL);
-      draw3DEdge(V.nose, V.wingR);
-      draw3DEdge(V.wingL, V.nozzleL);
-      draw3DEdge(V.wingR, V.nozzleR);
-      draw3DEdge(V.nozzleL, V.nozzleR);
+      if (stageId === 2) {
+        // ====================================================================
+        // STAGE 2: Orbital Tether Climber (Gondola, Rollers, Solar Wings)
+        // ====================================================================
+        const isRuptured = !!tlm.cable_snapped;
+        const climberColor = isRuptured ? '#ef4444' : (isGhost ? '#f59e0b' : '#38bdf8');
+        ctx.strokeStyle = climberColor;
+        ctx.shadowColor = climberColor;
+        ctx.shadowBlur = isRuptured ? 16 : 8;
+        ctx.lineWidth = 1.8;
+        if (isGhost) ctx.setLineDash([4, 4]);
+        else ctx.setLineDash([]);
 
-      // Cockpit Canopy
-      draw3DEdge(V.nose, V.canopy);
-      draw3DEdge(V.wingL, V.canopy);
-      draw3DEdge(V.wingR, V.canopy);
-
-      // Vertical Stabilizer Fins
-      draw3DEdge(V.nozzleL, V.finL);
-      draw3DEdge(V.canopy, V.finL);
-      draw3DEdge(V.nozzleR, V.finR);
-      draw3DEdge(V.canopy, V.finR);
-
-      // Ventral Keel
-      draw3DEdge(V.nose, V.keel);
-      draw3DEdge(V.wingL, V.keel);
-      draw3DEdge(V.wingR, V.keel);
-
-      // Internal Reaction Wheel Flywheel Disk (Center of Mass)
-      const wheelAngle = (now * 0.001 * ((tlm.wheel_rpm || 0) * 0.1)) % (Math.PI * 2);
-      const rwRadius = 0.45;
-      const rwSegments = 8;
-      const rwPts = [];
-      for (let i = 0; i < rwSegments; i++) {
-        const a = wheelAngle + (i * Math.PI * 2 / rwSegments);
-        rwPts.push(transformShipPoint(-0.4 + Math.cos(a) * rwRadius * 0.6, Math.sin(a) * rwRadius, 0.1));
-      }
-      ctx.strokeStyle = Math.abs(tlm.wheel_rpm || 0) > 5000 ? '#ef4444' : '#ec4899';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      for (let i = 0; i < rwSegments; i++) {
-        const next = (i + 1) % rwSegments;
-        if (rwPts[i] && rwPts[next]) {
-          ctx.moveTo(rwPts[i].sx, rwPts[i].sy);
-          ctx.lineTo(rwPts[next].sx, rwPts[next].sy);
-        }
-      }
-      ctx.stroke();
-      if (rwPts[0] && rwPts[4]) {
-        ctx.moveTo(rwPts[0].sx, rwPts[0].sy); ctx.lineTo(rwPts[4].sx, rwPts[4].sy);
-      }
-      if (rwPts[2] && rwPts[6]) {
-        ctx.moveTo(rwPts[2].sx, rwPts[2].sy); ctx.lineTo(rwPts[6].sx, rwPts[6].sy);
-      }
-      ctx.stroke();
-
-      // RCS Pod Hardware Brackets
-      const drawRcsPod = (p) => {
-        if (!p) return;
-        ctx.fillStyle = '#f59e0b';
-        ctx.shadowColor = '#f59e0b';
-        ctx.shadowBlur = 4;
-        ctx.fillRect(p.sx - 2.5, p.sy - 2.5, 5, 5);
-      };
-      drawRcsPod(V.rcsBowL);
-      drawRcsPod(V.rcsBowR);
-      drawRcsPod(V.rcsSternL);
-      drawRcsPod(V.rcsSternR);
-
-      // Optical Line Sensor Bar ahead of nose
-      const sensorL = transformShipPoint(1.2, -0.8, 0);
-      const sensorR = transformShipPoint(1.2, 0.8, 0);
-      if (sensorL && sensorR) {
-        ctx.strokeStyle = '#22c55e';
-        ctx.shadowColor = '#22c55e';
-        ctx.shadowBlur = 8;
-        ctx.lineWidth = 2.5;
-        ctx.setLineDash([]);
-        draw3DEdge(sensorL, sensorR);
-      }
-
-      // Main Engine Thruster Plumes (Active Forward Thrust & Cruise Burn)
-      const hasFuel = (tlm.fuel === undefined || tlm.fuel > 0);
-      const isCruising = ((tlm.vel_x || 0) > 0.05);
-      const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : (isCruising ? 0.15 : 0.0);
-
-      if ((actualFx > 0.005 || (isCruising && actualFx >= -0.005)) && hasFuel) {
-        // Forward Acceleration / Cruise Thrust:
-        // Even during steady turns or cruise, produce prominent twin plasma plumes
-        const cmdPower = (actualFx > 0.005) ? actualFx : 0.08;
-        const throttle = Math.min(1.0, Math.max(0.20, cmdPower / 0.25));
-        const plumeLen = 0.6 + throttle * (1.6 + Math.random() * 0.5);
-        const jitter = (Math.random() - 0.5) * 0.12 * throttle;
-
-        // Outer Plasma Sheath (Bright Cyan Blue)
-        ctx.strokeStyle = '#38bdf8';
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 10 + throttle * 15;
-        ctx.lineWidth = 1.8 + throttle * 2.2;
-        ctx.setLineDash([]);
-
-        const pTipL = transformShipPoint(-1.6 - plumeLen, -0.4, (Math.random() - 0.5) * 0.15 * throttle);
-        const pTipR = transformShipPoint(-1.6 - plumeLen, 0.4, (Math.random() - 0.5) * 0.15 * throttle);
-        draw3DEdge(V.nozzleL, pTipL);
-        draw3DEdge(V.nozzleR, pTipR);
-
-        // Core Plasma Flame (Hyper-Hot Orange/White)
-        ctx.strokeStyle = throttle > 0.5 ? '#ffffff' : '#fb923c';
-        ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = 8 + throttle * 12;
-        ctx.lineWidth = 1.2 + throttle * 1.5;
-        const pTipMid = transformShipPoint(-1.6 - plumeLen * 1.25, 0.0, jitter);
-        draw3DEdge(V.nozzleL, pTipMid);
-        draw3DEdge(V.nozzleR, pTipMid);
-
-        // Twin nozzle flare crossbars for high visual presence
-        const flareSpread = 0.25 + throttle * 0.15;
-        const pFlL1 = transformShipPoint(-1.7, -0.4 - flareSpread, 0);
-        const pFlL2 = transformShipPoint(-1.7, -0.4 + flareSpread, 0);
-        const pFlR1 = transformShipPoint(-1.7, 0.4 - flareSpread, 0);
-        const pFlR2 = transformShipPoint(-1.7, 0.4 + flareSpread, 0);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-        ctx.lineWidth = 1.0;
-        draw3DEdge(pFlL1, pFlL2);
-        draw3DEdge(pFlR1, pFlR2);
-      } else if (actualFx < -0.005 && hasFuel) {
-        // Reverse Braking: Forward retrograde plumes from bow nozzles
-        const throttle = Math.min(1.0, Math.abs(actualFx) / 0.25);
-        const revLen = 0.4 + throttle * (1.2 + Math.random() * 0.5);
-
-        ctx.strokeStyle = '#f59e0b';
-        ctx.shadowColor = '#ef4444';
-        ctx.shadowBlur = 8 + throttle * 12;
-        ctx.lineWidth = 1.5 + throttle * 1.5;
-        ctx.setLineDash([]);
-
-        const pRevL = transformShipPoint(2.2 + revLen, -0.35, 0.0);
-        const pRevR = transformShipPoint(2.2 + revLen, 0.35, 0.0);
-        draw3DEdge(V.nose, pRevL);
-        draw3DEdge(V.nose, pRevR);
-      }
-
-      // RCS Cold-Gas Plumes (Proportional to Actual Firing Commands: Torque & Lateral)
-      const effTorque = (tlm.torque !== undefined) ? tlm.torque : 0.0;
-      const effLat = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
-
-      const drawRcsJet = (bx, by, bz, dirY, dirX = 0, power = 0.15) => {
-        const normPower = Math.min(1.0, Math.max(0.2, power / 0.25));
-        const jetLen = normPower * (0.75 + Math.random() * 0.45);
-        const pBase = transformShipPoint(bx, by, bz);
-        const pTip = transformShipPoint(bx + dirX * jetLen, by + dirY * jetLen, bz + (Math.random() - 0.5) * 0.12 * normPower);
-        if (pBase && pTip) {
-          ctx.strokeStyle = '#38bdf8';
-          ctx.shadowColor = '#00f0ff';
-          ctx.shadowBlur = 4 + normPower * 10;
-          ctx.lineWidth = 1.0 + normPower * 1.8;
-          ctx.beginPath();
-          ctx.moveTo(pBase.sx, pBase.sy);
-          ctx.lineTo(pTip.sx, pTip.sy);
-          ctx.stroke();
-
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-          ctx.lineWidth = 0.8 + normPower * 0.8;
-          ctx.beginPath();
-          ctx.moveTo(pBase.sx, pBase.sy);
-          ctx.lineTo(pTip.sx + (Math.random() - 0.5) * 3, pTip.sy + (Math.random() - 0.5) * 3);
-          ctx.stroke();
-        }
-      };
-
-      // Attitude Yaw RCS Plumes (Proportional to effTorque)
-      if (effTorque > 0.015) {
-        drawRcsJet(0.8, 0.65, 0, 1.0, 0, effTorque);
-        drawRcsJet(-1.3, -1.8, 0, -1.0, 0, effTorque);
-      }
-      if (effTorque < -0.015) {
-        drawRcsJet(0.8, -0.65, 0, -1.0, 0, -effTorque);
-        drawRcsJet(-1.3, 1.8, 0, 1.0, 0, -effTorque);
-      }
-
-      // Lateral Translation RCS Plumes (Proportional to effLat)
-      if (effLat > 0.015) {
-        drawRcsJet(0.8, 0.65, 0, 0.8, 0, effLat);
-        drawRcsJet(-1.3, 1.8, 0, 0.8, 0, effLat);
-      }
-      if (effLat < -0.015) {
-        drawRcsJet(0.8, -0.65, 0, -0.8, 0, -effLat);
-        drawRcsJet(-1.3, -1.8, 0, -0.8, 0, -effLat);
-      }
-
-      // Vertical Roll RCS Jet Plumes (Proportional to Bank Angle)
-      if (Math.abs(rawBank) > 0.04) {
-        const rollDir = rawBank > 0 ? 1.0 : -1.0;
-        const normRoll = Math.min(1.0, Math.abs(rawBank) / 0.18);
-        const rollLen = normRoll * (0.6 + Math.random() * 0.35);
-        const drawRollJet = (bx, by, dirZ) => {
-          const pBase = transformShipPoint(bx, by, 0.0);
-          const pTip = transformShipPoint(bx, by, dirZ * rollLen);
-          if (pBase && pTip) {
-            ctx.strokeStyle = '#38bdf8';
-            ctx.shadowColor = '#00f0ff';
-            ctx.shadowBlur = 4 + normRoll * 8;
-            ctx.lineWidth = 1.0 + normRoll * 1.5;
+        // 1. Central Cable Guide Rings (Upper Collar at +0.85m, Lower Collar at -0.85m)
+        const collarRadii = 0.45;
+        const collarX = [0.85, -0.85];
+        for (let k = 0; k < 2; k++) {
+          const cx = collarX[k];
+          const cPts = [];
+          for (let i = 0; i < 8; i++) {
+            const a = (i * Math.PI * 2) / 8;
+            cPts.push(transformShipPoint(cx, collarRadii * Math.sin(a), collarRadii * Math.cos(a)));
+          }
+          if (cPts.length === 8) {
             ctx.beginPath();
-            ctx.moveTo(pBase.sx, pBase.sy);
-            ctx.lineTo(pTip.sx, pTip.sy);
+            ctx.moveTo(cPts[0].sx, cPts[0].sy);
+            for (let i = 1; i < 8; i++) ctx.lineTo(cPts[i].sx, cPts[i].sy);
+            ctx.closePath();
             ctx.stroke();
           }
+        }
+
+        // 4 Connecting Titanium Spine Rods between Top and Bottom Collars
+        for (let i = 0; i < 4; i++) {
+          const a = (i * Math.PI * 2) / 4 + Math.PI / 4;
+          const p1 = transformShipPoint(0.85, collarRadii * Math.sin(a), collarRadii * Math.cos(a));
+          const p2 = transformShipPoint(-0.85, collarRadii * Math.sin(a), collarRadii * Math.cos(a));
+          draw3DEdge(p1, p2);
+        }
+
+        // 2. Spinning Dual Pinch Roller Wheels (Rotating with velocity)
+        const rollerAngle = (now * 0.006 * (tlm.vel_x || 0)) % (Math.PI * 2);
+        const rollerR = 0.22;
+        const rollerXPositions = [0.70, -0.70];
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.4;
+        for (const rx of rollerXPositions) {
+          // Left pinch roller wheel (by = -0.25)
+          const rwL = [];
+          for (let i = 0; i < 6; i++) {
+            const a = rollerAngle + (i * Math.PI * 2 / 6);
+            rwL.push(transformShipPoint(rx + rollerR * Math.cos(a), -0.25, rollerR * Math.sin(a)));
+          }
+          if (rwL.length === 6) {
+            ctx.beginPath();
+            ctx.moveTo(rwL[0].sx, rwL[0].sy);
+            for (let i = 1; i < 6; i++) ctx.lineTo(rwL[i].sx, rwL[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+            draw3DEdge(rwL[0], rwL[3]);
+          }
+          // Right pinch roller wheel (by = +0.25)
+          const rwR = [];
+          for (let i = 0; i < 6; i++) {
+            const a = -rollerAngle + (i * Math.PI * 2 / 6);
+            rwR.push(transformShipPoint(rx + rollerR * Math.cos(a), 0.25, rollerR * Math.sin(a)));
+          }
+          if (rwR.length === 6) {
+            ctx.beginPath();
+            ctx.moveTo(rwR[0].sx, rwR[0].sy);
+            for (let i = 1; i < 6; i++) ctx.lineTo(rwR[i].sx, rwR[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+            draw3DEdge(rwR[0], rwR[3]);
+          }
+        }
+
+        // 3. Central Hexagonal Pressurized Gondola Pod (bx in [-0.5, +0.5])
+        ctx.strokeStyle = climberColor;
+        ctx.lineWidth = 1.8;
+        const gX = [0.5, -0.5];
+        const gRadY = 0.95;
+        const gRadZ = 0.75;
+        const gondolaEnds = [];
+        for (let k = 0; k < 2; k++) {
+          const gx = gX[k];
+          const gPts = [];
+          for (let i = 0; i < 6; i++) {
+            const a = (i * Math.PI * 2) / 6;
+            gPts.push(transformShipPoint(gx, gRadY * Math.sin(a), gRadZ * Math.cos(a)));
+          }
+          gondolaEnds.push(gPts);
+          if (gPts.length === 6) {
+            ctx.beginPath();
+            ctx.moveTo(gPts[0].sx, gPts[0].sy);
+            for (let i = 1; i < 6; i++) ctx.lineTo(gPts[i].sx, gPts[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+          }
+        }
+        if (gondolaEnds.length === 2 && gondolaEnds[0].length === 6 && gondolaEnds[1].length === 6) {
+          for (let i = 0; i < 6; i++) {
+            draw3DEdge(gondolaEnds[0][i], gondolaEnds[1][i]);
+          }
+          // Observation viewport
+          draw3DEdge(gondolaEnds[0][0], gondolaEnds[1][3]);
+          draw3DEdge(gondolaEnds[0][1], gondolaEnds[1][4]);
+        }
+
+        // 4. Dual Photovoltaic Solar Array Wings (Left & Right)
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 1.5;
+        const pLeft = [
+          transformShipPoint(0.35, -0.95, 0),
+          transformShipPoint(0.35, -2.5, 0),
+          transformShipPoint(-0.35, -2.5, 0),
+          transformShipPoint(-0.35, -0.95, 0)
+        ];
+        if (pLeft.every(p => p !== null)) {
+          ctx.beginPath();
+          ctx.moveTo(pLeft[0].sx, pLeft[0].sy);
+          for (let i = 1; i < 4; i++) ctx.lineTo(pLeft[i].sx, pLeft[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+          const m1 = transformShipPoint(0.35, -1.75, 0);
+          const m2 = transformShipPoint(-0.35, -1.75, 0);
+          draw3DEdge(m1, m2);
+        }
+
+        const pRight = [
+          transformShipPoint(0.35, 0.95, 0),
+          transformShipPoint(0.35, 2.5, 0),
+          transformShipPoint(-0.35, 2.5, 0),
+          transformShipPoint(-0.35, 0.95, 0)
+        ];
+        if (pRight.every(p => p !== null)) {
+          ctx.beginPath();
+          ctx.moveTo(pRight[0].sx, pRight[0].sy);
+          for (let i = 1; i < 4; i++) ctx.lineTo(pRight[i].sx, pRight[i].sy);
+          ctx.closePath();
+          ctx.stroke();
+          const m1 = transformShipPoint(0.35, 1.75, 0);
+          const m2 = transformShipPoint(-0.35, 1.75, 0);
+          draw3DEdge(m1, m2);
+        }
+
+        // 5. Optical Mark Scanner Sensor Head pointing inward at central cable
+        const pScanStart = transformShipPoint(0.65, 0.35, 0.35);
+        const pScanTarget = transformShipPoint(0.65, 0, 0);
+        if (pScanStart && pScanTarget) {
+          ctx.strokeStyle = '#22c55e';
+          ctx.shadowColor = '#22c55e';
+          ctx.shadowBlur = 8;
+          ctx.lineWidth = 2.2;
+          draw3DEdge(pScanStart, pScanTarget);
+        }
+
+        // 6. Drive Induction Coil Glow & Reverse Dynamic Braking
+        const actualDrive = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
+        if (Math.abs(actualDrive) > 0.04) {
+          const isBraking = (actualDrive < 0);
+          const glowColor = isBraking ? '#ef4444' : '#06b6d4';
+          ctx.strokeStyle = glowColor;
+          ctx.shadowColor = glowColor;
+          ctx.shadowBlur = 14;
+          ctx.lineWidth = 2.5;
+          const glowX = isBraking ? 0.85 : -0.85;
+          const gPts = [];
+          for (let i = 0; i < 8; i++) {
+            const a = (i * Math.PI * 2) / 8;
+            gPts.push(transformShipPoint(glowX, 0.55 * Math.sin(a), 0.55 * Math.cos(a)));
+          }
+          if (gPts.length === 8) {
+            ctx.beginPath();
+            ctx.moveTo(gPts[0].sx, gPts[0].sy);
+            for (let i = 1; i < 8; i++) ctx.lineTo(gPts[i].sx, gPts[i].sy);
+            ctx.closePath();
+            ctx.stroke();
+          }
+        }
+        ctx.shadowBlur = 0;
+      } else {
+        // ====================================================================
+        // STAGE 1, 3, 4: Aerospace Spacecraft Fighter / Explorer Model
+        // ====================================================================
+        const shipColor = isGhost ? '#f59e0b' : '#38bdf8';
+        ctx.strokeStyle = shipColor;
+        ctx.shadowColor = shipColor;
+        ctx.shadowBlur = isGhost ? 4 : 12;
+        ctx.lineWidth = 2.0;
+        if (isGhost) ctx.setLineDash([4, 4]);
+
+        const V = {
+          nose: transformShipPoint(2.2, 0, 0),
+          wingL: transformShipPoint(-1.3, -1.8, 0),
+          wingR: transformShipPoint(-1.3, 1.8, 0),
+          canopy: transformShipPoint(-0.2, 0, 0.65),
+          finL: transformShipPoint(-1.4, -0.7, 0.8),
+          finR: transformShipPoint(-1.4, 0.7, 0.8),
+          nozzleL: transformShipPoint(-1.6, -0.4, 0),
+          nozzleR: transformShipPoint(-1.6, 0.4, 0),
+          keel: transformShipPoint(-0.4, 0, -0.4),
+          rcsBowL: transformShipPoint(0.8, -0.65, 0),
+          rcsBowR: transformShipPoint(0.8, 0.65, 0),
+          rcsSternL: transformShipPoint(-1.3, -1.8, 0),
+          rcsSternR: transformShipPoint(-1.3, 1.8, 0)
         };
-        drawRollJet(-1.3, -1.8, rollDir);
-        drawRollJet(-1.3, 1.8, -rollDir);
+
+        // Delta Hull Outline
+        draw3DEdge(V.nose, V.wingL);
+        draw3DEdge(V.nose, V.wingR);
+        draw3DEdge(V.wingL, V.nozzleL);
+        draw3DEdge(V.wingR, V.nozzleR);
+        draw3DEdge(V.nozzleL, V.nozzleR);
+
+        // Cockpit Canopy
+        draw3DEdge(V.nose, V.canopy);
+        draw3DEdge(V.wingL, V.canopy);
+        draw3DEdge(V.wingR, V.canopy);
+
+        // Vertical Stabilizer Fins
+        draw3DEdge(V.nozzleL, V.finL);
+        draw3DEdge(V.canopy, V.finL);
+        draw3DEdge(V.nozzleR, V.finR);
+        draw3DEdge(V.canopy, V.finR);
+
+        // Ventral Keel
+        draw3DEdge(V.nose, V.keel);
+        draw3DEdge(V.wingL, V.keel);
+        draw3DEdge(V.wingR, V.keel);
+
+        // Internal Reaction Wheel Flywheel Disk (Center of Mass)
+        const wheelAngle = (now * 0.001 * ((tlm.wheel_rpm || 0) * 0.1)) % (Math.PI * 2);
+        const rwRadius = 0.45;
+        const rwSegments = 8;
+        const rwPts = [];
+        for (let i = 0; i < rwSegments; i++) {
+          const a = wheelAngle + (i * Math.PI * 2 / rwSegments);
+          rwPts.push(transformShipPoint(-0.4 + Math.cos(a) * rwRadius * 0.6, Math.sin(a) * rwRadius, 0.1));
+        }
+        ctx.strokeStyle = Math.abs(tlm.wheel_rpm || 0) > 5000 ? '#ef4444' : '#ec4899';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let i = 0; i < rwSegments; i++) {
+          const next = (i + 1) % rwSegments;
+          if (rwPts[i] && rwPts[next]) {
+            ctx.moveTo(rwPts[i].sx, rwPts[i].sy);
+            ctx.lineTo(rwPts[next].sx, rwPts[next].sy);
+          }
+        }
+        ctx.stroke();
+        if (rwPts[0] && rwPts[4]) {
+          ctx.moveTo(rwPts[0].sx, rwPts[0].sy); ctx.lineTo(rwPts[4].sx, rwPts[4].sy);
+        }
+        if (rwPts[2] && rwPts[6]) {
+          ctx.moveTo(rwPts[2].sx, rwPts[2].sy); ctx.lineTo(rwPts[6].sx, rwPts[6].sy);
+        }
+        ctx.stroke();
+
+        // RCS Pod Hardware Brackets
+        const drawRcsPod = (p) => {
+          if (!p) return;
+          ctx.fillStyle = '#f59e0b';
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 4;
+          ctx.fillRect(p.sx - 2.5, p.sy - 2.5, 5, 5);
+        };
+        drawRcsPod(V.rcsBowL);
+        drawRcsPod(V.rcsBowR);
+        drawRcsPod(V.rcsSternL);
+        drawRcsPod(V.rcsSternR);
+
+        // Optical Line Sensor Bar ahead of nose
+        const sensorL = transformShipPoint(1.2, -0.8, 0);
+        const sensorR = transformShipPoint(1.2, 0.8, 0);
+        if (sensorL && sensorR) {
+          ctx.strokeStyle = '#22c55e';
+          ctx.shadowColor = '#22c55e';
+          ctx.shadowBlur = 8;
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([]);
+          draw3DEdge(sensorL, sensorR);
+        }
+
+        // Main Engine Thruster Plumes
+        const hasFuel = (tlm.fuel === undefined || tlm.fuel > 0);
+        const isCruising = ((tlm.vel_x || 0) > 0.05);
+        const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : (isCruising ? 0.15 : 0.0);
+
+        if ((actualFx > 0.005 || (isCruising && actualFx >= -0.005)) && hasFuel) {
+          const cmdPower = (actualFx > 0.005) ? actualFx : 0.08;
+          const throttle = Math.min(1.0, Math.max(0.20, cmdPower / 0.25));
+          const plumeLen = 0.6 + throttle * (1.6 + Math.random() * 0.5);
+          const jitter = (Math.random() - 0.5) * 0.12 * throttle;
+
+          ctx.strokeStyle = '#38bdf8';
+          ctx.shadowColor = '#0284c7';
+          ctx.shadowBlur = 16;
+          ctx.lineWidth = 2.0 * throttle + 1.0;
+          ctx.setLineDash([]);
+
+          const nozL = V.nozzleL;
+          const tipL = transformShipPoint(-1.6 - plumeLen, -0.4 + jitter, jitter * 0.5);
+          draw3DEdge(nozL, tipL);
+
+          const nozR = V.nozzleR;
+          const tipR = transformShipPoint(-1.6 - plumeLen, 0.4 + jitter, -jitter * 0.5);
+          draw3DEdge(nozR, tipR);
+
+          // Inner hot plasma core
+          ctx.strokeStyle = '#ffffff';
+          ctx.shadowColor = '#38bdf8';
+          ctx.shadowBlur = 8;
+          ctx.lineWidth = 1.0;
+          const coreL = transformShipPoint(-1.6 - plumeLen * 0.45, -0.4, 0);
+          draw3DEdge(nozL, coreL);
+          const coreR = transformShipPoint(-1.6 - plumeLen * 0.45, 0.4, 0);
+          draw3DEdge(nozR, coreR);
+        }
+
+        // Lateral RCS Thruster Jets
+        const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
+        if (Math.abs(actualFy) > 0.01 && hasFuel) {
+          const jetLen = 0.4 + Math.min(0.8, Math.abs(actualFy) * 1.5);
+          ctx.strokeStyle = '#f59e0b';
+          ctx.shadowColor = '#d97706';
+          ctx.shadowBlur = 10;
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([]);
+
+          if (actualFy > 0.01) {
+            draw3DEdge(V.rcsBowR, transformShipPoint(0.8, 0.65 + jetLen, 0));
+            draw3DEdge(V.rcsSternR, transformShipPoint(-1.3, 1.8 + jetLen, 0));
+          } else {
+            draw3DEdge(V.rcsBowL, transformShipPoint(0.8, -0.65 - jetLen, 0));
+            draw3DEdge(V.rcsSternL, transformShipPoint(-1.3, -1.8 - jetLen, 0));
+          }
+        }
       }
-
-      ctx.setLineDash([]);
-      ctx.shadowBlur = 0;
-
       // 5. Tactical HUD Crosshairs ahead of ship
       const aimPt = project3D(shipX + 10.0, getPipelineY(shipX + 10.0), 0.0);
       if (aimPt) {

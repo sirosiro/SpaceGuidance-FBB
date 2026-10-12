@@ -90,8 +90,8 @@ cd /workspaces/FPGA-BoardlessBench
 # Stage 1: 小惑星パイプライン巡回の起動
 ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
 
-# Stage 2: 宇宙テザークライマーの起動 (順次対応)
-# ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/02_tether_climber
+# Stage 2: 宇宙テザークライマーの起動
+./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/02_tether_climber
 ```
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の 4 分割画面が自動ロードされます：
@@ -134,7 +134,7 @@ SpaceGuidance-FBB/
 │   │   ├── run_mission.sh        # CLI 高速実行スクリプト
 │   │   ├── test_chaos_fdir.py    # カオス障害自動検証テスト
 │   │   └── fbb_layout.json       # ダッシュボード配置
-│   ├── 02_tether_climber/        # 【Stage 2】宇宙テザークライマー (準備中)
+│   ├── 02_tether_climber/        # 【Stage 2】宇宙テザークライマー (解禁・本番稼働)
 │   │   └── README.md             # Stage 2 仕様・弦振動モデル・ノッチフィルタ設計書
 │   ├── 03_iss_truss/             # 【Stage 3】ISS トラス点検機 (準備中)
 │   │   └── README.md             # Stage 3 仕様・3D遠心力・把持シーケンス設計書
