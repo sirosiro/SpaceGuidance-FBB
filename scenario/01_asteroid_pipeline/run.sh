@@ -21,6 +21,17 @@ if [ "$FBB_ACTIVE" = "1" ]; then
     echo "[SpaceGuidance] F-BB Lab environment active."
     cleanup
     rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
+    # Auto-build space_guidance_daemon if missing (e.g. after clean.sh)
+    if [ ! -f "$PLUGIN_ROOT/bin/space_guidance_daemon" ]; then
+        echo "[SpaceGuidance] Binary space_guidance_daemon not found. Auto-building via CMake..."
+        cmake -B "$PLUGIN_ROOT/build" -S "$PLUGIN_ROOT" >/dev/null 2>&1
+        cmake --build "$PLUGIN_ROOT/build" >/dev/null 2>&1
+        if [ ! -f "$PLUGIN_ROOT/bin/space_guidance_daemon" ]; then
+            echo "[SpaceGuidance Error] Failed to build space_guidance_daemon!"
+            exit 1
+        fi
+        echo "[SpaceGuidance] Build complete."
+    fi
     echo "[SpaceGuidance] Launching physics daemon in background..."
     "$PLUGIN_ROOT/bin/space_guidance_daemon" &
     DAEMON_PID=$!

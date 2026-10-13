@@ -18,6 +18,7 @@ import sys
 import os
 import time
 import math
+import json
 
 # UIO ハードウェアインターフェースのインポート
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ros2", "nodes"))

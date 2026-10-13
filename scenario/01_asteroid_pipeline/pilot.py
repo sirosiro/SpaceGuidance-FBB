@@ -18,6 +18,7 @@ import sys
 import os
 import time
 import math
+import json
 
 # UIO ハードウェアインターフェースのインポート
 # Hardware interface path resolution (handles execution from scenario/ or plugin root)
