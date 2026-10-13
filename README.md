@@ -1,6 +1,8 @@
 # SpaceGuidance-FBB: 自律宇宙探査・軌道ガイダンス プラグイン
 (Autonomous Space Guidance & Docking Challenge Plugin for FPGA-BoardlessBench)
 
+![Dashboard](assets/dashboard.gif)
+
 ---
 
 ## 1. プロジェクト概要 (Project Overview)

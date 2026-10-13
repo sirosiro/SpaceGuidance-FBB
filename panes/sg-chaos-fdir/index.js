@@ -8,7 +8,14 @@ export default function ChaosFdirConsole() {
     fdir_mode: 0,
     cross_track_err: 0.0,
     pos_x: 0.0,
-    fuel: 100.0
+    fuel: 100.0,
+    score: 0,
+    checkpoint_score: 0,
+    bonus_score: 0,
+    passed_checkpoints: 0,
+    total_checkpoints: 9,
+    official_grade: 'IN_FLIGHT',
+    last_event: ''
   });
 
   useEffect(() => {
@@ -55,51 +62,52 @@ export default function ChaosFdirConsole() {
         marginBottom: '16px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
       }
-    }, `FLIGHT MODE: [            // Official Referee Scorecard (SSOT)
-            React.createElement('div', {
-                style: {
-                    background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95))',
-                    border: '1px solid rgba(59, 130, 246, 0.4)',
-                    borderRadius: '8px',
-                    padding: '12px 16px',
-                    marginBottom: '16px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontFamily: 'monospace'
-                }
-            }, [
-                React.createElement('div', { key: 'ref_left' }, [
-                    React.createElement('div', {
-                        style: { fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }
-                    }, 'Official Referee (SSOT)'),
-                    React.createElement('div', {
-                        style: { fontSize: '20px', fontWeight: 'bold', color: '#38bdf8' }
-                    }, `${(status.score || 0).toLocaleString()} PTS`),
-                    React.createElement('div', {
-                        style: { fontSize: '11px', color: '#cbd5e1', marginTop: '2px' }
-                    }, status.last_event || 'Monitoring...')
-                ]),
-                React.createElement('div', { key: 'ref_right', style: { textAlign: 'right' } }, [
-                    React.createElement('div', {
-                        style: {
-                            display: 'inline-block',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 'bold',
-                            background: status.official_grade && status.official_grade.includes('GRADE S') ? 'rgba(34, 197, 94, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                            color: status.official_grade && status.official_grade.includes('GRADE S') ? '#4ade80' : '#60a5fa',
-                            border: '1px solid currentColor'
-                        }
-                    }, status.official_grade || 'IN_FLIGHT'),
-                    React.createElement('div', {
-                        style: { fontSize: '11px', color: '#94a3b8', marginTop: '4px' }
-                    }, `Checkpoints: ${status.passed_checkpoints || 0} / ${status.total_checkpoints || 9}`)
-                ])
-            ]),
- ${currentBanner.text} ]`),
+    }, `FLIGHT MODE: [ ${currentBanner.text} ]`),
+
+    // Official Referee Scorecard (SSOT)
+    React.createElement('div', {
+      style: {
+        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95))',
+        border: '1px solid rgba(59, 130, 246, 0.4)',
+        borderRadius: '8px',
+        padding: '12px 16px',
+        marginBottom: '16px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontFamily: 'monospace'
+      }
+    }, [
+      React.createElement('div', { key: 'ref_left' }, [
+        React.createElement('div', {
+          style: { fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }
+        }, 'Official Referee (SSOT)'),
+        React.createElement('div', {
+          style: { fontSize: '20px', fontWeight: 'bold', color: '#38bdf8' }
+        }, `${(status.score || 0).toLocaleString()} PTS`),
+        React.createElement('div', {
+          style: { fontSize: '11px', color: '#cbd5e1', marginTop: '2px' }
+        }, status.last_event || 'Monitoring...')
+      ]),
+      React.createElement('div', { key: 'ref_right', style: { textAlign: 'right' } }, [
+        React.createElement('div', {
+          style: {
+            display: 'inline-block',
+            padding: '3px 8px',
+            borderRadius: '4px',
+            fontSize: '11px',
+            fontWeight: 'bold',
+            background: status.official_grade && status.official_grade.includes('GRADE S') ? 'rgba(34, 197, 94, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+            color: status.official_grade && status.official_grade.includes('GRADE S') ? '#4ade80' : '#60a5fa',
+            border: '1px solid currentColor'
+          }
+        }, status.official_grade || 'IN_FLIGHT'),
+        React.createElement('div', {
+          style: { fontSize: '11px', color: '#94a3b8', marginTop: '4px' }
+        }, `Checkpoints: ${status.passed_checkpoints || 0} / ${status.total_checkpoints || 9}`)
+      ])
+    ]),
 
     // Cross-Track Error Vector Gauge
     React.createElement('div', {
