@@ -109,9 +109,10 @@ Web ダッシュボードの 3D ビューアでは、Stage 2 専用の立体モ�
 
 ### (1) 編集対象ファイル
 ```text
-/workspaces/SpaceGuidance-FBB/scenario/02_tether_climber/pilot.py
+~/.fbb/plugins/SpaceGuidance-FBB/scenario/02_tether_climber/pilot.py
+（※ローカル開発環境の場合は /workspaces/SpaceGuidance-FBB/scenario/02_tether_climber/pilot.py）
 ```
-（原本への初期化・リセットは `/workspaces/SpaceGuidance-FBB/examples/mission02_baseline_climber.py` からコピー可能）
+（原本への初期化・リセットは `examples/mission02_baseline_climber.py` からコピー可能）
 
 ### (2) 攻略の核心
 1. **S字加減速 (Jerk Limiting)**: 推力変化幅 `max_accel_step` を制限し、テザーの 5.0Hz 共振モード励起を抑止。
@@ -159,9 +160,12 @@ $$\text{Final Score} = \text{Beacon Score} + \text{Time Bonus} + \text{Stability
 
 ```bash
 # Web 3D 観戦モード (F-BB 統合ラボ)
-cd /workspaces/FPGA-BoardlessBench
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/02_tether_climber
+# F-BB 統合 CLI による起動
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/02_tether_climber
+
+# （ローカル開発環境の場合）
+# ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/02_tether_climber
 
 # CLI 高速実行モード
-/workspaces/SpaceGuidance-FBB/scenario/02_tether_climber/run_mission.sh
+bash scenario/02_tether_climber/run_mission.sh
 ```

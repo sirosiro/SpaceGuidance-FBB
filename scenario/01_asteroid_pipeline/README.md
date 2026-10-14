@@ -85,7 +85,8 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| \righ
 ### (1) 編集対象ファイル
 プレイヤーがアルゴリズムやパラメータをチューニングする対象ファイル：
 ```text
-/workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
+~/.fbb/plugins/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
+（※ローカル開発環境の場合は /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py）
 ```
 
 ### (2) 即時反映のやり方 (Rapid Re-flight Loop)
@@ -96,7 +97,8 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| \righ
 
 ### (3) 初期状態へのリセット方法
 ```bash
-cp /workspaces/SpaceGuidance-FBB/examples/mission01_baseline_pilot.py /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
+# プラグインルート（~/.fbb/plugins/SpaceGuidance-FBB）にて実行
+cp examples/mission01_baseline_pilot.py scenario/01_asteroid_pipeline/pilot.py
 ```
 
 ### (4) pilot.py 自律操縦ロジック・制御ループ全体図 (50Hz / 20ms)

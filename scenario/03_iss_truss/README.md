@@ -33,9 +33,10 @@ $$F_c = M \frac{v_x^2}{R(x)} \quad (R(x) \approx 2.5\text{ m: コーナー部})$
 
 ### (1) 編集対象ファイル
 ```text
-/workspaces/SpaceGuidance-FBB/scenario/03_iss_truss/pilot.py
+~/.fbb/plugins/SpaceGuidance-FBB/scenario/03_iss_truss/pilot.py
+（※ローカル開発環境の場合は /workspaces/SpaceGuidance-FBB/scenario/03_iss_truss/pilot.py）
 ```
-（原本への初期化・リセットは `/workspaces/SpaceGuidance-FBB/examples/mission03_baseline_truss.py` からコピー可能）
+（原本への初期化・リセットは `examples/mission03_baseline_truss.py` からコピー可能）
 
 ### (2) 攻略用 TUNE ZONE
 ```python
@@ -75,9 +76,12 @@ $$\text{Final Score} = \text{Joints Score} + \text{Time Bonus} + \text{Battery B
 
 ```bash
 # Web 3D 観戦モード (F-BB 統合ラボ)
-cd /workspaces/FPGA-BoardlessBench
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/03_iss_truss
+# F-BB 統合 CLI による起動
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/03_iss_truss
+
+# （ローカル開発環境の場合）
+# ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/03_iss_truss
 
 # CLI 高速実行モード
-/workspaces/SpaceGuidance-FBB/scenario/03_iss_truss/run_mission.sh
+bash scenario/03_iss_truss/run_mission.sh
 ```

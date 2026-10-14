@@ -167,30 +167,47 @@ flowchart TB
 
 ## 4. クイックスタート (Quick Start)
 
-### ① プラグイン仕様の検証 (PPA 整合性チェック)
+SpaceGuidance-FBB は、F-BB（FPGA-BoardlessBench）の公式プラグイン規格（PPA 5.1 / DPPA v1.0）に準拠したハイブリッド拡張パッケージです。F-BB 統合 CLI（`fbb`）を用いてワンステップで導入・検証・起動できます。
+
+### ① プラグインのインストール (Plugin Installation)
+F-BB 環境のターミナルにて、以下の統合 CLI コマンドを実行してインストールします（自動的に `~/.fbb/plugins/SpaceGuidance-FBB` 配下へクローンされ、C++ 物理シミュレーションデーモンが自動コンパイルされます）：
+
 ```bash
-cd /workspaces/FPGA-BoardlessBench
-./bin/fbb plugin validate ~/.fbb/plugins/SpaceGuidance-FBB
+# GitHub からワンショット導入（推奨）
+fbb plugin install https://github.com/sirosiro/SpaceGuidance-FBB
+```
+
+導入後、プラグインの登録状況と仕様の健全性を確認します：
+```bash
+# 登録済みプラグイン一覧の確認（Hybrid: SpaceGuidance-FBB として検出）
+fbb plugin list
+
+# PPA / DPPA プラグイン仕様の整合性検証 (100% VALID チェック)
+fbb plugin validate ~/.fbb/plugins/SpaceGuidance-FBB
 ```
 
 ### ② F-BB 統合ラボ環境での実行 (Web ダッシュボード・3D 観戦モード)
 F-BB の Verilator RTL シミュレータ、C-Shim、および Web ダッシュボードと全連動させて実行します。
 
 ```bash
-cd /workspaces/FPGA-BoardlessBench
-
 # Stage 1: 小惑星パイプライン巡回の起動
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
 
 # Stage 2: 宇宙テザークライマーの起動
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/02_tether_climber
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/02_tether_climber
 
 # Stage 3: ISS トラスレール点検機の起動
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/03_iss_truss
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/03_iss_truss
 
 # Stage 4: 深宇宙光レーザードッキングの起動
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/04_laser_docking
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/04_laser_docking
 ```
+
+> **ローカル開発環境（`/workspaces` 等で直接作業している場合）**:
+> 相対パスまたは直接パスを指定して起動することも可能です：
+> ```bash
+> ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
+> ```
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の分割画面が自動ロードされます：
   * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の自転ドッキングポートを完全3D描画。
@@ -200,8 +217,12 @@ cd /workspaces/FPGA-BoardlessBench
   * **UART: serial**: 探査機がシリアル出力する航法テレメトリログ。
 
 ### ③ スタンドアローン直接実行 (CLI 高速モード)
+Web ダッシュボードを介さず、コンソールのみで物理シミュレーションと自律航法スクリプトを高速実行する場合：
+
 ```bash
-cd /workspaces/SpaceGuidance-FBB
+cd ~/.fbb/plugins/SpaceGuidance-FBB
+
+# 各ステージの直接実行
 bash scenario/01_asteroid_pipeline/run_mission.sh
 bash scenario/02_tether_climber/run_mission.sh
 bash scenario/03_iss_truss/run_mission.sh

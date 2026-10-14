@@ -29,9 +29,10 @@
 
 ### (1) 編集対象ファイル
 ```text
-/workspaces/SpaceGuidance-FBB/scenario/04_laser_docking/pilot.py
+~/.fbb/plugins/SpaceGuidance-FBB/scenario/04_laser_docking/pilot.py
+（※ローカル開発環境の場合は /workspaces/SpaceGuidance-FBB/scenario/04_laser_docking/pilot.py）
 ```
-（原本への初期化・リセットは `/workspaces/SpaceGuidance-FBB/examples/mission04_baseline_docker.py` からコピー可能）
+（原本への初期化・リセットは `examples/mission04_baseline_docker.py` からコピー可能）
 
 ### (2) 攻略用 TUNE ZONE
 ```python
@@ -76,9 +77,12 @@ $$\text{Final Score} = \text{Approach Score} + \text{Soft Contact Bonus} + \text
 
 ```bash
 # Web 3D 観戦モード (F-BB 統合ラボ)
-cd /workspaces/FPGA-BoardlessBench
-./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/04_laser_docking
+# F-BB 統合 CLI による起動
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/04_laser_docking
+
+# （ローカル開発環境の場合）
+# ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/04_laser_docking
 
 # CLI 高速実行モード
-/workspaces/SpaceGuidance-FBB/scenario/04_laser_docking/run_mission.sh
+bash scenario/04_laser_docking/run_mission.sh
 ```
