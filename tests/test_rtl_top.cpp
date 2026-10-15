@@ -65,8 +65,8 @@ int main(int argc, char** argv) {
     std::cout << "  ✓ Centroid Q16.16: " << signed_edge << " (near center 0)" << std::endl;
     assert(std::abs(signed_edge) < 2000 && "Line centroid offset too large for centered input!");
 
-    std::cout << "[TEST] 3. SEU Parity Robustness during Dynamic Thrust Writes (X and Y)" << std::endl;
-    // Write alternating commands to X and Y
+    std::cout << "[TEST] 3. Independent 3-Bit SEU Parity Robustness (X, Y, and Torque)" << std::endl;
+    // Write alternating commands to X, Y, and Torque
     axi_write(top, 0x24, 0x01); // Kick watchdog
     axi_write(top, 0x10, 0x00000001); // X write
     tick(top);
@@ -76,7 +76,11 @@ int main(int argc, char** argv) {
     tick(top);
     st = axi_read(top, 0x04);
     assert((st & 0x04) == 0 && "SEU false alarm triggered on Y write!");
-    std::cout << "  ✓ Dynamic thrust command changes (X and Y) verified without false SEU trip!" << std::endl;
+    axi_write(top, 0x1C, 0x00000003); // Torque write
+    tick(top);
+    st = axi_read(top, 0x04);
+    assert((st & 0x04) == 0 && "SEU false alarm triggered on Torque write!");
+    std::cout << "  ✓ Independent parity tracking across X, Y, and Torque verified without false SEU trip!" << std::endl;
 
     std::cout << "[TEST] 4. PWM Full-Scale Saturation & Continuous 100% Verification" << std::endl;
     // Set safety limit to 2.0 (0x00020000)
@@ -101,29 +105,46 @@ int main(int argc, char** argv) {
     }
     std::cout << "  ✓ -1.0 Reverse Thrust: PWM Bit 1 = strictly 100.00% active across all 256 cycles" << std::endl;
 
-    std::cout << "[TEST] 5. Signed Safety Limit Clamping (Assertions on Clamped Outputs)" << std::endl;
+    std::cout << "[TEST] 5. Signed Safety Limit Clamping Across All 3 Primary RCS Axes (X, Y, Torque)" << std::endl;
     // Set safety limit to 0.5 (0x00008000)
     axi_write(top, 0x20, 0x00008000);
+
     // Command -1.0 reverse thrust -> must be clamped to -0.5 (0xFFFF8000)
     axi_write(top, 0x10, 0xFFFF0000);
     tick(top);
-    assert(top->safe_thrust_cmd_x_o == 0xFFFF8000 && "Negative thrust not clamped to -0.5!");
+    assert(top->safe_thrust_cmd_x_o == 0xFFFF8000 && "Negative X thrust not clamped to -0.5!");
 
     // Command +1.0 forward thrust -> must be clamped to +0.5 (0x00008000)
     axi_write(top, 0x10, 0x00010000);
     tick(top);
-    assert(top->safe_thrust_cmd_x_o == 0x00008000 && "Positive thrust not clamped to +0.5!");
+    assert(top->safe_thrust_cmd_x_o == 0x00008000 && "Positive X thrust not clamped to +0.5!");
 
     // Command within-limit +0.25 (0x00004000) -> must pass through unchanged
     axi_write(top, 0x10, 0x00004000);
     tick(top);
-    assert(top->safe_thrust_cmd_x_o == 0x00004000 && "Within-limit thrust altered!");
+    assert(top->safe_thrust_cmd_x_o == 0x00004000 && "Within-limit X thrust altered!");
 
     // Command -1.0 Y-axis lateral thrust -> must be clamped to -0.5
     axi_write(top, 0x14, 0xFFFF0000);
     tick(top);
     assert(top->safe_thrust_cmd_y_o == 0xFFFF8000 && "Y-axis negative thrust not clamped to -0.5!");
-    std::cout << "  ✓ Bidirectional clamping for X and Y axes verified with exact bit-level assertions!" << std::endl;
+
+    // Command +1.0 Y-axis lateral thrust -> must be clamped to +0.5
+    axi_write(top, 0x14, 0x00010000);
+    tick(top);
+    assert(top->safe_thrust_cmd_y_o == 0x00008000 && "Y-axis positive thrust not clamped to +0.5!");
+
+    // Command -1.0 Yaw Torque -> must be clamped to -0.5
+    axi_write(top, 0x1C, 0xFFFF0000);
+    tick(top);
+    assert(top->safe_torque_cmd_o == 0xFFFF8000 && "Torque negative command not clamped to -0.5!");
+
+    // Command +1.0 Yaw Torque -> must be clamped to +0.5
+    axi_write(top, 0x1C, 0x00010000);
+    tick(top);
+    assert(top->safe_torque_cmd_o == 0x00008000 && "Torque positive command not clamped to +0.5!");
+
+    std::cout << "  ✓ Bidirectional clamping for X, Y, and Torque verified with exact bit-level assertions!" << std::endl;
 
     std::cout << "[TEST] 6. Safety Watchdog Timeout Check" << std::endl;
     // Don't kick watchdog for 60,000 cycles -> should trip E-STOP
