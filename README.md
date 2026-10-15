@@ -7,9 +7,9 @@
 
 ## 1. プロジェクト概要 (Project Overview)
 
-**SpaceGuidance-FBB** は、組み込み教育・制御競技の原点である「ライントレースロボット」の制御概念を、極限環境である**「宇宙探査・軌道誘導（Space Guidance）」**へと昇華させた、FPGA-BoardlessBench (F-BB) 向けの完全独立型ゲームプラグインです。
+**SpaceGuidance-FBB** は、組み込み教育・制御競技の原点である「ライントレースロボット」の制御概念を、極限環境である **「宇宙探査・軌道誘導（Space Guidance）」** へと昇華させた、FPGA-BoardlessBench (F-BB) 向けの完全独立型ゲームプラグインです。
 
-従来の地上型ロボットが「車輪の機械的摩擦」と「目視リアルタイム操舵」に依存していたのに対し、本プラグインでは**「微小重力・完全無摩擦（Zero Friction）」の宇宙物理空間**を舞台とします。プレイヤーはゲームパッドでのアクション操作ではなく、**「FPGA RTL による超高速ハードウェア安全回路・PWM制御」** と **「Python (ROS 2 `rclpy`) による自律誘導アルゴリズム・FDIR（障害検知・隔離・回復）」** を設計・チューニングし、3Dサイバーワイヤーフレーム画面で宇宙探査機の自律航行を観戦・評価します。
+従来の地上型ロボットが「車輪の機械的摩擦」と「目視リアルタイム操舵」に依存していたのに対し、本プラグインでは **「微小重力・完全無摩擦（Zero Friction）」の宇宙物理空間** を舞台とします。プレイヤーはゲームパッドでのアクション操作ではなく、**「FPGA RTL による超高速ハードウェア安全回路・PWM制御」** と **「Python (ROS 2 `rclpy`) による自律誘導アルゴリズム・FDIR（障害検知・隔離・回復）」** を設計・チューニングし、3Dサイバーワイヤーフレーム画面で宇宙探査機の自律航行を観戦・評価します。
 
 ---
 
@@ -128,10 +128,24 @@ flowchart TB
 |  PL (Programmable Logic): Verilog HDL / FPGA IP Core                  |
 |  - 光学センサ / IMU / QPD フィルタ・エッジ検出回路 (ナノ秒応答)       |
 |  - ハードウェア・インターロック & ウォッチドッグ (異常時即時スラスタ遮断)|
-|  - RCS スラスタ PWM パルスジェネレータ (最小インパルス噴射制御)        |
-|  - SEU パリティ監視 & TMR (Triple Modular Redundancy) レジスタ保護    |
+|  - RCS スラスタ PWM パルスジェネレータ (符号付き Q16.16 デューティ変換)|
+|  - SEU パリティ監視 (ハードウェアレジスタ保護 & E-STOP 連動)           |
 +-----------------------------------------------------------------------+
 ```
+
+### 3.1 Sim-to-Real 二層検証設計 (Dual-Track Validation Philosophy)
+本プロジェクトは、航空宇宙・組込み制御分野で標準的な **MIL/SIL（ソフトウェア検証）と HIL/実機（ハードウェア論理合成）の階層分離** に基づき、目的の異なる 2 つの具象化トラック（Dual-Track）を並行して維持しています：
+
+1. **Track A: 高速 SIL（Software-in-the-Loop）リアルタイム開発環境**
+   * **実装**: C++ 物理シミュレーションデーモン（`space_guidance_daemon.cpp` / `space_physics.cpp`）
+   * **役割**: ホスト PC 上で 100Hz の 6 自由度剛体力学演算、外乱・カオス障害、および Web3D ダッシュボードへのリアルタイム配信を、実機 FPGA なし（Boardless）で軽快に成立させます。
+   * **価値**: 開発者は EDA ツールの重厚なクロック遅延シミュレーションに待たされることなく、自律航行アルゴリズムや FDIR の試行錯誤・反復学習を瞬時に行えます。
+2. **Track B: 論理合成対応 RTL IP コア（Synthesizable Hardware & Verilator Co-Sim）**
+   * **実装**: ピュア Verilog HDL（`rtl/space_guidance_top.v`, `line_sensor_filter.v`, `rcs_thruster_pwm.v`, `safety_interlock.v`）
+   * **役割**: AMD Xilinx Vivado で論理合成（Synthesis）し、Zynq / Kria KV260 の実機 FPGA ファブリック（PL）にそのまま書き込み可能なハードウェア IP です。
+   * **検証**: `tests/test_rtl_top.cpp` および `tests/test_physics_sim.cpp` において、Verilator 周期精度シミュレータを用いて物理エンジンと AXI4-Lite レジスタ間のコ・シミュレーション（Co-Sim）が自動テストで 100% 保証されています。
+3. **100% Sim-to-Real 透過性の保証 (Single Source of Truth)**
+   * Track A（PC 上の SIL）で開発した自律操縦スクリプト（`pilot.py`）は、実機 FPGA（Track B）に移植した際も、`/dev/uio0` の 32-bit MMIO レジスタマップ仕様が完全に一致しているため、**1 行のコード変更もなしにそのまま実機で動作**します。
 
 ### 公式審判システム (Official Referee: Single Source of Truth)
 本システムでは公平な競技性・シミュレーションの信頼性を担保するため、スコア計算・ゲート通過判定・ペナルティ判定・合否判定（Grade S/A/B/C）を各プレイヤーのスクリプトから完全に分離し、中央シミュレーションデーモン（`space_guidance_daemon.cpp`）内の **`OfficialReferee` エンジン** が 100Hz 周期でオーソリテーティブに判定します。
@@ -146,7 +160,7 @@ flowchart TB
 | `0x00` | `CR_CTRL` | R/W | システム制御（Bit 0: Enable, Bit 1: E-STOP, Bit 2: FDIR Reset） |
 | `0x04` | `SR_STATUS` | R | ステータス（Bit 0: Active, Bit 1: Interlock, Bit 2: SEU Alert, Bit 3: LOS） |
 | `0x08` | `SENSOR_RAW` | R | センサ受光強度 ADC 生データ（Stage 1: 8ch 光学 / Stage 4: QPD） |
-| `0x0C` | `SENSOR_EDGE`| R | ハードウェア検出重心変位（固定小数点 Q16.16: -1.0〜+1.0） |
+| `0x0C` | `SENSOR_EDGE`| R | ハードウェア幾何重心偏差（符号付き Q16.16: -3.5〜+3.5 素子ピッチ単位、0.0が中心） |
 | `0x10` | `THRUST_CMD_X` | R/W | X軸（メイン推進 / 登坂）推力指令値（Q16.16: -50N〜+50N） |
 | `0x14` | `THRUST_CMD_Y` | R/W | Y軸（ラテラル横移動）推力指令値（Q16.16: -50N〜+50N） |
 | `0x18` | `THRUST_CMD_Z` | R/W | Z軸推力指令値（Q16.16） |

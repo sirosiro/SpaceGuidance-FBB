@@ -23,7 +23,7 @@ void SpacePhysicsEngine::init_stage(int stage_id) {
 void SpacePhysicsEngine::init_stage1_asteroid_track() {
     track_.clear();
     // Stage 1 Track: 50m pipeline along asteroid surface with smooth S-curves
-    for (double x = 0.0; x <= 50.0; x += 0.2) {
+    for (double x = 0.0; x <= 50.0; x += 0.01) {
         double y = 0.0;
         if (x > 10.0 && x <= 25.0) {
             y = 2.5 * std::sin((x - 10.0) / 15.0 * M_PI);

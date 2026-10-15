@@ -64,6 +64,7 @@ module space_guidance_top #(
     reg [31:0] reg_safety_limit;
     reg [31:0] reg_chaos_fault_inj;
     reg        wdg_kick_pulse;
+    reg        thrust_write_pulse;
 
     // AXI handshakes
     reg awready_reg;
@@ -111,6 +112,7 @@ module space_guidance_top #(
         .wdg_kick_i(wdg_kick_pulse),
         .manual_estop_i(reg_cr_ctrl[1]),
         .chaos_seu_inject_i(reg_chaos_fault_inj[0]),
+        .thrust_write_strobe_i(thrust_write_pulse),
         .thrust_cmd_i(reg_thrust_cmd_x),
         .safety_limit_i(reg_safety_limit),
         .estop_tripped_o(estop_tripped),
@@ -143,8 +145,10 @@ module space_guidance_top #(
             reg_safety_limit   <= 32'h0000FFFF; // Default limit
             reg_chaos_fault_inj<= 32'd0;
             wdg_kick_pulse     <= 1'b0;
+            thrust_write_pulse <= 1'b0;
         end else begin
-            wdg_kick_pulse <= 1'b0;
+            wdg_kick_pulse     <= 1'b0;
+            thrust_write_pulse <= 1'b0;
 
             if (~awready_reg && s_axi_awvalid && s_axi_wvalid) begin
                 awready_reg <= 1'b1;
@@ -158,7 +162,7 @@ module space_guidance_top #(
                 bvalid_reg <= 1'b1;
                 case (s_axi_awaddr[5:0])
                     ADDR_CR_CTRL:         reg_cr_ctrl         <= s_axi_wdata;
-                    ADDR_THRUST_CMD_X:    reg_thrust_cmd_x    <= s_axi_wdata;
+                    ADDR_THRUST_CMD_X:    begin reg_thrust_cmd_x <= s_axi_wdata; thrust_write_pulse <= 1'b1; end
                     ADDR_THRUST_CMD_Y:    reg_thrust_cmd_y    <= s_axi_wdata;
                     ADDR_THRUST_CMD_Z:    reg_thrust_cmd_z    <= s_axi_wdata;
                     ADDR_TORQUE_CMD:      reg_torque_cmd      <= s_axi_wdata;

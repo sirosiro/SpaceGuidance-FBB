@@ -6,7 +6,7 @@ module line_sensor_filter (
     input  wire        clk,
     input  wire        rst_n,
     input  wire [31:0] raw_adc_i,         // 8 channels x 4-bit ADC values
-    output reg  [31:0] line_centroid_q16_o,// Fixed-point Q16.16 centroid (-1.0 to +1.0)
+    output reg  [31:0] line_centroid_q16_o,// Fixed-point Q16.16 centroid in sensor pitch units (-3.5 to +3.5, 0.0 is center)
     output reg         sensor_saturated_o  // Solar glare / all saturated alert
 );
 
