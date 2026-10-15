@@ -1,12 +1,12 @@
 // space_guidance_top.v
-// Top-level AXI4-Lite slave module for SpaceGuidance-FBB
+// Top-level AXI4-Lite IP core for SpaceGuidance-FBB
 `timescale 1ns / 1ps
 
 module space_guidance_top #(
     parameter integer C_S_AXI_DATA_WIDTH = 32,
     parameter integer C_S_AXI_ADDR_WIDTH = 6
 )(
-    // AXI4-Lite Clock & Reset
+    // AXI4-Lite Clock and Reset
     input  wire                                  s_axi_aclk,
     input  wire                                  s_axi_aresetn,
     // AXI4-Lite Write Address
@@ -39,7 +39,10 @@ module space_guidance_top #(
     output wire [7:0]                            thruster_pwm_o,
     output wire                                  estop_interlock_o,
     output wire                                  seu_alert_o,
-    output wire                                  irq_o
+    output wire                                  irq_o,
+    // Direct test probe outputs for hardware verifier & ILA
+    output wire [31:0]                           safe_thrust_cmd_x_o,
+    output wire [31:0]                           safe_thrust_cmd_y_o
 );
 
     // Register Offsets
@@ -90,10 +93,13 @@ module space_guidance_top #(
     wire        wdg_timeout;
     wire        internal_seu_alert;
     wire [31:0] safe_thrust_x;
+    wire [31:0] safe_thrust_y;
 
-    assign estop_interlock_o = estop_tripped;
-    assign seu_alert_o       = internal_seu_alert;
-    assign irq_o             = estop_tripped || internal_seu_alert || sensor_saturated;
+    assign estop_interlock_o   = estop_tripped;
+    assign seu_alert_o         = internal_seu_alert;
+    assign irq_o               = estop_tripped || internal_seu_alert || sensor_saturated;
+    assign safe_thrust_cmd_x_o = safe_thrust_x;
+    assign safe_thrust_cmd_y_o = safe_thrust_y;
 
     line_sensor_filter u_filter (
         .clk(s_axi_aclk),
@@ -113,12 +119,14 @@ module space_guidance_top #(
         .manual_estop_i(reg_cr_ctrl[1]),
         .chaos_seu_inject_i(reg_chaos_fault_inj[0]),
         .thrust_write_strobe_i(thrust_write_pulse),
-        .thrust_cmd_i(reg_thrust_cmd_x),
+        .thrust_x_cmd_i(reg_thrust_cmd_x),
+        .thrust_y_cmd_i(reg_thrust_cmd_y),
         .safety_limit_i(reg_safety_limit),
         .estop_tripped_o(estop_tripped),
         .wdg_timeout_o(wdg_timeout),
         .seu_alert_o(internal_seu_alert),
-        .safe_thrust_cmd_o(safe_thrust_x)
+        .safe_thrust_x_o(safe_thrust_x),
+        .safe_thrust_y_o(safe_thrust_y)
     );
 
     rcs_thruster_pwm u_pwm (
@@ -126,7 +134,7 @@ module space_guidance_top #(
         .rst_n(s_axi_aresetn),
         .estop_tripped_i(estop_tripped),
         .cmd_thrust_x_i(safe_thrust_x),
-        .cmd_thrust_y_i(reg_thrust_cmd_y),
+        .cmd_thrust_y_i(safe_thrust_y),
         .cmd_torque_i(reg_torque_cmd),
         .thruster_pwm_o(thruster_pwm_o)
     );
@@ -163,7 +171,7 @@ module space_guidance_top #(
                 case (s_axi_awaddr[5:0])
                     ADDR_CR_CTRL:         reg_cr_ctrl         <= s_axi_wdata;
                     ADDR_THRUST_CMD_X:    begin reg_thrust_cmd_x <= s_axi_wdata; thrust_write_pulse <= 1'b1; end
-                    ADDR_THRUST_CMD_Y:    reg_thrust_cmd_y    <= s_axi_wdata;
+                    ADDR_THRUST_CMD_Y:    begin reg_thrust_cmd_y <= s_axi_wdata; thrust_write_pulse <= 1'b1; end
                     ADDR_THRUST_CMD_Z:    reg_thrust_cmd_z    <= s_axi_wdata;
                     ADDR_TORQUE_CMD:      reg_torque_cmd      <= s_axi_wdata;
                     ADDR_SAFETY_LIMIT:    reg_safety_limit    <= s_axi_wdata;

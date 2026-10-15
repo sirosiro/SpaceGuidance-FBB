@@ -1,5 +1,5 @@
 // rcs_thruster_pwm.v
-// 8-channel RCS pulse-width modulator with signed Q16.16 duty conversion and saturation
+// 8-channel RCS pulse-width modulator with signed Q16.16 duty conversion, saturation, and true 100% full-burn
 `timescale 1ns / 1ps
 
 module rcs_thruster_pwm (
@@ -33,6 +33,11 @@ module rcs_thruster_pwm (
     wire [7:0] duty_y      = q16_to_duty(cmd_thrust_y_i);
     wire [7:0] duty_torque = q16_to_duty(cmd_torque_i);
 
+    // True 100.00% continuous full-burn on 8'hFF saturation (no 255/256 single-cycle dropout)
+    wire is_active_x      = (duty_x == 8'hFF)      ? 1'b1 : (duty_x > pwm_counter);
+    wire is_active_y      = (duty_y == 8'hFF)      ? 1'b1 : (duty_y > pwm_counter);
+    wire is_active_torque = (duty_torque == 8'hFF) ? 1'b1 : (duty_torque > pwm_counter);
+
     wire is_fwd_x = (~cmd_thrust_x_i[31]) && (cmd_thrust_x_i != 32'd0);
     wire is_aft_x = cmd_thrust_x_i[31];
 
@@ -57,14 +62,14 @@ module rcs_thruster_pwm (
                 // Bit 2, 3: +Y / -Y lateral thrusters
                 // Bit 4, 5: +Z / -Z vertical downforce
                 // Bit 6, 7: +Yaw / -Yaw rotational thrusters
-                thruster_pwm_o[0] <= is_fwd_x && (duty_x > pwm_counter);
-                thruster_pwm_o[1] <= is_aft_x && (duty_x > pwm_counter);
-                thruster_pwm_o[2] <= is_port_y && (duty_y > pwm_counter);
-                thruster_pwm_o[3] <= is_stbd_y && (duty_y > pwm_counter);
+                thruster_pwm_o[0] <= is_fwd_x && is_active_x;
+                thruster_pwm_o[1] <= is_aft_x && is_active_x;
+                thruster_pwm_o[2] <= is_port_y && is_active_y;
+                thruster_pwm_o[3] <= is_stbd_y && is_active_y;
                 thruster_pwm_o[4] <= 1'b1; // Continuous microgravity downforce (Stage 1)
                 thruster_pwm_o[5] <= 1'b0;
-                thruster_pwm_o[6] <= is_ccw_torque && (duty_torque > pwm_counter);
-                thruster_pwm_o[7] <= is_cw_torque && (duty_torque > pwm_counter);
+                thruster_pwm_o[6] <= is_ccw_torque && is_active_torque;
+                thruster_pwm_o[7] <= is_cw_torque && is_active_torque;
             end
         end
     end

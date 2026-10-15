@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
     std::cout << "  On-track centered ADC: 0x" << std::hex << adc << std::dec << ", Centroid: " << signed_edge << std::endl;
     assert(std::abs(signed_edge) < 2000 && "Centroid not near center when vehicle is centered on track!");
 
-    // Move vehicle laterally to the right by +0.1m
+    // Move vehicle laterally to the right by +0.10m
     s.pos = {0.0, 0.10};
     physics.set_state(s);
     adc = physics.compute_sensor_adc();
@@ -101,6 +101,54 @@ int main(int argc, char** argv) {
     signed_edge = static_cast<int32_t>(edge);
     std::cout << "  Offset +0.10m ADC: 0x" << std::hex << adc << std::dec << ", Centroid: " << signed_edge << std::endl;
     assert(signed_edge != 0 && "Centroid failed to shift when vehicle moved off-center!");
+
+    std::cout << "[TEST PHASE 2] 3. Closed-Loop Co-Simulation (ADC -> RTL -> PWM -> Physics)" << std::endl;
+    // Start vehicle at x=0.0, y=0.10 (off-center to the right by 10cm) with zero initial velocity
+    s.pos = {0.0, 0.10};
+    s.vel = {0.0, 0.0};
+    s.angle = 0.0;
+    s.omega = 0.0;
+    physics.set_state(s);
+
+    // Command forward thrust (+1.0 -> 50N) and corrective lateral thrust (-0.5 -> -25N) via AXI
+    axi_write(top, 0x24, 0x01); // Kick watchdog
+    axi_write(top, 0x10, 0x00010000); // Forward +1.0
+    axi_write(top, 0x14, 0xFFFF8000); // Lateral -0.5 (thrust left to counter +0.10 right offset)
+
+    // Run 50 co-simulation cycles (each cycle: 256 RTL clock ticks = 1 physics step of 0.01s = 0.5s total)
+    for (int step = 0; step < 50; ++step) {
+        // 1. Physics computes sensor ADC based on spacecraft position
+        uint32_t sensor_adc = physics.compute_sensor_adc();
+        top->raw_sensor_adc_i = sensor_adc;
+
+        // 2. Step RTL clocks to evaluate PWM and sensor filter
+        double fx = 0.0;
+        double fy = 0.0;
+        for (int c = 0; c < 256; ++c) {
+            tick(top);
+            // Accumulate active thrust:
+            // bit 0 = +X nozzle, bit 1 = -X nozzle
+            if (top->thruster_pwm_o & 0x01) fx += (50.0 / 256.0);
+            if (top->thruster_pwm_o & 0x02) fx -= (50.0 / 256.0);
+            // bit 2 = +Y nozzle, bit 3 = -Y nozzle
+            if (top->thruster_pwm_o & 0x04) fy += (50.0 / 256.0);
+            if (top->thruster_pwm_o & 0x08) fy -= (50.0 / 256.0);
+        }
+
+        // Kick watchdog periodically
+        if (step % 5 == 0) axi_write(top, 0x24, 0x01);
+
+        // 3. Actuate physics engine using actual PWM thrust forces produced by RTL
+        physics.step(fx, fy, 0.0, 0.0, 0.01);
+    }
+
+    SpacecraftState final_state = physics.get_state();
+    std::cout << "  Closed-loop position after 0.5s: X=" << final_state.pos.x << "m, Y=" << final_state.pos.y << "m" << std::endl;
+    // Spacecraft MUST have moved forward along X (> 0.05m)
+    assert(final_state.pos.x > 0.05 && "Spacecraft failed to advance under RTL PWM thrust!");
+    // Spacecraft MUST have accelerated to the left (Y decreased towards 0.0 from +0.10)
+    assert(final_state.pos.y < 0.10 && "Corrective lateral RTL PWM thrust failed to push spacecraft towards center!");
+    std::cout << "  ✓ Closed-loop sensor-RTL-PWM-physics actuation verified!" << std::endl;
 
     delete top;
     std::cout << "==========================================================" << std::endl;

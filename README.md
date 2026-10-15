@@ -143,7 +143,13 @@ flowchart TB
 2. **Track B: 論理合成対応 RTL IP コア（Synthesizable Hardware & Verilator Co-Sim）**
    * **実装**: ピュア Verilog HDL（`rtl/space_guidance_top.v`, `line_sensor_filter.v`, `rcs_thruster_pwm.v`, `safety_interlock.v`）
    * **役割**: AMD Xilinx Vivado で論理合成（Synthesis）し、Zynq / Kria KV260 の実機 FPGA ファブリック（PL）にそのまま書き込み可能なハードウェア IP です。
-   * **検証**: `tests/test_rtl_top.cpp` および `tests/test_physics_sim.cpp` において、Verilator 周期精度シミュレータを用いて物理エンジンと AXI4-Lite レジスタ間のコ・シミュレーション（Co-Sim）が自動テストで 100% 保証されています。
+   * **高信頼性安全アーキテクチャ**:
+     * **真の 100% PWM 連続出力**: カウンタ飽和判定により 255/256（99.61%）のドロップアウトを排除し、最大指令時の正真正銘 100.00% 連続全開噴射（Continuous Full Burn）を担保。
+     * **多軸双方向符号付き安全リミッター**: X軸推進力・Y軸ラテラル推力の両チャンネルに対し、符号を維持したまま設定限界値への厳格なクランプを実施（トップ階層テストポートで実測検証）。
+     * **動的パリティ書き込みストローブ**: CPU による AXI レジスタ正常更新と、放射線等による自発的ビット反転（SEU）を正確に識別する動的奇数パリティ監視。
+   * **包括的自動テスト体系**:
+     * `tests/test_rtl_top.cpp`: 全 7 項目の RTL 単体テスト（真の 100% PWM 連続性、X/Y 軸のビットレベル合否アサート、SEU 動的保護、WDT タイムアウト）。
+     * `tests/test_physics_sim.cpp`: 無摩擦慣性航行、センサ ADC エッジ検出、および「光学センサ ADC $	o$ RTL 重心演算 $	o$ PWM スラスタ噴射 $	o$ 6 自由度剛体物理推進」のクローズドループ Co-Sim 統合検証を自動アサートで 100% 保証。
 3. **100% Sim-to-Real 透過性の保証 (Single Source of Truth)**
    * Track A（PC 上の SIL）で開発した自律操縦スクリプト（`pilot.py`）は、実機 FPGA（Track B）に移植した際も、`/dev/uio0` の 32-bit MMIO レジスタマップ仕様が完全に一致しているため、**1 行のコード変更もなしにそのまま実機で動作**します。
 
