@@ -20,7 +20,7 @@
                                         "activeView": "registerMonitor",
                                         "id": "4"
                                     },
-                                    "size": 417
+                                    "size": 443
                                 },
                                 {
                                     "type": "leaf",
@@ -31,7 +31,7 @@
                                         "activeView": "sg-orbit-viewer",
                                         "id": "7"
                                     },
-                                    "size": 1243.0505288178101
+                                    "size": 1319.1139645017684
                                 }
                             ],
                             "size": 580
@@ -48,7 +48,7 @@
                                         "activeView": "chaosEngine",
                                         "id": "1"
                                     },
-                                    "size": 982
+                                    "size": 1042
                                 },
                                 {
                                     "type": "leaf",
@@ -59,13 +59,13 @@
                                         "activeView": "uartTerminal_vfpga_uart_1",
                                         "id": "3"
                                     },
-                                    "size": 678.0505288178101
+                                    "size": 720.1139645017684
                                 }
                             ],
                             "size": 580
                         }
                     ],
-                    "size": 1660.0505288178101
+                    "size": 1762.1139645017684
                 },
                 {
                     "type": "branch",
@@ -93,7 +93,7 @@
                             "size": 857
                         }
                     ],
-                    "size": 457.9494711821899
+                    "size": 355.88603549823165
                 }
             ],
             "size": 1160
@@ -135,6 +135,14 @@
             },
             "title": "SG 3D Cyber Orbit Viewer"
         },
+        "chaosEngine": {
+            "id": "chaosEngine",
+            "contentComponent": "chaosEngine",
+            "params": {
+                "_componentName": "chaosEngine"
+            },
+            "title": "Chaos & Fault Injection"
+        },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
             "contentComponent": "uartTerminal",
@@ -143,14 +151,6 @@
                 "_componentName": "uartTerminal"
             },
             "title": "UART: serial"
-        },
-        "chaosEngine": {
-            "id": "chaosEngine",
-            "contentComponent": "chaosEngine",
-            "params": {
-                "_componentName": "chaosEngine"
-            },
-            "title": "Chaos & Fault Injection"
         },
         "sg-telemetry-gauge": {
             "id": "sg-telemetry-gauge",

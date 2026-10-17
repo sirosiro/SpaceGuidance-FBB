@@ -84,8 +84,10 @@ export default function SpaceOrbitViewer3D() {
     pitch: 0.0,
     roll: 0.0,
     bank: 0.0,
+    lastTime: 0,
     initialized: false
   });
+  const lastUiUpdateRef = useRef(0);
 
   const dragRef = useRef({
     isDragging: false,
@@ -95,7 +97,7 @@ export default function SpaceOrbitViewer3D() {
     basePitch: 0.0
   });
 
-  // Poll telemetry at 50Hz
+  // Poll telemetry at 50Hz (Update mutable ref immediately, throttle React DOM re-renders to 10Hz)
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
@@ -103,7 +105,11 @@ export default function SpaceOrbitViewer3D() {
         if (res.ok) {
           const data = await res.json();
           telemetryRef.current = data;
-          setTelemetry(prev => ({ ...prev, ...data }));
+          const now = Date.now();
+          if (now - lastUiUpdateRef.current >= 100) {
+            lastUiUpdateRef.current = now;
+            setTelemetry(prev => ({ ...prev, ...data }));
+          }
         }
       } catch (e) {}
     }, 50);
@@ -164,51 +170,91 @@ export default function SpaceOrbitViewer3D() {
       const st = stateRef.current;
       const sm = smoothRef.current;
 
-      // First packet instant snap
-      const initTlm = telemetryRef.current || telemetry;
-      if (!sm.initialized && (initTlm.pos_x !== 0.0 || initTlm.vel_x !== 0.0)) {
-        sm.x = initTlm.pos_x;
-        sm.y = initTlm.pos_y;
-        sm.z = initTlm.pos_z || 0.0;
-        sm.yaw = initTlm.yaw !== undefined ? initTlm.yaw : initTlm.angle;
-        sm.pitch = initTlm.pitch || 0.0;
-        sm.roll = initTlm.roll || 0.0;
-        sm.bank = -(initTlm.omega || 0) * 1.1;
+      // Compute actual frame Delta-Time (dt) in seconds (clamped for stability)
+      const nowSec = now * 0.001;
+      let dt = sm.lastTime > 0 ? (nowSec - sm.lastTime) : 0.016;
+      sm.lastTime = nowSec;
+      if (dt > 0.05) dt = 0.05; // Cap at 50ms (20 FPS minimum) to avoid huge leap on tab restore
+      if (dt < 0.001) dt = 0.001; // Floor at 1ms
+
+      // Telemetry reference
+      const tlm = telemetryRef.current || telemetry;
+
+      // First packet instant snap or large teleport/reset
+      if (!sm.initialized && (tlm.pos_x !== 0.0 || tlm.vel_x !== 0.0)) {
+        sm.x = tlm.pos_x || 0.0;
+        sm.y = tlm.pos_y || 0.0;
+        sm.z = tlm.pos_z || 0.0;
+        sm.yaw = tlm.yaw !== undefined ? tlm.yaw : (tlm.angle || 0.0);
+        sm.pitch = tlm.pitch || 0.0;
+        sm.roll = tlm.roll || 0.0;
+        sm.bank = -(tlm.omega || 0) * 1.1;
         sm.initialized = true;
+      } else if (Math.abs((tlm.pos_x || 0.0) - sm.x) > 10.0 || Math.abs((tlm.pos_y || 0.0) - sm.y) > 10.0) {
+        // Instant snap on mission reset / restart
+        sm.x = tlm.pos_x || 0.0;
+        sm.y = tlm.pos_y || 0.0;
+        sm.z = tlm.pos_z || 0.0;
+        sm.yaw = tlm.yaw !== undefined ? tlm.yaw : (tlm.angle || 0.0);
+        sm.pitch = tlm.pitch || 0.0;
+        sm.roll = tlm.roll || 0.0;
       }
 
-      // Continuous 60FPS Spring-Damper Interpolation (Rotational & Translational Inertia)
-      const tlm = telemetryRef.current || telemetry;
+      // ====================================================================
+      // 120 FPS Velocity Dead-Reckoning (推測航法) with Closed-Loop Blending
+      // Spacecraft coasts autonomously with physical velocities (no packet wait stalls)
+      // and gently converges to incoming telemetry positions.
+      // ====================================================================
       const stageId = tlm.stage_id || 1;
-      const targetX = tlm.pos_x;
-      const targetY = tlm.pos_y;
+      const targetX = tlm.pos_x !== undefined ? tlm.pos_x : sm.x;
+      const targetY = tlm.pos_y !== undefined ? tlm.pos_y : sm.y;
       const targetZ = tlm.pos_z || 0.0;
       const targetYaw = tlm.yaw !== undefined ? tlm.yaw : tlm.angle;
       const targetPitch = tlm.pitch || 0.0;
       const targetBank = -Math.max(-0.45, Math.min(0.45, (tlm.omega || 0) * 1.2));
       const targetRoll = tlm.roll !== undefined ? tlm.roll : targetBank;
 
-      sm.x += (targetX - sm.x) * 0.28;
-      sm.y += (targetY - sm.y) * 0.28;
-      sm.z += (targetZ - sm.z) * 0.28;
+      const vx = tlm.vel_x !== undefined ? tlm.vel_x : 0.0;
+      const vy = tlm.vel_y !== undefined ? tlm.vel_y : 0.0;
+      const vz = tlm.vel_z !== undefined ? tlm.vel_z : 0.0;
+      const wx = tlm.omega_x !== undefined ? tlm.omega_x : 0.0;
+      const wy = tlm.omega_y !== undefined ? tlm.omega_y : 0.0;
+      const wz = tlm.omega_z !== undefined ? tlm.omega_z : (tlm.omega || 0.0);
 
+      // 1. Inertial Forward Propagation (Velocity * dt)
+      sm.x += vx * dt;
+      sm.y += vy * dt;
+      sm.z += vz * dt;
+      sm.yaw += (stageId === 5 ? wz : (tlm.omega || 0.0)) * dt;
+      if (stageId === 5) {
+        sm.pitch += wy * dt;
+        sm.roll += wx * dt;
+      }
+
+      // 2. Closed-Loop Position & Attitude Error Absorption (Spring Blend)
+      const blendPos = Math.min(1.0, 5.0 * dt);
+      sm.x += (targetX - sm.x) * blendPos;
+      sm.y += (targetY - sm.y) * blendPos;
+      sm.z += (targetZ - sm.z) * blendPos;
+
+      const blendRot = Math.min(1.0, 6.0 * dt);
       let dYaw = targetYaw - sm.yaw;
       while (dYaw > Math.PI) dYaw -= Math.PI * 2;
       while (dYaw < -Math.PI) dYaw += Math.PI * 2;
-      sm.yaw += dYaw * 0.24;
+      sm.yaw += dYaw * blendRot;
 
       let dPitch = targetPitch - sm.pitch;
       while (dPitch > Math.PI) dPitch -= Math.PI * 2;
       while (dPitch < -Math.PI) dPitch += Math.PI * 2;
-      sm.pitch += dPitch * 0.24;
+      sm.pitch += dPitch * blendRot;
 
       let dRoll = targetRoll - sm.roll;
       while (dRoll > Math.PI) dRoll -= Math.PI * 2;
       while (dRoll < -Math.PI) dRoll += Math.PI * 2;
-      sm.roll += dRoll * 0.24;
+      sm.roll += dRoll * blendRot;
 
       // Authentic angular roll inertia (wings smoothly tilt into curves and level out)
-      sm.bank += (targetBank - sm.bank) * 0.16;
+      sm.bank += (targetBank - sm.bank) * Math.min(1.0, 4.0 * dt);
 
       const shipX = sm.x;
       const shipY = sm.y;
