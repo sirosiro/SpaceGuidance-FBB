@@ -97,23 +97,40 @@ export default function SpaceOrbitViewer3D() {
     basePitch: 0.0
   });
 
-  // Poll telemetry at 50Hz (Update mutable ref immediately, throttle React DOM re-renders to 10Hz)
+  // Unified WebSocket Telemetry Bus (scenario:telemetry) with fallback
   useEffect(() => {
-    const timer = setInterval(async () => {
+    const handleTelemetry = (data) => {
+      if (data && data.type && data.type !== 'space_guidance') return;
+      telemetryRef.current = data;
+      const now = Date.now();
+      if (now - lastUiUpdateRef.current >= 100) {
+        lastUiUpdateRef.current = now;
+        setTelemetry(prev => ({ ...prev, ...data }));
+      }
+    };
+
+    let sock = window.FBB?.socket;
+    if (!sock && window.FBB?.useDashboard) {
       try {
-        const res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
-        if (res.ok) {
-          const data = await res.json();
-          telemetryRef.current = data;
-          const now = Date.now();
-          if (now - lastUiUpdateRef.current >= 100) {
-            lastUiUpdateRef.current = now;
-            setTelemetry(prev => ({ ...prev, ...data }));
-          }
-        }
+        sock = window.FBB.useDashboard().socket;
       } catch (e) {}
-    }, 50);
-    return () => clearInterval(timer);
+    }
+
+    if (sock) {
+      sock.on('scenario:telemetry', handleTelemetry);
+      return () => sock.off('scenario:telemetry', handleTelemetry);
+    } else {
+      const timer = setInterval(async () => {
+        try {
+          const res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
+          if (res.ok) {
+            const data = await res.json();
+            handleTelemetry(data);
+          }
+        } catch (e) {}
+      }, 100);
+      return () => clearInterval(timer);
+    }
   }, []);
 
   // Cinema Mode: Auto-cycle camera angles every 6 seconds

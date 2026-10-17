@@ -15,20 +15,37 @@ export default function SpaceTelemetryGauge() {
   });
 
   useEffect(() => {
-    const t = setInterval(async () => {
+    const handleTelemetry = (j) => {
+      if (j && j.type && j.type !== 'space_guidance') return;
+      setData(prev => ({
+        ...prev,
+        ...j,
+        sensor_saturated: (j.sensor_raw === 0xFFFFFFFF)
+      }));
+    };
+
+    let sock = window.FBB?.socket;
+    if (!sock && window.FBB?.useDashboard) {
       try {
-        const res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
-        if (res.ok) {
-          const j = await res.json();
-          setData(prev => ({
-            ...prev,
-            ...j,
-            sensor_saturated: (j.sensor_raw === 0xFFFFFFFF)
-          }));
-        }
+        sock = window.FBB.useDashboard().socket;
       } catch (e) {}
-    }, 60);
-    return () => clearInterval(t);
+    }
+
+    if (sock) {
+      sock.on('scenario:telemetry', handleTelemetry);
+      return () => sock.off('scenario:telemetry', handleTelemetry);
+    } else {
+      const t = setInterval(async () => {
+        try {
+          const res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
+          if (res.ok) {
+            const j = await res.json();
+            handleTelemetry(j);
+          }
+        } catch (e) {}
+      }, 100);
+      return () => clearInterval(t);
+    }
   }, []);
 
   const isWarning = data.sensor_saturated || Math.abs(data.cross_track_err) > 0.4;
