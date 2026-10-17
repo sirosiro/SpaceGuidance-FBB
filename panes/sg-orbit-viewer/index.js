@@ -138,12 +138,24 @@ export default function SpaceOrbitViewer3D() {
     let animId;
 
     const render = () => {
-      const w = canvas.width = canvas.clientWidth;
-      const h = canvas.height = canvas.clientHeight;
+      const clientW = canvas.clientWidth || 300;
+      const clientH = canvas.clientHeight || 150;
+      if (canvas.width !== clientW || canvas.height !== clientH) {
+        canvas.width = clientW;
+        canvas.height = clientH;
+      }
+      const w = clientW;
+      const h = clientH;
       const cx = w * 0.5;
       const cy = h * 0.55;
       const now = Date.now();
       const timeSec = now * 0.001;
+
+      // Reset 2D context states to prevent cross-frame shadowBlur / dash leakage
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1.0;
 
       // Deep Space background
       ctx.fillStyle = '#030712';
@@ -1128,46 +1140,7 @@ export default function SpaceOrbitViewer3D() {
           }
         }
 
-        // 3. Continuous Propellant Leak Vapor Trail from Damaged Thruster Pod (starts after impact)
-        if (stageElapsed >= 0.6 && (tlm.fuel || 0) > 0) {
-          const thrusterPositions = [
-            [-1.6, -0.4, 0.0],  // T0
-            [-1.6, 0.4, 0.0],   // T1
-            [1.2, -0.65, 0.0],  // T2
-            [1.2, 0.65, 0.0],   // T3
-            [-1.3, -1.8, 0.0],  // T4
-            [0.8, -0.65, 0.0],  // T5
-            [-1.3, 1.8, 0.0],   // T6
-            [0.8, 0.65, 0.0],   // T7
-            [1.2, 0.0, 0.4],    // T8
-            [1.2, 0.0, -0.4],   // T9
-            [-1.2, 0.0, 0.4],   // T10
-            [-1.2, 0.0, -0.4]   // T11
-          ];
-          const leakThrusterId = (tlm.damaged_thruster_1 !== undefined && tlm.damaged_thruster_1 >= 0) ? tlm.damaged_thruster_1 : 1;
-          const lPos = (leakThrusterId >= 0 && leakThrusterId < 12) ? thrusterPositions[leakThrusterId] : [-1.3, -1.8, 0];
-          const leakOrigin = transformShipPoint(lPos[0], lPos[1], lPos[2]);
-          if (leakOrigin) {
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.40)';
-            ctx.shadowColor = '#0284c7';
-            ctx.shadowBlur = 8;
-            ctx.lineWidth = 1.4;
-            ctx.setLineDash([2, 4]);
-            for (let lp = 0; lp < 5; lp++) {
-              const puffAge = ((now * 0.003 + lp * 0.2) % 1.0);
-              const puffLen = puffAge * 2.5;
-              const puffSpread = puffAge * 0.7;
-              const puffTip = transformShipPoint(lPos[0] - puffLen, lPos[1] - (lPos[1] >= 0 ? puffSpread : -puffSpread), lPos[2] + puffSpread * 0.5);
-              if (puffTip) {
-                ctx.beginPath();
-                ctx.moveTo(leakOrigin.sx, leakOrigin.sy);
-                ctx.lineTo(puffTip.sx, puffTip.sy);
-                ctx.stroke();
-              }
-            }
-            ctx.setLineDash([]);
-          }
-        }
+        // Damaged thruster status is indicated by red hardware brackets on ship hull (drawRcsPod)
 
         // 2. Safe Orbit Escape Line (X = 35.0m)
         const escX = 35.0;
@@ -1684,6 +1657,8 @@ export default function SpaceOrbitViewer3D() {
             drawJet(transformShipPoint(-1.2, 0, -0.4), transformShipPoint(-1.2, 0, -1.1), '#38bdf8', '#0284c7', 2.4);
           }
         }
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = 'transparent';
       }
       // 5. Tactical HUD Crosshairs ahead of ship
       const aimPt = project3D(shipX + 10.0, getPipelineY(shipX + 10.0), 0.0);
@@ -1697,6 +1672,8 @@ export default function SpaceOrbitViewer3D() {
         ctx.stroke();
       }
 
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
       animId = requestAnimationFrame(render);
     };
 
