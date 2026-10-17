@@ -1,40 +1,18 @@
 export const minApiVersion = 1;
 
 // ============================================================================
-// Persistent Celestial Sphere Starfield (260 Immutable Cosmic Stars)
-// Fixed in World Inertial Space (Infinite Distance: Zero Linear Parallax)
+// SpaceGuidance-FBB: 3D Orbit & Flight Dynamics Viewer
+// GPU-Native 120 FPS WebGL / Three.js Rendering Engine
+// Supports Stages 1 to 5, Dead-Reckoning, Additive Blending Shaders
 // ============================================================================
-const CELESTIAL_STARS = (() => {
-  const stars = [];
-  // Deterministic pseudo-random generator (LCG)
-  let seed = 1337;
-  const rand = () => {
-    seed = (seed * 16807) % 2147483647;
-    return (seed - 1) / 2147483646;
-  };
-
-  for (let i = 0; i < 280; i++) {
-    const u = rand();
-    const v = rand();
-    const theta = u * 2.0 * Math.PI;
-    const phi = Math.acos(2.0 * v - 1.0); // Uniform sphere distribution
-    const x = Math.sin(phi) * Math.cos(theta);
-    const y = Math.sin(phi) * Math.sin(theta);
-    const z = Math.cos(phi);
-    const baseSize = rand() * 1.6 + 0.5;
-    const twinkleSpeed = rand() * 1.8 + 0.8;
-    const twinklePhase = rand() * Math.PI * 2;
-    const colorRoll = rand();
-    const color = colorRoll > 0.85 ? '#38bdf8' : (colorRoll > 0.68 ? '#fde047' : (colorRoll > 0.45 ? '#e2e8f0' : '#ffffff'));
-    stars.push({ x, y, z, baseSize, twinkleSpeed, twinklePhase, color });
-  }
-  return stars;
-})();
 
 export default function SpaceOrbitViewer3D() {
   const React = window.React || window.FBB?.React;
   const { useState, useEffect, useRef } = window.FBB?.hooks || React;
-  const canvasRef = useRef(null);
+
+  const containerRef = useRef(null);
+  const glCanvasRef = useRef(null);
+  const hudCanvasRef = useRef(null);
 
   // Camera presets: 'chase', 'nose', 'hero', 'orbit', 'cinema'
   const [cameraPreset, setCameraPreset] = useState('chase');
@@ -45,18 +23,23 @@ export default function SpaceOrbitViewer3D() {
   const [telemetry, setTelemetry] = useState({
     pos_x: 0.0,
     pos_y: 0.0,
+    pos_z: 0.0,
     vel_x: 0.0,
     vel_y: 0.0,
+    vel_z: 0.0,
     angle: 0.0,
     omega: 0.0,
     fuel: 100.0,
     cross_track_err: 0.0,
     wheel_rpm: 0.0,
+    wheel_rpm_x: 0.0,
+    wheel_rpm_y: 0.0,
+    wheel_rpm_z: 0.0,
     carrier_lost: false,
-    fdir_mode: 0
+    fdir_mode: 0,
+    stage_id: 1
   });
 
-  // State refs to keep animation loop at steady 60FPS without teardown
   const stateRef = useRef({
     cameraPreset: 'chase',
     zoom: 1.0,
@@ -68,13 +51,11 @@ export default function SpaceOrbitViewer3D() {
     rotSpeed: 0.0
   });
 
-  // Update refs on state changes
   stateRef.current.cameraPreset = cameraPreset;
   stateRef.current.zoom = zoom;
   stateRef.current.userOffset = userOffset;
   stateRef.current.cinemaIndex = cinemaIndex;
 
-  // Continuous 60FPS Kinematic & Rotational Inertia State
   const telemetryRef = useRef(null);
   const smoothRef = useRef({
     x: 0.0,
@@ -153,51 +134,803 @@ export default function SpaceOrbitViewer3D() {
     return 0.0;
   };
 
-  // 3D Perspective Render Loop (Persistent 60FPS Animation)
+  // ============================================================================
+  // Three.js 3D WebGL Engine & Render Loop
+  // ============================================================================
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const THREE = window.THREE || window.FBB?.THREE;
+    const glCanvas = glCanvasRef.current;
+    const hudCanvas = hudCanvasRef.current;
+    const container = containerRef.current;
+    if (!THREE || !glCanvas || !hudCanvas || !container) return;
+
     let animId;
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: glCanvas,
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance'
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setClearColor(0x030712, 1.0);
+    } catch (e) {
+      console.error('[sg-orbit-viewer] Failed to create Three.js WebGLRenderer:', e);
+      return;
+    }
 
-    const render = () => {
-      const clientW = canvas.clientWidth || 300;
-      const clientH = canvas.clientHeight || 150;
-      if (canvas.width !== clientW || canvas.height !== clientH) {
-        canvas.width = clientW;
-        canvas.height = clientH;
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x030712, 0.0035);
+
+    const camera = new THREE.PerspectiveCamera(52, 1, 0.2, 800);
+    camera.up.set(0, 0, 1); // Z is vertical up in flight coordinates
+
+    // ------------------------------------------------------------------------
+    // 1. Celestial Starfield (1200 Cosmic Stars on Sphere R=450)
+    // ------------------------------------------------------------------------
+    const starCount = 1200;
+    const starGeo = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(starCount * 3);
+    const starColors = new Float32Array(starCount * 3);
+
+    let seed = 1337;
+    const rand = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+
+    const colorSky = new THREE.Color(0x38bdf8);
+    const colorYellow = new THREE.Color(0xfde047);
+    const colorWhite = new THREE.Color(0xffffff);
+    const colorDim = new THREE.Color(0x94a3b8);
+
+    for (let i = 0; i < starCount; i++) {
+      const u = rand();
+      const v = rand();
+      const theta = u * 2.0 * Math.PI;
+      const phi = Math.acos(2.0 * v - 1.0);
+      const r = 450 + rand() * 40;
+      starPositions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      starPositions[i * 3 + 2] = r * Math.cos(phi);
+
+      const roll = rand();
+      const c = roll > 0.85 ? colorSky : (roll > 0.65 ? colorYellow : (roll > 0.35 ? colorWhite : colorDim));
+      starColors[i * 3 + 0] = c.r;
+      starColors[i * 3 + 1] = c.g;
+      starColors[i * 3 + 2] = c.b;
+    }
+
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+    const starMat = new THREE.PointsMaterial({
+      size: 1.8,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending
+    });
+    const starField = new THREE.Points(starGeo, starMat);
+    scene.add(starField);
+
+    // ------------------------------------------------------------------------
+    // 2. Stage 1: Asteroid Pipeline Corridor & Surface Grid
+    // ------------------------------------------------------------------------
+    const stage1Group = new THREE.Group();
+
+    // Ground Grid at Z = -3.5
+    const groundGridMat = new THREE.LineBasicMaterial({ color: 0x0b192f, transparent: true, opacity: 0.7 });
+    const groundGeo = new THREE.BufferGeometry();
+    const groundPts = [];
+    for (let gx = -10; gx <= 70; gx += 5) {
+      groundPts.push(gx, -20, -3.5, gx, 20, -3.5);
+    }
+    for (let gy = -20; gy <= 20; gy += 4) {
+      groundPts.push(-10, gy, -3.5, 70, gy, -3.5);
+    }
+    groundGeo.setAttribute('position', new THREE.Float32BufferAttribute(groundPts, 3));
+    stage1Group.add(new THREE.LineSegments(groundGeo, groundGridMat));
+
+    // Hexagonal Tunnel Rings & Rails
+    const hexRadius = 3.6;
+    const hexAngles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
+    const ringSpacing = 2.5;
+
+    const ringMeshes = [];
+    for (let rx = 0.0; rx <= 50.0; rx += ringSpacing) {
+      const ry = getPipelineY(rx);
+      const isTarget = rx >= 49.0;
+      const isGate = rx > 0 && Math.abs(rx % 5.0) < 0.1 && rx < 49.0;
+      const ringPts = [];
+      const glowRingPts = [];
+      const glowRad = hexRadius * 1.035;
+
+      for (let i = 0; i <= 6; i++) {
+        const a = hexAngles[i % 6];
+        ringPts.push(new THREE.Vector3(rx, ry + hexRadius * Math.sin(a), hexRadius * Math.cos(a)));
+        glowRingPts.push(new THREE.Vector3(rx, ry + glowRad * Math.sin(a), glowRad * Math.cos(a)));
       }
-      const w = clientW;
-      const h = clientH;
-      const cx = w * 0.5;
-      const cy = h * 0.55;
+      const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPts);
+      const glowGeo = new THREE.BufferGeometry().setFromPoints(glowRingPts);
+
+      const ringColor = isTarget ? 0xeab308 : (isGate ? 0x0284c7 : 0x0369a1);
+      const ringMat = new THREE.LineBasicMaterial({
+        color: ringColor,
+        linewidth: isGate ? 2 : 1,
+        transparent: true,
+        opacity: isGate ? 0.95 : 0.75,
+        blending: THREE.AdditiveBlending
+      });
+      const glowMat = new THREE.LineBasicMaterial({
+        color: ringColor,
+        transparent: true,
+        opacity: isGate ? 0.45 : 0.25,
+        blending: THREE.AdditiveBlending
+      });
+
+      const ringLine = new THREE.Line(ringGeo, ringMat);
+      const glowLine = new THREE.Line(glowGeo, glowMat);
+      ringMeshes.push({ line: ringLine, glow: glowLine, mat: ringMat, glowMat, rx, isGate, isTarget });
+      stage1Group.add(ringLine);
+      stage1Group.add(glowLine);
+    }
+
+    // Longitudinal Rails along S-curve
+    const railOffsets = [
+      { dy: 0, dz: hexRadius },
+      { dy: -hexRadius, dz: 0 },
+      { dy: hexRadius, dz: 0 }
+    ];
+    for (const ro of railOffsets) {
+      const railPts = [];
+      for (let rx = 0.0; rx <= 50.0; rx += 0.5) {
+        railPts.push(new THREE.Vector3(rx, getPipelineY(rx) + ro.dy, ro.dz));
+      }
+      const railGeo = new THREE.BufferGeometry().setFromPoints(railPts);
+      const railMat = new THREE.LineBasicMaterial({ color: 0x0284c7, transparent: true, opacity: 0.6 });
+      stage1Group.add(new THREE.Line(railGeo, railMat));
+    }
+    scene.add(stage1Group);
+
+    // ------------------------------------------------------------------------
+    // 3. Stage 2: 100m High-Tension Carbon Nanotube Tether & Stations
+    // ------------------------------------------------------------------------
+    const stage2Group = new THREE.Group();
+
+    // GEO Orbital Habitat Station (at X = -2.5)
+    const geoStationGroup = new THREE.Group();
+    geoStationGroup.position.set(-2.5, 0, 0);
+
+    const torusOuterR = 9.0;
+    const torusInnerR = 7.2;
+    const torusSegs = 24;
+
+    const torusPts = [];
+    for (let i = 0; i < torusSegs; i++) {
+      const a1 = (i * Math.PI * 2) / torusSegs;
+      const a2 = ((i + 1) * Math.PI * 2) / torusSegs;
+      // Outer ring
+      torusPts.push(0, torusOuterR * Math.sin(a1), torusOuterR * Math.cos(a1));
+      torusPts.push(0, torusOuterR * Math.sin(a2), torusOuterR * Math.cos(a2));
+      // Inner ring
+      torusPts.push(0, torusInnerR * Math.sin(a1), torusInnerR * Math.cos(a1));
+      torusPts.push(0, torusInnerR * Math.sin(a2), torusInnerR * Math.cos(a2));
+      // Cross struts
+      torusPts.push(0, torusOuterR * Math.sin(a1), torusOuterR * Math.cos(a1));
+      torusPts.push(0, torusInnerR * Math.sin(a1), torusInnerR * Math.cos(a1));
+    }
+    // 4 spokes to hub
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2;
+      torusPts.push(0, 0, 0, 0, torusInnerR * Math.sin(a), torusInnerR * Math.cos(a));
+    }
+    const torusGeo = new THREE.BufferGeometry();
+    torusGeo.setAttribute('position', new THREE.Float32BufferAttribute(torusPts, 3));
+    const torusMat = new THREE.LineBasicMaterial({ color: 0x0284c7 });
+    geoStationGroup.add(new THREE.LineSegments(torusGeo, torusMat));
+
+    // GEO Station Solar Wings
+    const solarPts = [];
+    for (const sz of [-7.0, 7.0]) {
+      const zMin = sz > 0 ? 3.5 : -10.5;
+      const zMax = sz > 0 ? 10.5 : -3.5;
+      solarPts.push(-1.2, -2.4, zMin, -1.2, 2.4, zMin);
+      solarPts.push(-1.2, 2.4, zMin, -1.2, 2.4, zMax);
+      solarPts.push(-1.2, 2.4, zMax, -1.2, -2.4, zMax);
+      solarPts.push(-1.2, -2.4, zMax, -1.2, -2.4, zMin);
+      solarPts.push(-1.2, 0, zMin, -1.2, 0, zMax);
+    }
+    const solarGeo = new THREE.BufferGeometry();
+    solarGeo.setAttribute('position', new THREE.Float32BufferAttribute(solarPts, 3));
+    geoStationGroup.add(new THREE.LineSegments(solarGeo, new THREE.LineBasicMaterial({ color: 0x0369a1 })));
+    stage2Group.add(geoStationGroup);
+
+    // Tether Dynamic Line (100 segments from X=0 to X=100)
+    const tetherSegCount = 101;
+    const tetherPositions = new Float32Array(tetherSegCount * 3);
+    for (let i = 0; i < tetherSegCount; i++) {
+      tetherPositions[i * 3 + 0] = i;
+      tetherPositions[i * 3 + 1] = 0;
+      tetherPositions[i * 3 + 2] = 0;
+    }
+    const tetherGeo = new THREE.BufferGeometry();
+    tetherGeo.setAttribute('position', new THREE.BufferAttribute(tetherPositions, 3));
+    const tetherMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+    const tetherLine = new THREE.Line(tetherGeo, tetherMat);
+    stage2Group.add(tetherLine);
+
+    // Altitude Beacon Rings (10m .. 90m)
+    const beaconMeshes = [];
+    for (let bx = 10.0; bx <= 90.0; bx += 10.0) {
+      const bPts = [];
+      const bR = 2.5;
+      for (let i = 0; i <= 16; i++) {
+        const a = (i * Math.PI * 2) / 16;
+        bPts.push(new THREE.Vector3(bx, bR * Math.sin(a), bR * Math.cos(a)));
+      }
+      const bGeo = new THREE.BufferGeometry().setFromPoints(bPts);
+      const bMat = new THREE.LineBasicMaterial({ color: 0x0284c7 });
+      const bLine = new THREE.Line(bGeo, bMat);
+      beaconMeshes.push({ line: bLine, mat: bMat, bx });
+      stage2Group.add(bLine);
+    }
+
+    // Asteroid Mining Base (at X = 110)
+    const astGroup = new THREE.Group();
+    astGroup.position.set(110.0, 0, 0);
+    const astPts = [];
+    const astR = 12.0;
+    const latCount = 8;
+    const lonCount = 16;
+    for (let la = 0; la < latCount; la++) {
+      const lat = -Math.PI / 2 + (la + 0.5) * Math.PI / latCount;
+      for (let lo = 0; lo < lonCount; lo++) {
+        const lon = (lo * 2 * Math.PI) / lonCount;
+        const nextLon = ((lo + 1) * 2 * Math.PI) / lonCount;
+        const r1 = astR + 2.2 * Math.sin(lat * 3) * Math.cos(lon * 2);
+        const r2 = astR + 2.2 * Math.sin(lat * 3) * Math.cos(nextLon * 2);
+        astPts.push(
+          r1 * Math.cos(lat) * Math.cos(lon), r1 * Math.cos(lat) * Math.sin(lon), r1 * Math.sin(lat),
+          r2 * Math.cos(lat) * Math.cos(nextLon), r2 * Math.cos(lat) * Math.sin(nextLon), r2 * Math.sin(lat)
+        );
+      }
+    }
+    const astGeo = new THREE.BufferGeometry();
+    astGeo.setAttribute('position', new THREE.Float32BufferAttribute(astPts, 3));
+    astGroup.add(new THREE.LineSegments(astGeo, new THREE.LineBasicMaterial({ color: 0x78716c })));
+
+    // Docking Clamp Ring at X = 100
+    const dockPts = [];
+    for (let i = 0; i <= 16; i++) {
+      const a = (i * Math.PI * 2) / 16;
+      dockPts.push(new THREE.Vector3(100.0, 3.8 * Math.sin(a), 3.8 * Math.cos(a)));
+    }
+    const dockGeo = new THREE.BufferGeometry().setFromPoints(dockPts);
+    stage2Group.add(new THREE.Line(dockGeo, new THREE.LineBasicMaterial({ color: 0xeab308, linewidth: 2 })));
+    stage2Group.add(astGroup);
+    scene.add(stage2Group);
+
+    // ------------------------------------------------------------------------
+    // 4. Stage 3: 60m ISS Modular Box Truss Structure
+    // ------------------------------------------------------------------------
+    const stage3Group = new THREE.Group();
+    const trussPts = [];
+    const trussHalf = 1.6;
+    const corners = [
+      [-trussHalf, -trussHalf],
+      [trussHalf, -trussHalf],
+      [trussHalf, trussHalf],
+      [-trussHalf, trussHalf]
+    ];
+    // 4 Longitudinal Guide Chords
+    for (const c of corners) {
+      trussPts.push(0, c[0], c[1], 60, c[0], c[1]);
+    }
+    // Bulkheads and Cross Diagonals every 5m
+    for (let tx = 0.0; tx <= 60.0; tx += 5.0) {
+      for (let i = 0; i < 4; i++) {
+        const next = (i + 1) % 4;
+        trussPts.push(tx, corners[i][0], corners[i][1], tx, corners[next][0], corners[next][1]);
+      }
+      trussPts.push(tx, corners[0][0], corners[0][1], tx, corners[2][0], corners[2][1]);
+    }
+    const trussGeo = new THREE.BufferGeometry();
+    trussGeo.setAttribute('position', new THREE.Float32BufferAttribute(trussPts, 3));
+    stage3Group.add(new THREE.LineSegments(trussGeo, new THREE.LineBasicMaterial({ color: 0x475569 })));
+
+    // 4 Critical Inspection Joints (15m, 30m, 45m, 60m)
+    const joints = [
+      { x: 15.0, name: 'JOINT 01: S1 TRUSS' },
+      { x: 30.0, name: 'JOINT 02: SARJ ROTARY' },
+      { x: 45.0, name: 'JOINT 03: P1 TRUSS' },
+      { x: 60.0, name: 'TERMINAL: DOCK LATCH' }
+    ];
+    const jointMeshes = [];
+    for (const j of joints) {
+      const jPts = [];
+      for (let i = 0; i <= 16; i++) {
+        const a = (i * Math.PI * 2) / 16;
+        jPts.push(new THREE.Vector3(j.x, 2.8 * Math.sin(a), 2.8 * Math.cos(a)));
+      }
+      const jGeo = new THREE.BufferGeometry().setFromPoints(jPts);
+      const jMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+      const jLine = new THREE.Line(jGeo, jMat);
+      jointMeshes.push({ line: jLine, mat: jMat, x: j.x, name: j.name });
+      stage3Group.add(jLine);
+    }
+    scene.add(stage3Group);
+
+    // ------------------------------------------------------------------------
+    // 5. Stage 4: 50m Laser Docking Corridor & Target Station
+    // ------------------------------------------------------------------------
+    const stage4Group = new THREE.Group();
+
+    // Central Green Laser Beam
+    const laserPts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(50, 0, 0)];
+    const laserGeo = new THREE.BufferGeometry().setFromPoints(laserPts);
+    const laserMat = new THREE.LineBasicMaterial({ color: 0x22c55e, linewidth: 2.5, blending: THREE.AdditiveBlending });
+    stage4Group.add(new THREE.Line(laserGeo, laserMat));
+
+    // Funnel Approach Corridor Checkpoints
+    const checkpoints = [
+      { x: 10.0, r: 4.5, name: 'CORRIDOR 40m' },
+      { x: 20.0, r: 3.6, name: 'CORRIDOR 30m' },
+      { x: 30.0, r: 2.7, name: 'GATEWAY 20m' },
+      { x: 40.0, r: 1.8, name: 'APPROACH 10m' },
+      { x: 48.0, r: 1.2, name: 'FINAL CONE 2m' }
+    ];
+    const cpMeshes = [];
+    for (const cp of checkpoints) {
+      const cPts = [];
+      for (let i = 0; i <= 16; i++) {
+        const a = (i * Math.PI * 2) / 16;
+        cPts.push(new THREE.Vector3(cp.x, cp.r * Math.sin(a), cp.r * Math.cos(a)));
+      }
+      const cGeo = new THREE.BufferGeometry().setFromPoints(cPts);
+      const cMat = new THREE.LineBasicMaterial({ color: 0x06b6d4 });
+      const cLine = new THREE.Line(cGeo, cMat);
+      cpMeshes.push({ line: cLine, mat: cMat, x: cp.x, name: cp.name });
+      stage4Group.add(cLine);
+    }
+
+    // Rotating Docking Station Port Ring at X = 50m
+    const dockPortGroup = new THREE.Group();
+    dockPortGroup.position.set(50.0, 0, 0);
+
+    const portRingPts = [];
+    for (let i = 0; i <= 24; i++) {
+      const a = (i * Math.PI * 2) / 24;
+      portRingPts.push(new THREE.Vector3(0, 3.2 * Math.sin(a), 3.2 * Math.cos(a)));
+    }
+    const portRingGeo = new THREE.BufferGeometry().setFromPoints(portRingPts);
+    dockPortGroup.add(new THREE.Line(portRingGeo, new THREE.LineBasicMaterial({ color: 0xeab308, linewidth: 2 })));
+
+    // Rotating Crosshair Arms
+    const crossArmPts = [
+      0, -3.2, 0, 0, 3.2, 0,
+      0, 0, -3.2, 0, 0, 3.2
+    ];
+    const crossGeo = new THREE.BufferGeometry();
+    crossGeo.setAttribute('position', new THREE.Float32BufferAttribute(crossArmPts, 3));
+    const crossLine = new THREE.LineSegments(crossGeo, new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 1.5 }));
+    dockPortGroup.add(crossLine);
+    stage4Group.add(dockPortGroup);
+    scene.add(stage4Group);
+
+    // ------------------------------------------------------------------------
+    // 6. Stage 5: Panic Control Debris Field & Recovery Gate
+    // ------------------------------------------------------------------------
+    const stage5Group = new THREE.Group();
+
+    // 6 Rotating Debris Shards
+    const debrisConfigs = [
+      { x:  7.0, y:  3.8, z:  2.5, r: 0.45 },
+      { x: 13.0, y: -4.2, z: -2.8, r: 0.48 },
+      { x: 18.5, y:  4.5, z: -2.0, r: 0.40 },
+      { x: 23.0, y: -3.2, z:  3.2, r: 0.46 },
+      { x: 27.5, y:  3.6, z: -3.0, r: 0.50 },
+      { x: 32.0, y: -2.2, z:  1.8, r: 0.42 }
+    ];
+    const debrisMeshes = [];
+    for (let i = 0; i < debrisConfigs.length; i++) {
+      const cfg = debrisConfigs[i];
+      const shardGroup = new THREE.Group();
+      shardGroup.position.set(cfg.x, cfg.y, cfg.z);
+
+      const w = cfg.r * 1.2;
+      const h = cfg.r * 0.8;
+      const sPts = [
+        -w * 0.5, -h * 0.5, 0,  w * 0.5, -h * 0.4, cfg.r * 0.25,
+         w * 0.5, -h * 0.4, cfg.r * 0.25,  w * 0.4, h * 0.5, -cfg.r * 0.15,
+         w * 0.4, h * 0.5, -cfg.r * 0.15, -w * 0.5, h * 0.4, 0,
+        -w * 0.5, h * 0.4, 0, -w * 0.5, -h * 0.5, 0,
+        // Solar rib grid
+        -w * 0.2, -h * 0.2, 0, w * 0.2, h * 0.2, 0
+      ];
+      const sGeo = new THREE.BufferGeometry();
+      sGeo.setAttribute('position', new THREE.Float32BufferAttribute(sPts, 3));
+      const sLine = new THREE.LineSegments(sGeo, new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 1.5 }));
+      shardGroup.add(sLine);
+      debrisMeshes.push({ group: shardGroup, idx: i, baseCfg: cfg });
+      stage5Group.add(shardGroup);
+    }
+
+    // Kinetic Impactor Shard (Sharp metal wedge active during prologue)
+    const impactorGroup = new THREE.Group();
+    const impPts = [
+      -0.3, -0.2, 0,  0.3, -0.15, 0.12,
+       0.3, -0.15, 0.12, 0.2, 0.25, -0.12,
+       0.2, 0.25, -0.12, -0.3, 0.2, 0,
+      -0.3, 0.2, 0, -0.3, -0.2, 0
+    ];
+    const impGeo = new THREE.BufferGeometry();
+    impGeo.setAttribute('position', new THREE.Float32BufferAttribute(impPts, 3));
+    impactorGroup.add(new THREE.LineSegments(impGeo, new THREE.LineBasicMaterial({ color: 0xf87171, linewidth: 2 })));
+    stage5Group.add(impactorGroup);
+
+    // Collision Shockwave Ring & Sparks (GPU Additive Blending)
+    const shockwaveGeo = new THREE.BufferGeometry();
+    const shockPts = [];
+    for (let i = 0; i <= 24; i++) {
+      const a = (i * Math.PI * 2) / 24;
+      shockPts.push(Math.cos(a), Math.sin(a), 0);
+    }
+    shockwaveGeo.setAttribute('position', new THREE.Float32BufferAttribute(shockPts, 3));
+    const shockwaveMat = new THREE.LineBasicMaterial({
+      color: 0x38bdf8,
+      linewidth: 2.5,
+      transparent: true,
+      opacity: 0.0,
+      blending: THREE.AdditiveBlending
+    });
+    const shockwaveMesh = new THREE.Line(shockwaveGeo, shockwaveMat);
+    stage5Group.add(shockwaveMesh);
+
+    // Kinetic Spark Particles (16 particles)
+    const sparkCount = 16;
+    const sparkGeo = new THREE.BufferGeometry();
+    const sparkPositions = new Float32Array(sparkCount * 3);
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
+    const sparkMat = new THREE.PointsMaterial({
+      color: 0xf59e0b,
+      size: 4.5,
+      transparent: true,
+      opacity: 0.0,
+      blending: THREE.AdditiveBlending
+    });
+    const sparkPoints = new THREE.Points(sparkGeo, sparkMat);
+    stage5Group.add(sparkPoints);
+
+    // Safe Orbit Recovery Line Gate Ring at X = 35.0m
+    const gatePts = [];
+    for (let i = 0; i <= 8; i++) {
+      const a = (i * Math.PI * 2) / 8;
+      gatePts.push(new THREE.Vector3(35.0, 6.0 * Math.sin(a), 6.0 * Math.cos(a)));
+    }
+    const gateGeo = new THREE.BufferGeometry().setFromPoints(gatePts);
+    const gateLine = new THREE.Line(gateGeo, new THREE.LineBasicMaterial({ color: 0x22c55e, linewidth: 2.5 }));
+    stage5Group.add(gateLine);
+    scene.add(stage5Group);
+
+    // ------------------------------------------------------------------------
+    // 7. Spacecraft 3D Models
+    // ------------------------------------------------------------------------
+    // Ship Root Object
+    const shipRoot = new THREE.Group();
+
+    // A. Delta Aerospace Fighter / Explorer (Stages 1, 3, 4, 5)
+    const fighterGroup = new THREE.Group();
+
+    const fighterHullPts = [
+      // Delta hull outline
+      2.2, 0, 0,   -1.3, -1.8, 0,
+      2.2, 0, 0,   -1.3, 1.8, 0,
+      -1.3, -1.8, 0,  -1.6, -0.4, 0,
+      -1.3, 1.8, 0,   -1.6, 0.4, 0,
+      -1.6, -0.4, 0,  -1.6, 0.4, 0,
+      // Cockpit canopy
+      2.2, 0, 0,   -0.2, 0, 0.65,
+      -1.3, -1.8, 0, -0.2, 0, 0.65,
+      -1.3, 1.8, 0,  -0.2, 0, 0.65,
+      // Vertical stabilizer fins
+      -1.6, -0.4, 0, -1.4, -0.7, 0.8,
+      -0.2, 0, 0.65, -1.4, -0.7, 0.8,
+      -1.6, 0.4, 0,  -1.4, 0.7, 0.8,
+      -0.2, 0, 0.65, -1.4, 0.7, 0.8,
+      // Ventral keel
+      2.2, 0, 0,   -0.4, 0, -0.4,
+      -1.3, -1.8, 0, -0.4, 0, -0.4,
+      -1.3, 1.8, 0,  -0.4, 0, -0.4
+    ];
+    const fighterHullGeo = new THREE.BufferGeometry();
+    fighterHullGeo.setAttribute('position', new THREE.Float32BufferAttribute(fighterHullPts, 3));
+    
+    // 1. Primary Vibrant Neon Hull Lines
+    const fighterHullMat = new THREE.LineBasicMaterial({
+      color: 0x38bdf8,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending
+    });
+    const fighterHullLine = new THREE.LineSegments(fighterHullGeo, fighterHullMat);
+    fighterGroup.add(fighterHullLine);
+
+    // 2. Outer Halo Glow Shell (Dual-pass additive bloom)
+    const fighterGlowMat = new THREE.LineBasicMaterial({
+      color: 0x0284c7,
+      linewidth: 1,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending
+    });
+    const fighterGlowLine = new THREE.LineSegments(fighterHullGeo, fighterGlowMat);
+    fighterGlowLine.scale.set(1.028, 1.028, 1.028);
+    fighterGroup.add(fighterGlowLine);
+
+    // 3. Inner White-Hot Accent Edges (Spine & Wing Leading Edges)
+    const hotCorePts = [
+      2.2, 0, 0,  -0.2, 0, 0.65,
+      -0.2, 0, 0.65, -1.6, 0, 0,
+      2.2, 0, 0,  -1.3, -1.8, 0,
+      2.2, 0, 0,  -1.3, 1.8, 0
+    ];
+    const hotCoreGeo = new THREE.BufferGeometry();
+    hotCoreGeo.setAttribute('position', new THREE.Float32BufferAttribute(hotCorePts, 3));
+    const hotCoreMat = new THREE.LineBasicMaterial({
+      color: 0xe0f2fe,
+      linewidth: 1,
+      transparent: true,
+      opacity: 0.90,
+      blending: THREE.AdditiveBlending
+    });
+    fighterGroup.add(new THREE.LineSegments(hotCoreGeo, hotCoreMat));
+
+    // ------------------------------------------------------------------------
+    // Reaction Wheel Assembly (RWA): 3-Axis Orthogonal Flywheel Triad
+    // Positioned at Spacecraft Center of Mass (0, 0, 0) with physical clearance
+    // ------------------------------------------------------------------------
+    const rwCluster = new THREE.Group();
+    rwCluster.position.set(0, 0, 0); // Positioned at Spacecraft Center of Mass (CoM)
+
+    // Helper to generate circular rotor ring + cross spokes
+    const createFlywheel = (radius, plane, colorHex) => {
+      const grp = new THREE.Group();
+      const pts = [];
+      const segs = 24;
+      for (let i = 0; i < segs; i++) {
+        const a1 = (i * Math.PI * 2) / segs;
+        const a2 = ((i + 1) * Math.PI * 2) / segs;
+        if (plane === 'XY') {
+          pts.push(radius * Math.cos(a1), radius * Math.sin(a1), 0);
+          pts.push(radius * Math.cos(a2), radius * Math.sin(a2), 0);
+        } else if (plane === 'XZ') {
+          pts.push(radius * Math.cos(a1), 0, radius * Math.sin(a1));
+          pts.push(radius * Math.cos(a2), 0, radius * Math.sin(a2));
+        } else if (plane === 'YZ') {
+          pts.push(0, radius * Math.cos(a1), radius * Math.sin(a1));
+          pts.push(0, radius * Math.cos(a2), radius * Math.sin(a2));
+        }
+      }
+      // Cross spokes to visualize spin rotation
+      if (plane === 'XY') {
+        pts.push(-radius, 0, 0, radius, 0, 0);
+        pts.push(0, -radius, 0, 0, radius, 0);
+      } else if (plane === 'XZ') {
+        pts.push(-radius, 0, 0, radius, 0, 0);
+        pts.push(0, 0, -radius, 0, 0, radius);
+      } else if (plane === 'YZ') {
+        pts.push(0, -radius, 0, 0, radius, 0);
+        pts.push(0, 0, -radius, 0, 0, radius);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: colorHex,
+        linewidth: 1.5,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+      });
+      grp.add(new THREE.LineSegments(geo, mat));
+      return { group: grp, material: mat, defaultColor: colorHex };
+    };
+
+    // Orthogonal 3-axis wheels (Triad mounting with physical clearance):
+    // Wheel X: Roll Axis (spins around local X, rotor in YZ plane, offset forward +X)
+    const wheelX = createFlywheel(0.15, 'YZ', 0xa855f7); // Purple
+    wheelX.group.position.set(0.18, 0, 0);
+
+    // Wheel Y: Pitch Axis (spins around local Y, rotor in XZ plane, offset starboard +Y)
+    const wheelY = createFlywheel(0.15, 'XZ', 0x06b6d4); // Cyan
+    wheelY.group.position.set(0, 0.18, 0);
+
+    // Wheel Z: Yaw Axis (spins around local Z, rotor in XY plane, offset dorsal +Z)
+    const wheelZ = createFlywheel(0.15, 'XY', 0xec4899); // Magenta
+    wheelZ.group.position.set(0, 0, 0.18);
+
+    rwCluster.add(wheelX.group);
+    rwCluster.add(wheelY.group);
+    rwCluster.add(wheelZ.group);
+
+    // Aerospace-Grade Triad Truss Bracket & Central Avionics Hub
+    const rwaTrussPts = [];
+    const hs = 0.05;
+    // Central hub cube at Center of Mass (0, 0, 0)
+    rwaTrussPts.push(-hs, -hs, -hs, hs, -hs, -hs,  hs, -hs, -hs, hs, hs, -hs);
+    rwaTrussPts.push(hs, hs, -hs, -hs, hs, -hs,   -hs, hs, -hs, -hs, -hs, -hs);
+    rwaTrussPts.push(-hs, -hs, hs, hs, -hs, hs,    hs, -hs, hs, hs, hs, hs);
+    rwaTrussPts.push(hs, hs, hs, -hs, hs, hs,     -hs, hs, hs, -hs, -hs, hs);
+    rwaTrussPts.push(-hs, -hs, -hs, -hs, -hs, hs,  hs, -hs, -hs, hs, -hs, hs);
+    rwaTrussPts.push(hs, hs, -hs, hs, hs, hs,     -hs, hs, -hs, -hs, hs, hs);
+    // Motor mount spindle struts connecting hub to wheel centers
+    rwaTrussPts.push(0, 0, 0, 0.18, 0, 0);
+    rwaTrussPts.push(0, 0, 0, 0, 0.18, 0);
+    rwaTrussPts.push(0, 0, 0, 0, 0, 0.18);
+    // Diagonal stiffener struts between wheel housings
+    rwaTrussPts.push(0.18, 0, 0, 0, 0.18, 0);
+    rwaTrussPts.push(0, 0.18, 0, 0, 0, 0.18);
+    rwaTrussPts.push(0, 0, 0.18, 0.18, 0, 0);
+
+    const rwaTrussGeo = new THREE.BufferGeometry();
+    rwaTrussGeo.setAttribute('position', new THREE.Float32BufferAttribute(rwaTrussPts, 3));
+    const rwaTrussMat = new THREE.LineSegments(
+      rwaTrussGeo,
+      new THREE.LineBasicMaterial({
+        color: 0x64748b,
+        linewidth: 1,
+        transparent: true,
+        opacity: 0.5
+      })
+    );
+    rwCluster.add(rwaTrussMat);
+    fighterGroup.add(rwCluster);
+
+    // Cumulative wheel spin angles (integrated over dt to prevent Nyquist aliasing)
+    const rwAngles = { x: 0.0, y: 0.0, z: 0.0 };
+
+    // Optical Line Sensor Bar (Stage 1)
+    const sensorGeo = new THREE.BufferGeometry();
+    sensorGeo.setAttribute('position', new THREE.Float32BufferAttribute([1.2, -0.8, 0, 1.2, 0.8, 0], 3));
+    const sensorLine = new THREE.Line(sensorGeo, new THREE.LineBasicMaterial({ color: 0x22c55e, linewidth: 2 }));
+    fighterGroup.add(sensorLine);
+
+    // RCS Pod Hardware Status Markers
+    const rcsLocations = [
+      { id: 0, pos: [-1.6, -0.4, 0] },
+      { id: 1, pos: [-1.6, 0.4, 0] },
+      { id: 2, pos: [0.8, -0.65, 0] },
+      { id: 3, pos: [0.8, 0.65, 0] },
+      { id: 4, pos: [-1.3, -1.8, 0] },
+      { id: 5, pos: [0.8, -0.65, 0] },
+      { id: 6, pos: [-1.3, 1.8, 0] },
+      { id: 7, pos: [0.8, 0.65, 0] }
+    ];
+    const rcsCubes = [];
+    const cubeBoxGeo = new THREE.BoxGeometry(0.04, 0.04, 0.04);
+    for (const r of rcsLocations) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+      const mesh = new THREE.Mesh(cubeBoxGeo, mat);
+      mesh.position.set(r.pos[0], r.pos[1], r.pos[2]);
+      fighterGroup.add(mesh);
+      rcsCubes.push({ mesh, mat, id: r.id });
+    }
+
+    // B. Climber Gondola Model (Stage 2)
+    const climberGroup = new THREE.Group();
+
+    // Central Titanium Collars & Spine
+    const climberPts = [];
+    for (const cx of [0.85, -0.85]) {
+      for (let i = 0; i < 8; i++) {
+        const a1 = (i * Math.PI * 2) / 8;
+        const a2 = ((i + 1) * Math.PI * 2) / 8;
+        climberPts.push(cx, 0.45 * Math.sin(a1), 0.45 * Math.cos(a1));
+        climberPts.push(cx, 0.45 * Math.sin(a2), 0.45 * Math.cos(a2));
+      }
+    }
+    // 4 Spine Rods
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI * 2) / 4 + Math.PI / 4;
+      climberPts.push(0.85, 0.45 * Math.sin(a), 0.45 * Math.cos(a), -0.85, 0.45 * Math.sin(a), 0.45 * Math.cos(a));
+    }
+    // Hexagonal Pressurized Gondola
+    for (const gx of [0.5, -0.5]) {
+      for (let i = 0; i < 6; i++) {
+        const a1 = (i * Math.PI * 2) / 6;
+        const a2 = ((i + 1) * Math.PI * 2) / 6;
+        climberPts.push(gx, 0.95 * Math.sin(a1), 0.75 * Math.cos(a1));
+        climberPts.push(gx, 0.95 * Math.sin(a2), 0.75 * Math.cos(a2));
+      }
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI * 2) / 6;
+      climberPts.push(0.5, 0.95 * Math.sin(a), 0.75 * Math.cos(a), -0.5, 0.95 * Math.sin(a), 0.75 * Math.cos(a));
+    }
+    // Solar Wings
+    for (const wy of [-1, 1]) {
+      const y1 = wy * 0.95;
+      const y2 = wy * 2.5;
+      climberPts.push(0.35, y1, 0, 0.35, y2, 0);
+      climberPts.push(0.35, y2, 0, -0.35, y2, 0);
+      climberPts.push(-0.35, y2, 0, -0.35, y1, 0);
+      climberPts.push(-0.35, y1, 0, 0.35, y1, 0);
+    }
+    const climberGeo = new THREE.BufferGeometry();
+    climberGeo.setAttribute('position', new THREE.Float32BufferAttribute(climberPts, 3));
+    climberGroup.add(new THREE.LineSegments(climberGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 })));
+
+    shipRoot.add(fighterGroup);
+    shipRoot.add(climberGroup);
+    scene.add(shipRoot);
+
+    // ------------------------------------------------------------------------
+    // 8. Task 3.3: GPU Additive Blending Thruster Plumes
+    // ------------------------------------------------------------------------
+    const thrusterGroup = new THREE.Group();
+
+    // Main Engine Plumes (T0, T1)
+    const plumeGeo = new THREE.BufferGeometry();
+    const plumePts = new Float32Array(4 * 3); // 2 lines: core + outer
+    plumeGeo.setAttribute('position', new THREE.BufferAttribute(plumePts, 3));
+    const plumeMat = new THREE.LineBasicMaterial({
+      color: 0x38bdf8,
+      linewidth: 3.0,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending
+    });
+    const plumeT0 = new THREE.LineSegments(plumeGeo.clone(), plumeMat);
+    const plumeT1 = new THREE.LineSegments(plumeGeo.clone(), plumeMat);
+    thrusterGroup.add(plumeT0);
+    thrusterGroup.add(plumeT1);
+
+    // Multi-Nozzle RCS Jets (T2..T11)
+    const rcsJetGeo = new THREE.BufferGeometry();
+    const rcsJetPositions = new Float32Array(10 * 2 * 3); // 10 jets * 2 points
+    rcsJetGeo.setAttribute('position', new THREE.BufferAttribute(rcsJetPositions, 3));
+    const rcsJetMat = new THREE.LineBasicMaterial({
+      color: 0xf59e0b,
+      linewidth: 2.2,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending
+    });
+    const rcsJetLines = new THREE.LineSegments(rcsJetGeo, rcsJetMat);
+    thrusterGroup.add(rcsJetLines);
+
+    shipRoot.add(thrusterGroup);
+
+    // ------------------------------------------------------------------------
+    // Main Animation & Render Loop (120 FPS Native GPU Pipeline)
+    // ------------------------------------------------------------------------
+    const render = () => {
+      const clientW = container.clientWidth || 300;
+      const clientH = container.clientHeight || 150;
+
+      if (glCanvas.width !== clientW || glCanvas.height !== clientH) {
+        renderer.setSize(clientW, clientH, false);
+        camera.aspect = clientW / clientH;
+        camera.updateProjectionMatrix();
+        hudCanvas.width = clientW;
+        hudCanvas.height = clientH;
+      }
+
       const now = Date.now();
-      const timeSec = now * 0.001;
-
-      // Reset 2D context states to prevent cross-frame shadowBlur / dash leakage
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1.0;
-
-      // Deep Space background
-      ctx.fillStyle = '#030712';
-      ctx.fillRect(0, 0, w, h);
-
+      const nowSec = now * 0.001;
       const st = stateRef.current;
       const sm = smoothRef.current;
 
-      // Compute actual frame Delta-Time (dt) in seconds (clamped for stability)
-      const nowSec = now * 0.001;
       let dt = sm.lastTime > 0 ? (nowSec - sm.lastTime) : 0.016;
       sm.lastTime = nowSec;
-      if (dt > 0.05) dt = 0.05; // Cap at 50ms (20 FPS minimum) to avoid huge leap on tab restore
-      if (dt < 0.001) dt = 0.001; // Floor at 1ms
+      if (dt > 0.05) dt = 0.05;
+      if (dt < 0.001) dt = 0.001;
 
-      // Telemetry reference
       const tlm = telemetryRef.current || telemetry;
 
-      // First packet instant snap or large teleport/reset
+      // Reset or initialize positions
       if (!sm.initialized && (tlm.pos_x !== 0.0 || tlm.vel_x !== 0.0)) {
         sm.x = tlm.pos_x || 0.0;
         sm.y = tlm.pos_y || 0.0;
@@ -208,7 +941,6 @@ export default function SpaceOrbitViewer3D() {
         sm.bank = -(tlm.omega || 0) * 1.1;
         sm.initialized = true;
       } else if (Math.abs((tlm.pos_x || 0.0) - sm.x) > 10.0 || Math.abs((tlm.pos_y || 0.0) - sm.y) > 10.0) {
-        // Instant snap on mission reset / restart
         sm.x = tlm.pos_x || 0.0;
         sm.y = tlm.pos_y || 0.0;
         sm.z = tlm.pos_z || 0.0;
@@ -217,11 +949,7 @@ export default function SpaceOrbitViewer3D() {
         sm.roll = tlm.roll || 0.0;
       }
 
-      // ====================================================================
-      // 120 FPS Velocity Dead-Reckoning (推測航法) with Closed-Loop Blending
-      // Spacecraft coasts autonomously with physical velocities (no packet wait stalls)
-      // and gently converges to incoming telemetry positions.
-      // ====================================================================
+      // Stage ID Detection
       let stageId = tlm.stage_id;
       if (!stageId) {
         try {
@@ -236,6 +964,19 @@ export default function SpaceOrbitViewer3D() {
           stageId = 1;
         }
       }
+
+      // Toggle stage-specific 3D scenes
+      stage1Group.visible = (stageId === 1);
+      stage2Group.visible = (stageId === 2);
+      stage3Group.visible = (stageId === 3);
+      stage4Group.visible = (stageId === 4);
+      stage5Group.visible = (stageId === 5);
+
+      fighterGroup.visible = (stageId !== 2);
+      climberGroup.visible = (stageId === 2);
+      sensorLine.visible = (stageId === 1);
+
+      // Dead-Reckoning Blending
       const targetX = tlm.pos_x !== undefined ? tlm.pos_x : sm.x;
       const targetY = tlm.pos_y !== undefined ? tlm.pos_y : sm.y;
       const targetZ = tlm.pos_z || 0.0;
@@ -251,7 +992,7 @@ export default function SpaceOrbitViewer3D() {
       const wy = tlm.omega_y !== undefined ? tlm.omega_y : 0.0;
       const wz = tlm.omega_z !== undefined ? tlm.omega_z : (tlm.omega || 0.0);
 
-      // 1. Inertial Forward Propagation (Velocity * dt)
+      // Inertial forward propagation
       sm.x += vx * dt;
       sm.y += vy * dt;
       sm.z += vz * dt;
@@ -261,7 +1002,7 @@ export default function SpaceOrbitViewer3D() {
         sm.roll += wx * dt;
       }
 
-      // 2. Closed-Loop Position & Attitude Error Absorption (Spring Blend)
+      // Spring blend towards incoming telemetry
       const blendPos = Math.min(1.0, 5.0 * dt);
       sm.x += (targetX - sm.x) * blendPos;
       sm.y += (targetY - sm.y) * blendPos;
@@ -282,8 +1023,6 @@ export default function SpaceOrbitViewer3D() {
       while (dRoll > Math.PI) dRoll -= Math.PI * 2;
       while (dRoll < -Math.PI) dRoll += Math.PI * 2;
       sm.roll += dRoll * blendRot;
-
-      // Authentic angular roll inertia (wings smoothly tilt into curves and level out)
       sm.bank += (targetBank - sm.bank) * Math.min(1.0, 4.0 * dt);
 
       const shipX = sm.x;
@@ -291,841 +1030,168 @@ export default function SpaceOrbitViewer3D() {
       const shipZ = sm.z;
       const shipYaw = sm.yaw;
       const shipPitch = sm.pitch;
-      const shipRoll = stageId === 5 ? sm.roll : sm.bank;
+      const shipRoll = (stageId === 5 ? sm.roll : sm.bank);
 
-      // Smooth camera roll damping (subtle natural horizon reaction, max 6 deg)
-      const targetCamRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (tlm.omega || 0) * 0.15)) : 0.0);
-      st.smoothRoll += (targetCamRoll - st.smoothRoll) * 0.08;
+      // Position & Rotate Spacecraft in Three.js
+      shipRoot.position.set(shipX, shipY, shipZ);
+      shipRoot.rotation.set(0, 0, 0);
+      const euler = new THREE.Euler(shipRoll, shipPitch, shipYaw, 'ZYX');
+      shipRoot.setRotationFromEuler(euler);
 
-      // Camera preset parameters
-      const cinemaModes = ['chase', 'nose', 'hero', 'orbit'];
-      const effectiveMode = (st.cameraPreset === 'cinema') ? cinemaModes[st.cinemaIndex] : st.cameraPreset;
+      // 3-Axis Reaction Wheel Cluster Dynamics & Visual Rotation
+      const rpmX = Number(tlm.wheel_rpm_x || 0);
+      const rpmY = Number(tlm.wheel_rpm_y || 0);
+      const rpmZ = Number(tlm.wheel_rpm_z !== undefined ? tlm.wheel_rpm_z : (tlm.wheel_rpm || 0));
 
-      let baseAzimuth = 0.0;
-      let baseElevation = 0.26;
-      let baseDist = 9.0;
+      // Visual speed mapper: prevent stroboscopic Nyquist aliasing at 5000+ RPM
+      const toVisualSpeed = (rpm) => {
+        if (Math.abs(rpm) < 1.0) return 0.0;
+        const speed = rpm * 0.0035;
+        const maxSpeed = 18.0; // rad/s
+        return Math.sign(speed) * Math.min(Math.abs(speed), maxSpeed);
+      };
 
-      if (effectiveMode === 'chase') {
-        // Rear-Top Chase looking +X
-        baseAzimuth = 0.0;
-        baseElevation = 0.26;
-        baseDist = 9.0;
-      } else if (effectiveMode === 'nose') {
-        // Front-Top looking back towards approaching ship
-        baseAzimuth = Math.PI;
-        baseElevation = 0.20;
-        baseDist = 7.5;
-      } else if (effectiveMode === 'hero') {
-        // Dramatic Low-Angle Hero Shot
-        baseAzimuth = -0.75;
-        baseElevation = -0.28;
-        baseDist = 6.2;
-      } else if (effectiveMode === 'orbit') {
-        // Continuous 360 Fly-Around
-        baseAzimuth = (now * 0.00045) % (Math.PI * 2);
-        baseElevation = 0.24 + 0.12 * Math.sin(now * 0.0003);
-        baseDist = 8.8;
-      }
+      rwAngles.x = (rwAngles.x + toVisualSpeed(rpmX) * dt) % (Math.PI * 2);
+      rwAngles.y = (rwAngles.y + toVisualSpeed(rpmY) * dt) % (Math.PI * 2);
+      rwAngles.z = (rwAngles.z + toVisualSpeed(rpmZ) * dt) % (Math.PI * 2);
 
-      // Combine Preset + User Offset + Zoom
-      const finalAzimuth = baseAzimuth + st.userOffset.yaw;
-      const finalElevation = Math.max(-1.3, Math.min(1.3, baseElevation + st.userOffset.pitch));
-      const finalDist = baseDist / Math.max(0.4, Math.min(2.5, st.zoom));
+      wheelX.group.rotation.x = rwAngles.x;
+      wheelY.group.rotation.y = rwAngles.y;
+      wheelZ.group.rotation.z = rwAngles.z;
 
-      // Calculate camera angular rotation rate (for dynamic star twinkle intensity)
-      const dAz = Math.abs(finalAzimuth - st.lastAzimuth);
-      const dEl = Math.abs(finalElevation - st.lastElevation);
-      const currentRotRate = Math.min(1.0, (dAz + dEl) * 15.0 + Math.abs(st.smoothRoll) * 2.0);
-      st.rotSpeed += (currentRotRate - st.rotSpeed) * 0.12;
-      st.lastAzimuth = finalAzimuth;
-      st.lastElevation = finalElevation;
+      // Saturation warning color (Red if |RPM| > 5000, otherwise nominal axis color)
+      wheelX.material.color.setHex(Math.abs(rpmX) > 5000 ? 0xef4444 : wheelX.defaultColor);
+      wheelY.material.color.setHex(Math.abs(rpmY) > 5000 ? 0xef4444 : wheelY.defaultColor);
+      wheelZ.material.color.setHex(Math.abs(rpmZ) > 5000 ? 0xef4444 : wheelZ.defaultColor);
 
-      // ------------------------------------------------------------------------
-      // Rigorous Orthonormal Camera Basis Vectors
-      // ------------------------------------------------------------------------
-      const cosA = Math.cos(finalAzimuth);
-      const sinA = Math.sin(finalAzimuth);
-      const cosE = Math.cos(finalElevation);
-      const sinE = Math.sin(finalElevation);
-
-      // Stage 5 Initial Debris Collision Camera Shake (Only during impact: 0.6s to 1.8s)
-      let shakeX = 0, shakeY = 0, shakeZ = 0;
+      // Spacecraft ghost & alert flicker states
+      let isGhost = false;
+      let isPanicTumbling = false;
       const stageElapsed = tlm.elapsed_time !== undefined ? tlm.elapsed_time : 0.0;
-      if (stageId === 5 && stageElapsed >= 0.6 && stageElapsed < 1.8) {
-        const shakeDecay = Math.max(0, 1.0 - (stageElapsed - 0.6) / 1.2);
-        const shakeMag = 0.35 * shakeDecay;
-        shakeX = (Math.sin(now * 0.065) + Math.cos(now * 0.089)) * shakeMag;
-        shakeY = (Math.cos(now * 0.071) - Math.sin(now * 0.093)) * shakeMag;
-        shakeZ = Math.sin(now * 0.082) * shakeMag * 0.7;
+      if (stageId === 5) {
+        if (stageElapsed >= 0.6 && (tlm.fdir_mode === 0 || tlm.fdir_mode === undefined)) {
+          isGhost = true;
+          isPanicTumbling = true;
+        }
+      } else {
+        isGhost = tlm.carrier_lost || tlm.fdir_mode === 1;
       }
 
-      // Camera position relative to target ship
-      const cam = {
-        x: shipX - finalDist * cosE * cosA + shakeX,
-        y: shipY - finalDist * cosE * sinA + shakeY,
-        z: shipZ + finalDist * sinE + shakeZ
-      };
-
-      // Optical Forward Vector (from Camera to Target)
-      const f = {
-        x: cosE * cosA,
-        y: cosE * sinA,
-        z: -sinE
-      };
-
-      // Camera Right Vector (Horizontal in World XY)
-      const r_raw = {
-        x: sinA,
-        y: -cosA,
-        z: 0.0
-      };
-
-      // Camera Up Vector (Orthogonal to f and r)
-      const u_raw = {
-        x: sinE * cosA,
-        y: sinE * sinA,
-        z: cosE
-      };
-
-      // Apply Camera Roll (st.smoothRoll) around line of sight
-      const cosR = Math.cos(st.smoothRoll);
-      const sinR = Math.sin(st.smoothRoll);
-
-      const r = {
-        x: cosR * r_raw.x + sinR * u_raw.x,
-        y: cosR * r_raw.y + sinR * u_raw.y,
-        z: cosR * r_raw.z + sinR * u_raw.z
-      };
-
-      const u = {
-        x: -sinR * r_raw.x + cosR * u_raw.x,
-        y: -sinR * r_raw.y + cosR * u_raw.y,
-        z: -sinR * r_raw.z + cosR * u_raw.z
-      };
-
-      const focal = 380;
-
-      // 3D Perspective Projection for World Objects
-      const project3D = (wx, wy, wz) => {
-        const dx = wx - cam.x;
-        const dy = wy - cam.y;
-        const dz = wz - cam.z;
-
-        const z_cam = dx * f.x + dy * f.y + dz * f.z;
-        if (z_cam <= 0.6) return null;
-
-        const x_cam = dx * r.x + dy * r.y + dz * r.z;
-        const y_cam = dx * u.x + dy * u.y + dz * u.z;
-
-        const scale = focal / z_cam;
-        return {
-          sx: cx + x_cam * scale,
-          sy: cy - y_cam * scale,
-          scale,
-          depth: z_cam
-        };
-      };
-
-      const cosSY = Math.cos(shipYaw);
-      const sinSY = Math.sin(shipYaw);
-      const cosSP = Math.cos(shipPitch);
-      const sinSP = Math.sin(shipPitch);
-      const cosSR = Math.cos(shipRoll);
-      const sinSR = Math.sin(shipRoll);
-
-      const transformShipPoint = (bx, by, bz) => {
-        // Step 1: Roll around body X axis
-        const x1 = bx;
-        const y1 = by * cosSR - bz * sinSR;
-        const z1 = by * sinSR + bz * cosSR;
-
-        // Step 2: Pitch around intermediate Y axis
-        const x2 = x1 * cosSP + z1 * sinSP;
-        const y2 = y1;
-        const z2 = -x1 * sinSP + z1 * cosSP;
-
-        // Step 3: Yaw around World Z axis and translate
-        const wx = shipX + x2 * cosSY - y2 * sinSY;
-        const wy = shipY + x2 * sinSY + y2 * cosSY;
-        const wz = shipZ + z2;
-
-        return project3D(wx, wy, wz);
-      };
-
-      const draw3DEdge = (p1, p2) => {
-        if (p1 && p2) {
-          ctx.beginPath();
-          ctx.moveTo(p1.sx, p1.sy);
-          ctx.lineTo(p2.sx, p2.sy);
-          ctx.stroke();
-        }
-      };
-
-      // ------------------------------------------------------------------------
-      // 1. Draw Celestial Starfield (Immutable Astronomical Sphere)
-      // Completely stationary when camera is fixed; flows in exact direction when turned
-      // ------------------------------------------------------------------------
-      const starFocal = focal * 1.15;
-      for (const s of CELESTIAL_STARS) {
-        // Depth along camera line of sight
-        const z_star = s.x * f.x + s.y * f.y + s.z * f.z;
-        if (z_star > 0.08) {
-          const x_star = s.x * r.x + s.y * r.y + s.z * r.z;
-          const y_star = s.x * u.x + s.y * u.y + s.z * u.z;
-
-          const ssx = cx + (x_star / z_star) * starFocal;
-          const ssy = cy - (y_star / z_star) * starFocal;
-
-          if (ssx >= -10 && ssx <= w + 10 && ssy >= -10 && ssy <= h + 10) {
-            // Dynamic Twinkle: serene when still, shimmers and flares dynamically on turns/bank
-            const baseTwinkle = 0.52 + 0.48 * Math.sin(timeSec * s.twinkleSpeed + s.twinklePhase);
-            const dynamicTwinkle = Math.min(1.0, baseTwinkle + st.rotSpeed * 0.35);
-
-            ctx.fillStyle = s.color;
-            ctx.globalAlpha = dynamicTwinkle;
-            ctx.beginPath();
-            ctx.arc(ssx, ssy, s.baseSize, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Cross diffraction spikes on prominent stars (flares with motion)
-            if (s.baseSize > 1.5 && dynamicTwinkle > 0.70) {
-              const spk = 3.5 + st.rotSpeed * 3.0;
-              ctx.strokeStyle = s.color;
-              ctx.lineWidth = 0.8;
-              ctx.beginPath();
-              ctx.moveTo(ssx - spk, ssy); ctx.lineTo(ssx + spk, ssy);
-              ctx.moveTo(ssx, ssy - spk); ctx.lineTo(ssx, ssy + spk);
-              ctx.stroke();
-            }
-          }
-        }
-      }
-      ctx.globalAlpha = 1.0;
-
-      // ------------------------------------------------------------------------
-      // 2. Draw 3D Asteroid Surface Grid (Ground Plane at Z = -3.5m)
-      // ------------------------------------------------------------------------
-      ctx.strokeStyle = '#0b192f';
-      ctx.lineWidth = 1;
-      const groundZ = -3.5;
-      const startX = Math.floor((shipX - 25) / 5) * 5;
-      const endX = startX + 60;
-      for (let gx = startX; gx <= endX; gx += 5) {
-        const p1 = project3D(gx, -18, groundZ);
-        const p2 = project3D(gx, 18, groundZ);
-        if (p1 && p2) {
-          ctx.beginPath();
-          ctx.moveTo(p1.sx, p1.sy);
-          ctx.lineTo(p2.sx, p2.sy);
-          ctx.stroke();
-        }
-      }
-      for (let gy = -18; gy <= 18; gy += 4) {
-        const p1 = project3D(startX, gy, groundZ);
-        const p2 = project3D(endX, gy, groundZ);
-        if (p1 && p2) {
-          ctx.beginPath();
-          ctx.moveTo(p1.sx, p1.sy);
-          ctx.lineTo(p2.sx, p2.sy);
-          ctx.stroke();
-        }
+      if (isPanicTumbling) {
+        const flicker = Math.floor(now * 0.008) % 2 === 0;
+        const c = flicker ? 0xef4444 : 0xf59e0b;
+        fighterHullMat.color.setHex(c);
+        fighterGlowMat.color.setHex(c);
+      } else if (isGhost) {
+        fighterHullMat.color.setHex(0xf59e0b);
+        fighterGlowMat.color.setHex(0xd97706);
+      } else {
+        fighterHullMat.color.setHex(0x38bdf8);
+        fighterGlowMat.color.setHex(0x0284c7);
       }
 
-      // ------------------------------------------------------------------------
-      // 3. Draw 3D Asteroid Pipeline Corridor (Hexagonal Rings + Guide Rails)
-            // ------------------------------------------------------------------------
-      // 3. Draw Track / World Structures based on Active Stage ID
-      // ------------------------------------------------------------------------
-      const ringSpacing = 2.5;
-      const hexRadius = 3.6;
-      const hexAngles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
+      // Update RCS hardware brackets
+      const healthMask = (tlm.thruster_health !== undefined) ? tlm.thruster_health : 0xFFF;
+      for (const r of rcsCubes) {
+        const damaged = (healthMask & (1 << r.id)) === 0;
+        r.mat.color.setHex(damaged ? 0xef4444 : 0xf59e0b);
+      }
 
+      // Update Dynamic Plumes & Particles
+      const hasFuel = (tlm.fuel === undefined || tlm.fuel > 0);
+      const thrustMask = (tlm.thrust_z !== undefined) ? (tlm.thrust_z & 0xFF) : 0;
+      const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
+      const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
+      const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
+
+      // Main thrusters T0, T1
+      const isT0Firing = hasFuel && (healthMask & 1) && ((thrustMask & 1) || (stageId !== 5 && actualFx > 0.005));
+      const isT1Firing = hasFuel && (healthMask & 2) && ((thrustMask & 2) || (stageId !== 5 && actualFx > 0.005));
+
+      plumeT0.visible = !!isT0Firing;
+      if (isT0Firing) {
+        const pLen = 1.0 + Math.random() * 0.5;
+        const jx = (Math.random() - 0.5) * 0.1;
+        const posAttr = plumeT0.geometry.attributes.position;
+        posAttr.setXYZ(0, -1.6, -0.4, 0);
+        posAttr.setXYZ(1, -1.6 - pLen, -0.4 + jx, jx);
+        posAttr.setXYZ(2, -1.6, -0.4, 0);
+        posAttr.setXYZ(3, -1.6 - pLen * 0.45, -0.4, 0);
+        posAttr.needsUpdate = true;
+      }
+
+      plumeT1.visible = !!isT1Firing;
+      if (isT1Firing) {
+        const pLen = 1.0 + Math.random() * 0.5;
+        const jx = (Math.random() - 0.5) * 0.1;
+        const posAttr = plumeT1.geometry.attributes.position;
+        posAttr.setXYZ(0, -1.6, 0.4, 0);
+        posAttr.setXYZ(1, -1.6 - pLen, 0.4 + jx, jx);
+        posAttr.setXYZ(2, -1.6, 0.4, 0);
+        posAttr.setXYZ(3, -1.6 - pLen * 0.45, 0.4, 0);
+        posAttr.needsUpdate = true;
+      }
+
+      // RCS Jet lines
+      let rcsIdx = 0;
+      const rcsPos = rcsJetGeo.attributes.position;
+      const addJet = (ox, oy, oz, dx, dy, dz) => {
+        rcsPos.setXYZ(rcsIdx * 2, ox, oy, oz);
+        rcsPos.setXYZ(rcsIdx * 2 + 1, ox + dx, oy + dy, oz + dz);
+        rcsIdx++;
+      };
+
+      if (hasFuel) {
+        const isT5 = (healthMask & (1 << 5)) && ((thrustMask & (1 << 5)) || actualFy > 0.01 || actualTau > 0.02);
+        const isT7 = (healthMask & (1 << 7)) && ((thrustMask & (1 << 7)) || actualFy < -0.01 || actualTau < -0.02);
+        const isT4 = (healthMask & (1 << 4)) && ((thrustMask & (1 << 4)) || actualFy > 0.01 || actualTau < -0.02);
+        const isT6 = (healthMask & (1 << 6)) && ((thrustMask & (1 << 6)) || actualFy < -0.01 || actualTau > 0.02);
+
+        if (isT5) addJet(0.8, -0.65, 0, 0, -(0.5 + Math.random() * 0.35), 0);
+        if (isT7) addJet(0.8, 0.65, 0, 0, (0.5 + Math.random() * 0.35), 0);
+        if (isT4) addJet(-1.3, -1.8, 0, 0, -(0.5 + Math.random() * 0.35), 0);
+        if (isT6) addJet(-1.3, 1.8, 0, 0, (0.5 + Math.random() * 0.35), 0);
+
+        // Reverse braking T2, T3
+        if ((healthMask & (1 << 2)) && (thrustMask & (1 << 2))) addJet(0.8, -0.65, 0, 0.6, 0, 0);
+        if ((healthMask & (1 << 3)) && (thrustMask & (1 << 3))) addJet(0.8, 0.65, 0, 0.6, 0, 0);
+
+        // Vertical T8..T11
+        if ((healthMask & (1 << 8)) && (thrustMask & (1 << 8))) addJet(1.2, 0, 0.4, 0, 0, 0.7);
+        if ((healthMask & (1 << 9)) && (thrustMask & (1 << 9))) addJet(1.2, 0, -0.4, 0, 0, -0.7);
+        if ((healthMask & (1 << 10)) && (thrustMask & (1 << 10))) addJet(-1.2, 0, 0.4, 0, 0, 0.7);
+        if ((healthMask & (1 << 11)) && (thrustMask & (1 << 11))) addJet(-1.2, 0, -0.4, 0, 0, -0.7);
+      }
+      rcsJetGeo.setDrawRange(0, rcsIdx * 2);
+      rcsPos.needsUpdate = true;
+
+      // Update Stage 2 Tether Wave Vibration
       if (stageId === 2) {
-        // --------------------------------------------------------------------
-        // Stage 2: 100m High-Tension Carbon Nanotube Tether Cable & Environments
-        // [Origin: GEO Orbital Habitat Station (0m) -> Terminal: Asteroid Mining Base (100m)]
-        // --------------------------------------------------------------------
-        const cableLength = 100.0;
-        const isRuptured = !!tlm.cable_snapped;
-        const cableTension = tlm.cable_tension || 10000;
-        const cableColor = isRuptured ? '#ef4444' : (cableTension > 13000 ? '#f97316' : '#38bdf8');
+        const vib = tlm.cable_vibration || 0.0;
+        const pos = tetherGeo.attributes.position;
+        for (let i = 0; i < tetherSegCount; i++) {
+          const v = vib * Math.sin((i / 100.0) * Math.PI);
+          pos.setY(i, v);
+        }
+        pos.needsUpdate = true;
+        tetherMat.color.setHex(tlm.cable_snapped ? 0xef4444 : ((tlm.cable_tension || 10000) > 13000 ? 0xf97316 : 0x38bdf8));
+      }
 
-        // ====================================================================
-        // A. STARTING TERMINUS (0m): Geostationary Orbital Station (GEO Station)
-        // ====================================================================
-        const stationRot = (now * 0.0003) % (Math.PI * 2);
-        const geoX = -2.5;
-        const torusR = 9.0;
-        const torusInnerR = 7.2;
+      // Update Stage 4 Docking Crosshair Rotation
+      if (stageId === 4) {
+        crossLine.rotation.x = nowSec * 0.15;
+      }
 
-        // 1. Massive Rotating Habitat Torus Ring in Y-Z plane
-        ctx.strokeStyle = '#0284c7';
-        ctx.shadowColor = '#0284c7';
-        ctx.shadowBlur = 6;
-        ctx.lineWidth = 1.6;
-
-        const torusOuterPts = [];
-        const torusInnerPts = [];
-        const torusSegs = 20;
-        for (let i = 0; i < torusSegs; i++) {
-          const a = stationRot + (i * Math.PI * 2 / torusSegs);
-          const pOut = project3D(geoX, torusR * Math.sin(a), torusR * Math.cos(a));
-          const pIn  = project3D(geoX, torusInnerR * Math.sin(a), torusInnerR * Math.cos(a));
-          if (pOut) torusOuterPts.push(pOut);
-          if (pIn) torusInnerPts.push(pIn);
+      // Update Stage 5 Debris Shards & Impact Dynamics
+      if (stageId === 5) {
+        for (const deb of debrisMeshes) {
+          deb.group.rotation.x = nowSec * 0.8 + deb.idx;
+          deb.group.rotation.y = nowSec * 0.6 + deb.idx;
         }
 
-        if (torusOuterPts.length === torusSegs && torusInnerPts.length === torusSegs) {
-          // Outer ring
-          ctx.beginPath();
-          ctx.moveTo(torusOuterPts[0].sx, torusOuterPts[0].sy);
-          for (let i = 1; i < torusSegs; i++) ctx.lineTo(torusOuterPts[i].sx, torusOuterPts[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-
-          // Inner ring
-          ctx.beginPath();
-          ctx.moveTo(torusInnerPts[0].sx, torusInnerPts[0].sy);
-          for (let i = 1; i < torusSegs; i++) ctx.lineTo(torusInnerPts[i].sx, torusInnerPts[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-
-          // Window modules & cross bulkheads
-          ctx.strokeStyle = '#38bdf8';
-          ctx.lineWidth = 1.0;
-          for (let i = 0; i < torusSegs; i += 2) {
-            ctx.beginPath();
-            ctx.moveTo(torusOuterPts[i].sx, torusOuterPts[i].sy);
-            ctx.lineTo(torusInnerPts[i].sx, torusInnerPts[i].sy);
-            ctx.stroke();
-          }
-        }
-
-        // 2. 4 Structural Spoke Trusses connecting Hub to Torus
-        ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 1.4;
-        const hubCenter = project3D(geoX, 0, 0);
-        for (let k = 0; k < 4; k++) {
-          const a = stationRot + (k * Math.PI / 2);
-          const pSpokeEnd = project3D(geoX, torusInnerR * Math.sin(a), torusInnerR * Math.cos(a));
-          if (hubCenter && pSpokeEnd) {
-            ctx.beginPath();
-            ctx.moveTo(hubCenter.sx, hubCenter.sy);
-            ctx.lineTo(pSpokeEnd.sx, pSpokeEnd.sy);
-            ctx.stroke();
-          }
-        }
-
-        // 3. Central Mooring Core & Tether Anchor Sleeve (X from -6m to +0.5m)
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2.0;
-        const pAnchorEntry = project3D(0.0, 0, 0);
-        const pAnchorBack  = project3D(-6.0, 0, 0);
-        const hubCollarPts = [];
-        for (let i = 0; i < 8; i++) {
-          const a = (i * Math.PI * 2 / 8);
-          const pt = project3D(0.2, 2.2 * Math.sin(a), 2.2 * Math.cos(a));
-          if (pt) hubCollarPts.push(pt);
-        }
-        if (hubCollarPts.length === 8) {
-          ctx.beginPath();
-          ctx.moveTo(hubCollarPts[0].sx, hubCollarPts[0].sy);
-          for (let i = 1; i < 8; i++) ctx.lineTo(hubCollarPts[i].sx, hubCollarPts[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-        }
-
-        // 4. Giant Photovoltaic Solar Array Wings (Upper & Lower Z)
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 1.2;
-        const solarZOffsets = [
-          { z1: 3.5, z2: 10.5 },
-          { z1: -10.5, z2: -3.5 }
-        ];
-        for (const s of solarZOffsets) {
-          const sp1 = project3D(geoX - 1.2, -2.4, s.z1);
-          const sp2 = project3D(geoX - 1.2, 2.4, s.z1);
-          const sp3 = project3D(geoX - 1.2, 2.4, s.z2);
-          const sp4 = project3D(geoX - 1.2, -2.4, s.z2);
-          if (sp1 && sp2 && sp3 && sp4) {
-            ctx.beginPath();
-            ctx.moveTo(sp1.sx, sp1.sy);
-            ctx.lineTo(sp2.sx, sp2.sy);
-            ctx.lineTo(sp3.sx, sp3.sy);
-            ctx.lineTo(sp4.sx, sp4.sy);
-            ctx.closePath();
-            ctx.stroke();
-            // Solar rib grid
-            const sm1 = project3D(geoX - 1.2, 0, s.z1);
-            const sm2 = project3D(geoX - 1.2, 0, s.z2);
-            if (sm1 && sm2) {
-              ctx.moveTo(sm1.sx, sm1.sy);
-              ctx.lineTo(sm2.sx, sm2.sy);
-              ctx.stroke();
-            }
-          }
-        }
-
-        // GEO Station HUD Label
-        if (torusOuterPts.length > 0) {
-          const topTorus = project3D(geoX, 0, torusR);
-          if (topTorus) {
-            ctx.save();
-            ctx.fillStyle = '#38bdf8';
-            ctx.font = 'bold 11px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('GEO ORBITAL STATION [ALPHA ANCHOR]', topTorus.sx, topTorus.sy - 10);
-            ctx.restore();
-          }
-        }
-
-        // ====================================================================
-        // B. 100m High-Tension Carbon Nanotube Tether Cable (String Wave)
-        // ====================================================================
-        ctx.strokeStyle = cableColor;
-        ctx.shadowColor = cableColor;
-        ctx.shadowBlur = isRuptured ? 16 : 8;
-        ctx.lineWidth = 3.2;
-        ctx.beginPath();
-        let firstCablePt = true;
-        for (let px = 0.0; px <= cableLength; px += 1.0) {
-          const vibOffset = (tlm.cable_vibration || 0.0) * Math.sin((px / cableLength) * Math.PI);
-          const pt = project3D(px, vibOffset, 0.0);
-          if (pt) {
-            if (firstCablePt) { ctx.moveTo(pt.sx, pt.sy); firstCablePt = false; }
-            else { ctx.lineTo(pt.sx, pt.sy); }
-          }
-        }
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Draw altitude beacon rings every 10m (10m .. 90m)
-        for (let rx = 10.0; rx <= 90.0; rx += 10.0) {
-          const isPassed = rx < shipX - 1.0;
-          const ringColor = isPassed ? '#059669' : '#0284c7';
-          const ringRad = 2.5;
-
-          ctx.strokeStyle = ringColor;
-          ctx.shadowColor = ringColor;
-          ctx.shadowBlur = 4;
-          ctx.lineWidth = 1.2;
-
-          const circlePts = [];
-          for (let i = 0; i < 12; i++) {
-            const a = (i * Math.PI * 2) / 12;
-            const pt = project3D(rx, ringRad * Math.sin(a), ringRad * Math.cos(a));
-            if (pt) circlePts.push(pt);
-          }
-          if (circlePts.length === 12) {
-            ctx.beginPath();
-            ctx.moveTo(circlePts[0].sx, circlePts[0].sy);
-            for (let i = 1; i < 12; i++) ctx.lineTo(circlePts[i].sx, circlePts[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-
-            const topPt = circlePts[0];
-            if (topPt) {
-              ctx.save();
-              ctx.fillStyle = isPassed ? '#10b981' : '#94a3b8';
-              ctx.font = '10px monospace';
-              ctx.textAlign = 'center';
-              ctx.fillText(`BEACON ${Math.round(rx/10)} (${rx.toFixed(0)}m)`, topPt.sx, topPt.sy - 8);
-              ctx.restore();
-            }
-          }
-        }
-
-        // ====================================================================
-        // C. GOAL TERMINUS (100m): Asteroid Mining Base (小惑星採掘基地)
-        // ====================================================================
-        const astX = 110.0;
-        const astBaseR = 12.0;
-
-        // 1. 3D Wireframe Irregular Asteroid Rock Face
-        ctx.strokeStyle = '#78716c';
-        ctx.lineWidth = 1.0;
-        ctx.shadowBlur = 0;
-
-        const latCount = 7;
-        const lonCount = 12;
-        const astGrid = [];
-
-        for (let la = 0; la < latCount; la++) {
-          const lat = -Math.PI / 2 + (la + 0.5) * Math.PI / latCount;
-          const ringPts = [];
-          for (let lo = 0; lo < lonCount; lo++) {
-            const lon = lo * 2 * Math.PI / lonCount;
-            // Craggy surface perturbation
-            const rDispl = astBaseR + 2.4 * Math.sin(lat * 3) * Math.cos(lon * 2) + 1.2 * Math.sin(lon * 4 + 1.0);
-            const px = astX + rDispl * Math.cos(lat) * Math.cos(lon);
-            const py = rDispl * Math.cos(lat) * Math.sin(lon);
-            const pz = rDispl * Math.sin(lat);
-            const pt = project3D(px, py, pz);
-            ringPts.push(pt);
-          }
-          astGrid.push(ringPts);
-
-          // Draw latitude line
-          ctx.beginPath();
-          let fPt = true;
-          for (let lo = 0; lo < lonCount; lo++) {
-            const p = ringPts[lo];
-            if (p) {
-              if (fPt) { ctx.moveTo(p.sx, p.sy); fPt = false; }
-              else { ctx.lineTo(p.sx, p.sy); }
-            }
-          }
-          if (ringPts[0] && !fPt) ctx.lineTo(ringPts[0].sx, ringPts[0].sy);
-          ctx.stroke();
-        }
-
-        // Draw longitude meridian lines on asteroid
-        for (let lo = 0; lo < lonCount; lo++) {
-          ctx.beginPath();
-          let fPt = true;
-          for (let la = 0; la < latCount; la++) {
-            const p = astGrid[la][lo];
-            if (p) {
-              if (fPt) { ctx.moveTo(p.sx, p.sy); fPt = false; }
-              else { ctx.lineTo(p.sx, p.sy); }
-            }
-          }
-          ctx.stroke();
-        }
-
-        // 2. High-Tension Cable Anchor Rig & Steel Gantry Tower (X from 98m to 104m)
-        ctx.strokeStyle = '#eab308';
-        ctx.shadowColor = '#eab308';
-        ctx.shadowBlur = 10;
-        ctx.lineWidth = 2.4;
-
-        // Terminal Docking Clamp Ring at X=100.0m
-        const dockCollarPts = [];
-        for (let i = 0; i < 12; i++) {
-          const a = (i * Math.PI * 2 / 12);
-          const pt = project3D(100.0, 3.8 * Math.sin(a), 3.8 * Math.cos(a));
-          if (pt) dockCollarPts.push(pt);
-        }
-        if (dockCollarPts.length === 12) {
-          ctx.beginPath();
-          ctx.moveTo(dockCollarPts[0].sx, dockCollarPts[0].sy);
-          for (let i = 1; i < 12; i++) ctx.lineTo(dockCollarPts[i].sx, dockCollarPts[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-        }
-
-        // 4 Anchor Footings bolted into Asteroid Rock face
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 1.6;
-        for (let k = 0; k < 4; k++) {
-          const a = k * Math.PI / 2 + Math.PI / 4;
-          const pClamp = project3D(100.0, 3.8 * Math.sin(a), 3.8 * Math.cos(a));
-          const pAnchorRock = project3D(104.5, 6.5 * Math.sin(a), 6.5 * Math.cos(a));
-          if (pClamp && pAnchorRock) {
-            ctx.beginPath();
-            ctx.moveTo(pClamp.sx, pClamp.sy);
-            ctx.lineTo(pAnchorRock.sx, pAnchorRock.sy);
-            ctx.stroke();
-          }
-        }
-
-        // 3. Mining Excavation Core Drill Rig & Geodesic Habitat Domes
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.2;
-        // Mining Dome at surface
-        const domeCenter = { x: 102.5, y: 5.5, z: 3.5, r: 2.4 };
-        const domePts = [];
-        for (let i = 0; i < 8; i++) {
-          const a = i * Math.PI * 2 / 8;
-          const pt = project3D(domeCenter.x, domeCenter.y + domeCenter.r * Math.cos(a), domeCenter.z + domeCenter.r * Math.sin(a));
-          if (pt) domePts.push(pt);
-        }
-        if (domePts.length === 8) {
-          ctx.beginPath();
-          ctx.moveTo(domePts[0].sx, domePts[0].sy);
-          for (let i = 1; i < 8; i++) ctx.lineTo(domePts[i].sx, domePts[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-        }
-
-        // Terminal Label
-        if (dockCollarPts.length > 0) {
-          const topDock = dockCollarPts[0];
-          if (topDock) {
-            ctx.save();
-            ctx.fillStyle = '#fde047';
-            ctx.font = 'bold 12px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('ASTEROID MINING BASE [TERMINAL PORT]', topDock.sx, topDock.sy - 12);
-            ctx.restore();
-          }
-        }
-        ctx.shadowBlur = 0;
-      } else if (stageId === 3) {
-        // --------------------------------------------------------------------
-        // Stage 3: 60m ISS Modular Box Truss Structure with Inspection Nodes
-        // --------------------------------------------------------------------
-        const trussLength = 60.0;
-        const halfW = 1.6;
-        const halfH = 1.6;
-        const cornerOffsets = [
-          { dy: -halfW, dz: -halfH },
-          { dy: halfW, dz: -halfH },
-          { dy: halfW, dz: halfH },
-          { dy: -halfW, dz: halfH }
-        ];
-
-        // 4 Main Longitudinal Steel Chords / Guide Rails
-        for (let c = 0; c < 4; c++) {
-          ctx.strokeStyle = (c === 2 || c === 3) ? '#0284c7' : '#475569';
-          ctx.lineWidth = (c === 2) ? 2.5 : 1.2;
-          ctx.beginPath();
-          let firstP = true;
-          for (let rx = 0.0; rx <= trussLength; rx += 2.0) {
-            const pt = project3D(rx, cornerOffsets[c].dy, cornerOffsets[c].dz);
-            if (pt) {
-              if (firstP) { ctx.moveTo(pt.sx, pt.sy); firstP = false; }
-              else { ctx.lineTo(pt.sx, pt.sy); }
-            }
-          }
-          ctx.stroke();
-        }
-
-        // Cross Bulkheads and Diagonal Bracing every 5m
-        for (let bx = 0.0; bx <= trussLength; bx += 5.0) {
-          const bPts = [];
-          for (const co of cornerOffsets) {
-            const pt = project3D(bx, co.dy, co.dz);
-            if (pt) bPts.push(pt);
-          }
-          if (bPts.length === 4) {
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 1.0;
-            ctx.beginPath();
-            ctx.moveTo(bPts[0].sx, bPts[0].sy);
-            ctx.lineTo(bPts[1].sx, bPts[1].sy);
-            ctx.lineTo(bPts[2].sx, bPts[2].sy);
-            ctx.lineTo(bPts[3].sx, bPts[3].sy);
-            ctx.closePath();
-            // Diagonal brace
-            ctx.moveTo(bPts[0].sx, bPts[0].sy);
-            ctx.lineTo(bPts[2].sx, bPts[2].sy);
-            ctx.stroke();
-          }
-        }
-
-        // 4 Critical Inspection Joints (15m, 30m, 45m, 60m)
-        const joints = [
-          { x: 15.0, name: 'JOINT 01: S1 TRUSS' },
-          { x: 30.0, name: 'JOINT 02: SARJ ROTARY' },
-          { x: 45.0, name: 'JOINT 03: P1 TRUSS' },
-          { x: 60.0, name: 'TERMINAL: DOCK LATCH' }
-        ];
-
-        for (const j of joints) {
-          const isPassed = j.x < shipX - 0.5;
-          const isClose = Math.abs(shipX - j.x) <= 0.6;
-          const jColor = isClose ? '#facc15' : (isPassed ? '#10b981' : '#38bdf8');
-
-          ctx.strokeStyle = jColor;
-          ctx.shadowColor = jColor;
-          ctx.shadowBlur = isClose ? 16 : 6;
-          ctx.lineWidth = isClose ? 3.0 : 1.8;
-
-          const jPts = [];
-          for (let i = 0; i < 8; i++) {
-            const a = (i * Math.PI * 2) / 8;
-            const pt = project3D(j.x, 2.8 * Math.sin(a), 2.8 * Math.cos(a));
-            if (pt) jPts.push(pt);
-          }
-          if (jPts.length === 8) {
-            ctx.beginPath();
-            ctx.moveTo(jPts[0].sx, jPts[0].sy);
-            for (let i = 1; i < 8; i++) ctx.lineTo(jPts[i].sx, jPts[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-
-            ctx.save();
-            ctx.fillStyle = jColor;
-            ctx.font = 'bold 11px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(j.name, jPts[0].sx, jPts[0].sy - 10);
-            ctx.restore();
-          }
-        }
-        ctx.shadowBlur = 0;
-      } else if (stageId === 4) {
-        // --------------------------------------------------------------------
-        // Stage 4: 50m Deep Space Laser Docking Corridor & Target Station
-        // --------------------------------------------------------------------
-        const dockDist = 50.0;
-
-        // Central Optical Laser Beam from Station (50m) to Entry Point (0m)
-        ctx.strokeStyle = '#22c55e';
-        ctx.shadowColor = '#22c55e';
-        ctx.shadowBlur = 14;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        const pBeamStart = project3D(0.0, 0.0, 0.0);
-        const pBeamEnd = project3D(dockDist, 0.0, 0.0);
-        if (pBeamStart && pBeamEnd) {
-          ctx.moveTo(pBeamStart.sx, pBeamStart.sy);
-          ctx.lineTo(pBeamEnd.sx, pBeamEnd.sy);
-          ctx.stroke();
-        }
-        ctx.shadowBlur = 0;
-
-        // Funnel-shaped Approach Corridor Checkpoints
-        const checkpoints = [
-          { x: 10.0, r: 4.5, name: 'CORRIDOR 40m' },
-          { x: 20.0, r: 3.6, name: 'CORRIDOR 30m' },
-          { x: 30.0, r: 2.7, name: 'GATEWAY 20m' },
-          { x: 40.0, r: 1.8, name: 'APPROACH 10m' },
-          { x: 48.0, r: 1.2, name: 'FINAL CONE 2m' }
-        ];
-
-        for (const cp of checkpoints) {
-          const isPassed = cp.x < shipX - 0.5;
-          const cpColor = isPassed ? '#10b981' : '#06b6d4';
-          ctx.strokeStyle = cpColor;
-          ctx.lineWidth = 1.4;
-
-          const cpPts = [];
-          for (let i = 0; i < 12; i++) {
-            const a = (i * Math.PI * 2) / 12;
-            const pt = project3D(cp.x, cp.r * Math.sin(a), cp.r * Math.cos(a));
-            if (pt) cpPts.push(pt);
-          }
-          if (cpPts.length === 12) {
-            ctx.beginPath();
-            ctx.moveTo(cpPts[0].sx, cpPts[0].sy);
-            for (let i = 1; i < 12; i++) ctx.lineTo(cpPts[i].sx, cpPts[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-
-            ctx.save();
-            ctx.fillStyle = cpColor;
-            ctx.font = '10px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(cp.name, cpPts[0].sx, cpPts[0].sy - 6);
-            ctx.restore();
-          }
-        }
-
-        // Rotating Docking Station Port Ring at X=50m
-        const targetAngle = (Date.now() / 1000.0) * 0.15; // Realistic slow spin
-        const portRad = 3.2;
-        ctx.strokeStyle = '#eab308';
-        ctx.shadowColor = '#eab308';
-        ctx.shadowBlur = 12;
-        ctx.lineWidth = 2.8;
-
-        const portPts = [];
-        for (let i = 0; i < 16; i++) {
-          const a = (i * Math.PI * 2) / 16;
-          const pt = project3D(dockDist, portRad * Math.sin(a), portRad * Math.cos(a));
-          if (pt) portPts.push(pt);
-        }
-        if (portPts.length === 16) {
-          ctx.beginPath();
-          ctx.moveTo(portPts[0].sx, portPts[0].sy);
-          for (let i = 1; i < 16; i++) ctx.lineTo(portPts[i].sx, portPts[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-
-          // Rotating crosshairs on docking target
-          for (let k = 0; k < 4; k++) {
-            const ca = targetAngle + (k * Math.PI / 2);
-            const pArm = project3D(dockDist, portRad * Math.sin(ca), portRad * Math.cos(ca));
-            const pCenter = project3D(dockDist, 0, 0);
-            if (pArm && pCenter) {
-              ctx.strokeStyle = '#f59e0b';
-              ctx.lineWidth = 1.5;
-              ctx.beginPath();
-              ctx.moveTo(pCenter.sx, pCenter.sy);
-              ctx.lineTo(pArm.sx, pArm.sy);
-              ctx.stroke();
-            }
-          }
-
-          ctx.save();
-          ctx.fillStyle = '#fde047';
-          ctx.font = 'bold 12px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText('TARGET PORT #01 [ROTATING]', portPts[0].sx, portPts[0].sy - 12);
-          ctx.restore();
-        }
-        ctx.shadowBlur = 0;
-      } else if (stageId === 5) {
-        // --------------------------------------------------------------------
-        // Stage 5: Panic Control - Deep Space Debris Field & Safe Orbit Gate
-        // --------------------------------------------------------------------
-        const debrisCoords = [
-          { x:  7.0, y:  3.8, z:  2.5, r: 0.45 },
-          { x: 13.0, y: -4.2, z: -2.8, r: 0.48 },
-          { x: 18.5, y:  4.5, z: -2.0, r: 0.40 },
-          { x: 23.0, y: -3.2, z:  3.2, r: 0.46 },
-          { x: 27.5, y:  3.6, z: -3.0, r: 0.50 },
-          { x: 32.0, y: -2.2, z:  1.8, r: 0.42 }
-        ];
-
-        // 1. Draw 3D Floating Debris Shards (Realistic decimeter-scale satellite fragment plates)
-        debrisCoords.forEach((deb, didx) => {
-          const debRot = (now * 0.0012 * (didx % 2 === 0 ? 1 : -1)) + didx * 1.5;
-          const w = deb.r * 1.2;
-          const h = deb.r * 0.8;
-          const cornerLocal = [
-            { x: -w * 0.5, y: -h * 0.5, z: 0 },
-            { x:  w * 0.5, y: -h * 0.4, z: deb.r * 0.25 },
-            { x:  w * 0.4, y:  h * 0.5, z: -deb.r * 0.15 },
-            { x: -w * 0.5, y:  h * 0.4, z: 0 }
-          ];
-
-          const cosR = Math.cos(debRot);
-          const sinR = Math.sin(debRot);
-          const pCorners = [];
-          for (const c of cornerLocal) {
-            const rx = c.x * cosR - c.y * sinR;
-            const ry = c.x * sinR + c.y * cosR;
-            const p = project3D(deb.x + rx, deb.y + ry, deb.z + c.z);
-            if (p) pCorners.push(p);
-          }
-
-          if (pCorners.length === 4) {
-            ctx.strokeStyle = '#ef4444';
-            ctx.shadowColor = '#ef4444';
-            ctx.shadowBlur = 6;
-            ctx.lineWidth = 1.4;
-            ctx.beginPath();
-            ctx.moveTo(pCorners[0].sx, pCorners[0].sy);
-            for (let vi = 1; vi < 4; vi++) ctx.lineTo(pCorners[vi].sx, pCorners[vi].sy);
-            ctx.closePath();
-            ctx.stroke();
-
-            // Solar cell / structural gridline across shard
-            const mid1 = project3D(deb.x - w * 0.2 * cosR, deb.y - w * 0.2 * sinR, deb.z);
-            const mid2 = project3D(deb.x + w * 0.2 * cosR, deb.y + w * 0.2 * sinR, deb.z);
-            if (mid1 && mid2) {
-              ctx.lineWidth = 0.8;
-              ctx.beginPath();
-              ctx.moveTo(mid1.sx, mid1.sy);
-              ctx.lineTo(mid2.sx, mid2.sy);
-              ctx.stroke();
-            }
-
-            const pCenter = project3D(deb.x, deb.y, deb.z);
-            if (pCenter) {
-              ctx.fillStyle = '#f87171';
-              ctx.font = '9px monospace';
-              ctx.textAlign = 'center';
-              ctx.fillText(`DEBRIS #${didx + 1}`, pCenter.sx, pCenter.sy - 8);
-            }
-          }
-        });
-
-        // 2. Prologue Impactor Collision Event & Kinetic Shrapnel (Active only during active impact window: 0.05s to 1.8s)
-        const stageElapsed = tlm.elapsed_time !== undefined ? tlm.elapsed_time : 0.0;
+        // Kinetic impactor prologue trajectory (T=0.05..1.8s)
         if (stageElapsed >= 0.05 && stageElapsed < 1.8) {
+          impactorGroup.visible = true;
           const tImpact = 0.6;
           const spawnX = tlm.debris_spawn_x !== undefined ? tlm.debris_spawn_x : -16.0;
           const spawnY = tlm.debris_spawn_y !== undefined ? tlm.debris_spawn_y : -12.0;
@@ -1134,638 +1200,289 @@ export default function SpaceOrbitViewer3D() {
           const impPtY = tlm.debris_impact_y !== undefined ? tlm.debris_impact_y : -0.65;
           const impPtZ = tlm.debris_impact_z !== undefined ? tlm.debris_impact_z : 0.0;
 
-          let impX, impY, impZ;
           if (stageElapsed < tImpact) {
             const prog = Math.max(0.0, (stageElapsed - 0.05) / (tImpact - 0.05));
-            impX = shipX + (spawnX * (1.0 - prog) + impPtX * prog);
-            impY = shipY + (spawnY * (1.0 - prog) + impPtY * prog);
-            impZ = (shipZ || 0) + (spawnZ * (1.0 - prog) + impPtZ * prog);
+            impactorGroup.position.set(
+              shipX + spawnX * (1 - prog) + impPtX * prog,
+              shipY + spawnY * (1 - prog) + impPtY * prog,
+              shipZ + spawnZ * (1 - prog) + impPtZ * prog
+            );
           } else {
             const tPost = stageElapsed - tImpact;
-            // Physical deflection/ricochet after kinetic impact
-            const vinX = (impPtX - spawnX) / 0.55;
-            const vinY = (impPtY - spawnY) / 0.55;
-            const vinZ = (impPtZ - spawnZ) / 0.55;
-            const nNorm = Math.hypot(impPtX, impPtY, impPtZ) || 1.0;
-            const nx = impPtX / nNorm, ny = impPtY / nNorm, nz = impPtZ / nNorm;
-            const vDotN = vinX * nx + vinY * ny + vinZ * nz;
-            const ricX = (vinX - 1.4 * vDotN * nx) * 0.45;
-            const ricY = (vinY - 1.4 * vDotN * ny) * 0.45;
-            const ricZ = (vinZ - 1.4 * vDotN * nz) * 0.45;
-
-            impX = shipX + impPtX + tPost * ricX;
-            impY = shipY + impPtY + tPost * ricY;
-            impZ = (shipZ || 0) + impPtZ + tPost * ricZ;
+            impactorGroup.position.set(
+              shipX + impPtX + tPost * 8.0,
+              shipY + impPtY + tPost * 4.0,
+              shipZ + impPtZ + tPost * 2.0
+            );
           }
+          impactorGroup.rotation.x = nowSec * 12.0;
+          impactorGroup.rotation.y = nowSec * 8.0;
 
-          // Impactor fragment (sharp 3D metal wedge, ~0.32m) - only while near ship
-          if (stageElapsed < 1.3) {
-            const impRot = now * 0.03;
-            const iRad = 0.32;
-            const iPts = [];
-            for (let k = 0; k < 4; k++) {
-              const ia = impRot + k * Math.PI / 2;
-              const px = impX + iRad * Math.cos(ia);
-              const py = impY + iRad * 0.6 * Math.sin(ia);
-              const pz = impZ + (k % 2 === 0 ? 0.12 : -0.12);
-              const p = project3D(px, py, pz);
-              if (p) iPts.push(p);
-            }
-            if (iPts.length === 4) {
-              ctx.strokeStyle = '#f87171';
-              ctx.shadowColor = '#ef4444';
-              ctx.shadowBlur = 14;
-              ctx.lineWidth = 1.8;
-              ctx.beginPath();
-              ctx.moveTo(iPts[0].sx, iPts[0].sy);
-              for (let k = 1; k < 4; k++) ctx.lineTo(iPts[k].sx, iPts[k].sy);
-              ctx.closePath();
-              ctx.stroke();
-            }
-          }
-
-          // Collision Impact Shockwave & Sparks at instant of impact (0.6s to 1.8s)
+          // Shockwave and Sparks at collision
           if (stageElapsed >= 0.6 && stageElapsed <= 1.8) {
             const flashAge = stageElapsed - 0.6;
-            const flashRad = Math.min(3.0, flashAge * 3.5);
             const flashAlpha = Math.max(0, 1.0 - flashAge / 1.2);
+            shockwaveMesh.visible = true;
+            shockwaveMesh.position.set(shipX + impPtX, shipY + impPtY, shipZ + impPtZ);
+            const scale = Math.min(3.5, flashAge * 4.0) + 0.1;
+            shockwaveMesh.scale.set(scale, scale, scale);
+            shockwaveMat.opacity = flashAlpha;
 
-            const pImp = transformShipPoint(impPtX, impPtY, impPtZ);
-            if (pImp && flashAlpha > 0) {
-              // Expanding Cyan/White Shockwave Ring
-              ctx.strokeStyle = `rgba(255, 255, 255, ${flashAlpha})`;
-              ctx.shadowColor = '#38bdf8';
-              ctx.shadowBlur = 18;
-              ctx.lineWidth = 2.5;
-              ctx.beginPath();
-              ctx.arc(pImp.sx, pImp.sy, flashRad * 16, 0, Math.PI * 2);
-              ctx.stroke();
-
-              // Kinetic Sparks
-              ctx.strokeStyle = `rgba(245, 158, 11, ${flashAlpha})`;
-              ctx.lineWidth = 1.6;
-              for (let sp = 0; sp < 8; sp++) {
-                const spAng = (sp * Math.PI * 2 / 8) + (sp * 0.4);
-                const spDist = flashAge * (28 + (sp % 3) * 16);
-                ctx.beginPath();
-                ctx.moveTo(pImp.sx, pImp.sy);
-                ctx.lineTo(pImp.sx + Math.cos(spAng) * spDist, pImp.sy + Math.sin(spAng) * spDist);
-                ctx.stroke();
-              }
+            sparkPoints.visible = true;
+            sparkPoints.position.set(shipX + impPtX, shipY + impPtY, shipZ + impPtZ);
+            sparkMat.opacity = flashAlpha;
+            const spAttr = sparkGeo.attributes.position;
+            for (let sp = 0; sp < sparkCount; sp++) {
+              const ang = (sp * Math.PI * 2 / sparkCount) + sp * 0.3;
+              const dist = flashAge * (1.8 + (sp % 4) * 0.8);
+              spAttr.setXYZ(sp, Math.cos(ang) * dist, Math.sin(ang) * dist, (sp % 2 === 0 ? 0.3 : -0.3) * dist);
             }
+            spAttr.needsUpdate = true;
+          } else {
+            shockwaveMesh.visible = false;
+            sparkPoints.visible = false;
           }
-        }
-
-        // Damaged thruster status is indicated by red hardware brackets on ship hull (drawRcsPod)
-
-        // 2. Safe Orbit Escape Line (X = 35.0m)
-        const escX = 35.0;
-        const escRad = 6.0;
-        const gatePts = [];
-        for (let a = 0; a < 8; a++) {
-          const ang = a * 2 * Math.PI / 8;
-          const p = project3D(escX, escRad * Math.cos(ang), escRad * Math.sin(ang));
-          if (p) gatePts.push(p);
-        }
-        if (gatePts.length === 8) {
-          ctx.strokeStyle = '#22c55e';
-          ctx.shadowColor = '#22c55e';
-          ctx.shadowBlur = 14;
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.moveTo(gatePts[0].sx, gatePts[0].sy);
-          for (let a = 1; a < 8; a++) ctx.lineTo(gatePts[a].sx, gatePts[a].sy);
-          ctx.closePath();
-          ctx.stroke();
-
-          ctx.fillStyle = '#4ade80';
-          ctx.font = 'bold 12px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText('SAFE ORBIT RECOVERY LINE (35m)', gatePts[0].sx, gatePts[0].sy - 14);
-        }
-        ctx.shadowBlur = 0;
-      } else {
-        // --------------------------------------------------------------------
-        // Stage 1: Asteroid Surface Pipeline with Hexagonal Safety Ring Tunnel
-        // --------------------------------------------------------------------
-        for (let rx = 0.0; rx <= 50.0; rx += ringSpacing) {
-          const ry = getPipelineY(rx);
-          const isPassed = rx < shipX - 1.0;
-          const isNext = Math.abs(rx - shipX) < ringSpacing;
-          const isGate = (rx > 0 && Math.abs(rx % 5.0) < 0.1 && rx < 49.0);
-          const gateIdx = isGate ? Math.round(rx / 5.0) : 0;
-          const isTarget = (rx >= 49.0);
-
-          let ringColor = '#0284c7';
-          if (isTarget) ringColor = '#eab308';
-          else if (isPassed) ringColor = '#059669';
-          else if (isNext) ringColor = '#38bdf8';
-
-          ctx.strokeStyle = ringColor;
-          ctx.shadowColor = ringColor;
-          ctx.shadowBlur = isNext ? 12 : (isGate ? 8 : 4);
-          ctx.lineWidth = isNext ? 2.8 : (isGate ? 2.0 : 1.0);
-
-          const hexPoints = [];
-          for (const a of hexAngles) {
-            const hx = rx;
-            const hy = ry + hexRadius * Math.sin(a);
-            const hz = hexRadius * Math.cos(a);
-            const hp = project3D(hx, hy, hz);
-            if (hp) hexPoints.push(hp);
-          }
-
-          if (hexPoints.length === 6) {
-            ctx.beginPath();
-            ctx.moveTo(hexPoints[0].sx, hexPoints[0].sy);
-            for (let i = 1; i < 6; i++) ctx.lineTo(hexPoints[i].sx, hexPoints[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-
-            if (isGate) {
-              const topPt = hexPoints[0];
-              if (topPt) {
-                ctx.save();
-                ctx.fillStyle = isPassed ? '#10b981' : (isNext ? '#38bdf8' : '#94a3b8');
-                ctx.font = 'bold 11px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText(`GATE ${String(gateIdx).padStart(2, '0')}`, topPt.sx, topPt.sy - 8);
-                ctx.restore();
-              }
-            }
-          }
-        }
-
-        // Longitudinal Tunnel Rails
-        const railOffsets = [
-          { dy: 0, dz: hexRadius },
-          { dy: -hexRadius, dz: 0 },
-          { dy: hexRadius, dz: 0 }
-        ];
-        ctx.strokeStyle = '#0369a1';
-        ctx.lineWidth = 1.0;
-        for (const ro of railOffsets) {
-          ctx.beginPath();
-          let firstR = true;
-          for (let rx = 0.0; rx <= 50.0; rx += 1.0) {
-            const ry = getPipelineY(rx) + ro.dy;
-            const rz = ro.dz;
-            const rp = project3D(rx, ry, rz);
-            if (rp) {
-              if (firstR) { ctx.moveTo(rp.sx, rp.sy); firstR = false; }
-              else { ctx.lineTo(rp.sx, rp.sy); }
-            }
-          }
-          ctx.stroke();
-        }
-      }
-      // ------------------------------------------------------------------------
-      // 4. Draw True 3D Spacecraft Polyhedral Model with Yaw & Bank Roll
-      // ------------------------------------------------------------------------
-      let isGhost = false;
-      let isPanicTumbling = false;
-
-      if (stageId === 5) {
-        const stageElapsed = tlm.elapsed_time !== undefined ? tlm.elapsed_time : 0.0;
-        // Stage EX (Panic Control):
-        // 1. Pre-impact (T < 0.6s): Nominal intact spacecraft (Solid line, cyan)
-        // 2. Post-impact prologue (T >= 0.6s and fdir_mode == 0):
-        //    Debris crash damage & uncontrolled passive tumbling (Dashed line, alert flicker)
-        // 3. Active pilot control engaged (fdir_mode >= 1):
-        //    Solid line restored! Autopilot arrests tumbling inertia with reaction wheel & RCS.
-        if (stageElapsed >= 0.6 && (tlm.fdir_mode === 0 || tlm.fdir_mode === undefined)) {
-          isGhost = true;
-          isPanicTumbling = true;
         } else {
-          isGhost = false;
-          isPanicTumbling = false;
+          impactorGroup.visible = false;
+          shockwaveMesh.visible = false;
+          sparkPoints.visible = false;
         }
-      } else {
-        isGhost = tlm.carrier_lost || tlm.fdir_mode === 1;
       }
 
-      if (stageId === 2) {
-        // ====================================================================
-        // STAGE 2: Orbital Tether Climber (Gondola, Rollers, Solar Wings)
-        // ====================================================================
-        const isRuptured = !!tlm.cable_snapped;
-        const climberColor = isRuptured ? '#ef4444' : (isGhost ? '#f59e0b' : '#38bdf8');
-        ctx.strokeStyle = climberColor;
-        ctx.shadowColor = climberColor;
-        ctx.shadowBlur = isRuptured ? 16 : 8;
-        ctx.lineWidth = 1.8;
-        if (isGhost) ctx.setLineDash([4, 4]);
-        else ctx.setLineDash([]);
+      // Camera Presets & Dynamic Motion
+      const cinemaModes = ['chase', 'nose', 'hero', 'orbit'];
+      const effectiveMode = (st.cameraPreset === 'cinema') ? cinemaModes[st.cinemaIndex] : st.cameraPreset;
 
-        // 1. Central Cable Guide Rings (Upper Collar at +0.85m, Lower Collar at -0.85m)
-        const collarRadii = 0.45;
-        const collarX = [0.85, -0.85];
-        for (let k = 0; k < 2; k++) {
-          const cx = collarX[k];
-          const cPts = [];
-          for (let i = 0; i < 8; i++) {
-            const a = (i * Math.PI * 2) / 8;
-            cPts.push(transformShipPoint(cx, collarRadii * Math.sin(a), collarRadii * Math.cos(a)));
-          }
-          if (cPts.length === 8) {
-            ctx.beginPath();
-            ctx.moveTo(cPts[0].sx, cPts[0].sy);
-            for (let i = 1; i < 8; i++) ctx.lineTo(cPts[i].sx, cPts[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-          }
-        }
+      let baseAzimuth = 0.0;
+      let baseElevation = 0.26;
+      let baseDist = 9.0;
 
-        // 4 Connecting Titanium Spine Rods between Top and Bottom Collars
-        for (let i = 0; i < 4; i++) {
-          const a = (i * Math.PI * 2) / 4 + Math.PI / 4;
-          const p1 = transformShipPoint(0.85, collarRadii * Math.sin(a), collarRadii * Math.cos(a));
-          const p2 = transformShipPoint(-0.85, collarRadii * Math.sin(a), collarRadii * Math.cos(a));
-          draw3DEdge(p1, p2);
-        }
-
-        // 2. Spinning Dual Pinch Roller Wheels (Rotating with velocity)
-        const rollerAngle = (now * 0.006 * (tlm.vel_x || 0)) % (Math.PI * 2);
-        const rollerR = 0.22;
-        const rollerXPositions = [0.70, -0.70];
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 1.4;
-        for (const rx of rollerXPositions) {
-          // Left pinch roller wheel (by = -0.25)
-          const rwL = [];
-          for (let i = 0; i < 6; i++) {
-            const a = rollerAngle + (i * Math.PI * 2 / 6);
-            rwL.push(transformShipPoint(rx + rollerR * Math.cos(a), -0.25, rollerR * Math.sin(a)));
-          }
-          if (rwL.length === 6) {
-            ctx.beginPath();
-            ctx.moveTo(rwL[0].sx, rwL[0].sy);
-            for (let i = 1; i < 6; i++) ctx.lineTo(rwL[i].sx, rwL[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-            draw3DEdge(rwL[0], rwL[3]);
-          }
-          // Right pinch roller wheel (by = +0.25)
-          const rwR = [];
-          for (let i = 0; i < 6; i++) {
-            const a = -rollerAngle + (i * Math.PI * 2 / 6);
-            rwR.push(transformShipPoint(rx + rollerR * Math.cos(a), 0.25, rollerR * Math.sin(a)));
-          }
-          if (rwR.length === 6) {
-            ctx.beginPath();
-            ctx.moveTo(rwR[0].sx, rwR[0].sy);
-            for (let i = 1; i < 6; i++) ctx.lineTo(rwR[i].sx, rwR[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-            draw3DEdge(rwR[0], rwR[3]);
-          }
-        }
-
-        // 3. Central Hexagonal Pressurized Gondola Pod (bx in [-0.5, +0.5])
-        ctx.strokeStyle = climberColor;
-        ctx.lineWidth = 1.8;
-        const gX = [0.5, -0.5];
-        const gRadY = 0.95;
-        const gRadZ = 0.75;
-        const gondolaEnds = [];
-        for (let k = 0; k < 2; k++) {
-          const gx = gX[k];
-          const gPts = [];
-          for (let i = 0; i < 6; i++) {
-            const a = (i * Math.PI * 2) / 6;
-            gPts.push(transformShipPoint(gx, gRadY * Math.sin(a), gRadZ * Math.cos(a)));
-          }
-          gondolaEnds.push(gPts);
-          if (gPts.length === 6) {
-            ctx.beginPath();
-            ctx.moveTo(gPts[0].sx, gPts[0].sy);
-            for (let i = 1; i < 6; i++) ctx.lineTo(gPts[i].sx, gPts[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-          }
-        }
-        if (gondolaEnds.length === 2 && gondolaEnds[0].length === 6 && gondolaEnds[1].length === 6) {
-          for (let i = 0; i < 6; i++) {
-            draw3DEdge(gondolaEnds[0][i], gondolaEnds[1][i]);
-          }
-          // Observation viewport
-          draw3DEdge(gondolaEnds[0][0], gondolaEnds[1][3]);
-          draw3DEdge(gondolaEnds[0][1], gondolaEnds[1][4]);
-        }
-
-        // 4. Dual Photovoltaic Solar Array Wings (Left & Right)
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 1.5;
-        const pLeft = [
-          transformShipPoint(0.35, -0.95, 0),
-          transformShipPoint(0.35, -2.5, 0),
-          transformShipPoint(-0.35, -2.5, 0),
-          transformShipPoint(-0.35, -0.95, 0)
-        ];
-        if (pLeft.every(p => p !== null)) {
-          ctx.beginPath();
-          ctx.moveTo(pLeft[0].sx, pLeft[0].sy);
-          for (let i = 1; i < 4; i++) ctx.lineTo(pLeft[i].sx, pLeft[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-          const m1 = transformShipPoint(0.35, -1.75, 0);
-          const m2 = transformShipPoint(-0.35, -1.75, 0);
-          draw3DEdge(m1, m2);
-        }
-
-        const pRight = [
-          transformShipPoint(0.35, 0.95, 0),
-          transformShipPoint(0.35, 2.5, 0),
-          transformShipPoint(-0.35, 2.5, 0),
-          transformShipPoint(-0.35, 0.95, 0)
-        ];
-        if (pRight.every(p => p !== null)) {
-          ctx.beginPath();
-          ctx.moveTo(pRight[0].sx, pRight[0].sy);
-          for (let i = 1; i < 4; i++) ctx.lineTo(pRight[i].sx, pRight[i].sy);
-          ctx.closePath();
-          ctx.stroke();
-          const m1 = transformShipPoint(0.35, 1.75, 0);
-          const m2 = transformShipPoint(-0.35, 1.75, 0);
-          draw3DEdge(m1, m2);
-        }
-
-        // 5. Optical Mark Scanner Sensor Head pointing inward at central cable
-        const pScanStart = transformShipPoint(0.65, 0.35, 0.35);
-        const pScanTarget = transformShipPoint(0.65, 0, 0);
-        if (pScanStart && pScanTarget) {
-          ctx.strokeStyle = '#22c55e';
-          ctx.shadowColor = '#22c55e';
-          ctx.shadowBlur = 8;
-          ctx.lineWidth = 2.2;
-          draw3DEdge(pScanStart, pScanTarget);
-        }
-
-        // 6. Drive Induction Coil Glow & Reverse Dynamic Braking
-        const actualDrive = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
-        if (Math.abs(actualDrive) > 0.04) {
-          const isBraking = (actualDrive < 0);
-          const glowColor = isBraking ? '#ef4444' : '#06b6d4';
-          ctx.strokeStyle = glowColor;
-          ctx.shadowColor = glowColor;
-          ctx.shadowBlur = 14;
-          ctx.lineWidth = 2.5;
-          const glowX = isBraking ? 0.85 : -0.85;
-          const gPts = [];
-          for (let i = 0; i < 8; i++) {
-            const a = (i * Math.PI * 2) / 8;
-            gPts.push(transformShipPoint(glowX, 0.55 * Math.sin(a), 0.55 * Math.cos(a)));
-          }
-          if (gPts.length === 8) {
-            ctx.beginPath();
-            ctx.moveTo(gPts[0].sx, gPts[0].sy);
-            for (let i = 1; i < 8; i++) ctx.lineTo(gPts[i].sx, gPts[i].sy);
-            ctx.closePath();
-            ctx.stroke();
-          }
-        }
-        ctx.shadowBlur = 0;
-      } else {
-        // ====================================================================
-        // STAGE 1, 3, 4, 5: Aerospace Spacecraft Fighter / Explorer Model
-        // ====================================================================
-        let shipColor = isGhost ? '#f59e0b' : '#38bdf8';
-        if (isPanicTumbling) {
-          // In Stage 5 tumbling prologue: alert flicker between red & amber
-          shipColor = Math.floor(now * 0.008) % 2 === 0 ? '#ef4444' : '#f59e0b';
-        }
-        ctx.strokeStyle = shipColor;
-        ctx.shadowColor = shipColor;
-        ctx.shadowBlur = isGhost ? 6 : 12;
-        ctx.lineWidth = 2.0;
-        if (isGhost) ctx.setLineDash([4, 4]);
-        else ctx.setLineDash([]);
-
-        const V = {
-          nose: transformShipPoint(2.2, 0, 0),
-          wingL: transformShipPoint(-1.3, -1.8, 0),
-          wingR: transformShipPoint(-1.3, 1.8, 0),
-          canopy: transformShipPoint(-0.2, 0, 0.65),
-          finL: transformShipPoint(-1.4, -0.7, 0.8),
-          finR: transformShipPoint(-1.4, 0.7, 0.8),
-          nozzleL: transformShipPoint(-1.6, -0.4, 0),
-          nozzleR: transformShipPoint(-1.6, 0.4, 0),
-          keel: transformShipPoint(-0.4, 0, -0.4),
-          rcsBowL: transformShipPoint(0.8, -0.65, 0),
-          rcsBowR: transformShipPoint(0.8, 0.65, 0),
-          rcsSternL: transformShipPoint(-1.3, -1.8, 0),
-          rcsSternR: transformShipPoint(-1.3, 1.8, 0)
-        };
-
-        // Delta Hull Outline
-        draw3DEdge(V.nose, V.wingL);
-        draw3DEdge(V.nose, V.wingR);
-        draw3DEdge(V.wingL, V.nozzleL);
-        draw3DEdge(V.wingR, V.nozzleR);
-        draw3DEdge(V.nozzleL, V.nozzleR);
-
-        // Cockpit Canopy
-        draw3DEdge(V.nose, V.canopy);
-        draw3DEdge(V.wingL, V.canopy);
-        draw3DEdge(V.wingR, V.canopy);
-
-        // Vertical Stabilizer Fins
-        draw3DEdge(V.nozzleL, V.finL);
-        draw3DEdge(V.canopy, V.finL);
-        draw3DEdge(V.nozzleR, V.finR);
-        draw3DEdge(V.canopy, V.finR);
-
-        // Ventral Keel
-        draw3DEdge(V.nose, V.keel);
-        draw3DEdge(V.wingL, V.keel);
-        draw3DEdge(V.wingR, V.keel);
-
-        // Internal Reaction Wheel Flywheel Disk (Center of Mass)
-        const wheelAngle = (now * 0.001 * ((tlm.wheel_rpm || 0) * 0.1)) % (Math.PI * 2);
-        const rwRadius = 0.45;
-        const rwSegments = 8;
-        const rwPts = [];
-        for (let i = 0; i < rwSegments; i++) {
-          const a = wheelAngle + (i * Math.PI * 2 / rwSegments);
-          rwPts.push(transformShipPoint(-0.4 + Math.cos(a) * rwRadius * 0.6, Math.sin(a) * rwRadius, 0.1));
-        }
-        ctx.strokeStyle = Math.abs(tlm.wheel_rpm || 0) > 5000 ? '#ef4444' : '#ec4899';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        for (let i = 0; i < rwSegments; i++) {
-          const next = (i + 1) % rwSegments;
-          if (rwPts[i] && rwPts[next]) {
-            ctx.moveTo(rwPts[i].sx, rwPts[i].sy);
-            ctx.lineTo(rwPts[next].sx, rwPts[next].sy);
-          }
-        }
-        ctx.stroke();
-        if (rwPts[0] && rwPts[4]) {
-          ctx.moveTo(rwPts[0].sx, rwPts[0].sy); ctx.lineTo(rwPts[4].sx, rwPts[4].sy);
-        }
-        if (rwPts[2] && rwPts[6]) {
-          ctx.moveTo(rwPts[2].sx, rwPts[2].sy); ctx.lineTo(rwPts[6].sx, rwPts[6].sy);
-        }
-        ctx.stroke();
-
-        // RCS Pod Hardware Brackets & Health Status
-        const healthMask = (tlm.thruster_health !== undefined) ? tlm.thruster_health : 0xFFF;
-        const isDamaged = (id) => (healthMask & (1 << id)) === 0;
-
-        const drawRcsPod = (p, isDamaged) => {
-          if (!p) return;
-          ctx.fillStyle = isDamaged ? '#ef4444' : '#f59e0b';
-          ctx.shadowColor = isDamaged ? '#ef4444' : '#f59e0b';
-          ctx.shadowBlur = isDamaged ? 8 : 4;
-          ctx.fillRect(p.sx - 2.5, p.sy - 2.5, 5, 5);
-        };
-        drawRcsPod(V.rcsBowL, isDamaged(2) || isDamaged(5));
-        drawRcsPod(V.rcsBowR, isDamaged(3) || isDamaged(7));
-        drawRcsPod(V.rcsSternL, isDamaged(4));
-        drawRcsPod(V.rcsSternR, isDamaged(6));
-        drawRcsPod(V.nozzleL, isDamaged(0));
-        drawRcsPod(V.nozzleR, isDamaged(1));
-
-        // Optical Line Sensor Bar ahead of nose (Stage 1 Asteroid Pipeline Tracking only)
-        if (stageId === 1) {
-          const sensorL = transformShipPoint(1.2, -0.8, 0);
-          const sensorR = transformShipPoint(1.2, 0.8, 0);
-          if (sensorL && sensorR) {
-            ctx.strokeStyle = '#22c55e';
-            ctx.shadowColor = '#22c55e';
-            ctx.shadowBlur = 8;
-            ctx.lineWidth = 2.5;
-            ctx.setLineDash([]);
-            draw3DEdge(sensorL, sensorR);
-          }
-        }
-
-        // ====================================================================
-        // Thruster Exhaust Plumes (Main Engines & Multi-Nozzle RCS)
-        // ====================================================================
-        const hasFuel = (tlm.fuel === undefined || tlm.fuel > 0);
-        const thrustMask = (tlm.thrust_z !== undefined) ? (tlm.thrust_z & 0xFF) : 0;
-        const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
-        const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
-        const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
-
-        const drawJet = (pOrigin, pVector, color = '#38bdf8', glow = '#0284c7', width = 2.0) => {
-          if (!pOrigin || !pVector || !hasFuel) return;
-          ctx.strokeStyle = color;
-          ctx.shadowColor = glow;
-          ctx.shadowBlur = 12;
-          ctx.lineWidth = width;
-          ctx.setLineDash([]);
-          draw3DEdge(pOrigin, pVector);
-        };
-
-        if (hasFuel) {
-          // --- Main Thrusters (T0: Port / V.nozzleL, T1: Starboard / V.nozzleR) ---
-          const isT0Firing = !isDamaged(0) && ((thrustMask & (1 << 0)) || (stageId !== 5 && actualFx > 0.005));
-          const isT1Firing = !isDamaged(1) && ((thrustMask & (1 << 1)) || (stageId !== 5 && actualFx > 0.005));
-
-          if (isT0Firing) {
-            const plumeLen = 1.0 + Math.random() * 0.5;
-            const jx = (Math.random() - 0.5) * 0.1;
-            const tipL = transformShipPoint(-1.6 - plumeLen, -0.4 + jx, jx);
-            drawJet(V.nozzleL, tipL, '#38bdf8', '#0284c7', 2.8);
-            // Hot inner core
-            const coreL = transformShipPoint(-1.6 - plumeLen * 0.45, -0.4, 0);
-            drawJet(V.nozzleL, coreL, '#ffffff', '#38bdf8', 1.2);
-          }
-
-          if (isT1Firing) {
-            const plumeLen = 1.0 + Math.random() * 0.5;
-            const jx = (Math.random() - 0.5) * 0.1;
-            const tipR = transformShipPoint(-1.6 - plumeLen, 0.4 + jx, jx);
-            drawJet(V.nozzleR, tipR, '#38bdf8', '#0284c7', 2.8);
-            // Hot inner core
-            const coreR = transformShipPoint(-1.6 - plumeLen * 0.45, 0.4, 0);
-            drawJet(V.nozzleR, coreR, '#ffffff', '#38bdf8', 1.2);
-          }
-
-          // --- Lateral & Torque RCS Pod Jets (T4, T5, T6, T7, and detumble torque) ---
-          const isT5Firing = !isDamaged(5) && ((thrustMask & (1 << 5)) || actualFy > 0.01 || actualTau > 0.02); // Front Port (+Y)
-          const isT7Firing = !isDamaged(7) && ((thrustMask & (1 << 7)) || actualFy < -0.01 || actualTau < -0.02); // Front Stbd (-Y)
-          const isT4Firing = !isDamaged(4) && ((thrustMask & (1 << 4)) || actualFy > 0.01 || actualTau < -0.02); // Aft Port (+Y)
-          const isT6Firing = !isDamaged(6) && ((thrustMask & (1 << 6)) || actualFy < -0.01 || actualTau > 0.02); // Aft Stbd (-Y)
-
-          if (isT5Firing) {
-            const jetLen = 0.5 + Math.random() * 0.35;
-            drawJet(V.rcsBowL, transformShipPoint(0.8, -0.65 - jetLen, 0), '#f59e0b', '#d97706', 2.0);
-          }
-          if (isT7Firing) {
-            const jetLen = 0.5 + Math.random() * 0.35;
-            drawJet(V.rcsBowR, transformShipPoint(0.8, 0.65 + jetLen, 0), '#f59e0b', '#d97706', 2.0);
-          }
-          if (isT4Firing) {
-            const jetLen = 0.5 + Math.random() * 0.35;
-            drawJet(V.rcsSternL, transformShipPoint(-1.3, -1.8 - jetLen, 0), '#f59e0b', '#d97706', 2.0);
-          }
-          if (isT6Firing) {
-            const jetLen = 0.5 + Math.random() * 0.35;
-            drawJet(V.rcsSternR, transformShipPoint(-1.3, 1.8 + jetLen, 0), '#f59e0b', '#d97706', 2.0);
-          }
-
-          // Reverse Braking Thrusters (T2, T3 - firing forward +X during SysID or braking)
-          if (!isDamaged(2) && (thrustMask & (1 << 2))) {
-            drawJet(V.rcsBowL, transformShipPoint(1.4, -0.65, 0), '#f59e0b', '#d97706', 2.0);
-          }
-          if (!isDamaged(3) && (thrustMask & (1 << 3))) {
-            drawJet(V.rcsBowR, transformShipPoint(1.4, 0.65, 0), '#f59e0b', '#d97706', 2.0);
-          }
-
-          // Vertical Dorsal / Ventral Thrusters (T8..T11)
-          if (!isDamaged(8) && (thrustMask & (1 << 8))) {
-            // T8: Forward Dorsal (+Z thrust: downwards jet)
-            drawJet(transformShipPoint(1.2, 0, 0.4), transformShipPoint(1.2, 0, 1.1), '#38bdf8', '#0284c7', 2.4);
-          }
-          if (!isDamaged(9) && (thrustMask & (1 << 9))) {
-            // T9: Forward Ventral (-Z thrust: upwards jet)
-            drawJet(transformShipPoint(1.2, 0, -0.4), transformShipPoint(1.2, 0, -1.1), '#38bdf8', '#0284c7', 2.4);
-          }
-          if (!isDamaged(10) && (thrustMask & (1 << 10))) {
-            // T10: Aft Dorsal (+Z thrust: downwards jet)
-            drawJet(transformShipPoint(-1.2, 0, 0.4), transformShipPoint(-1.2, 0, 1.1), '#38bdf8', '#0284c7', 2.4);
-          }
-          if (!isDamaged(11) && (thrustMask & (1 << 11))) {
-            // T11: Aft Ventral (-Z thrust: upwards jet)
-            drawJet(transformShipPoint(-1.2, 0, -0.4), transformShipPoint(-1.2, 0, -1.1), '#38bdf8', '#0284c7', 2.4);
-          }
-        }
-        ctx.shadowBlur = 0;
-        ctx.shadowColor = 'transparent';
-      }
-      // 5. Tactical HUD Crosshairs ahead of ship
-      const aimPt = project3D(shipX + 10.0, getPipelineY(shipX + 10.0), 0.0);
-      if (aimPt) {
-        ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(aimPt.sx, aimPt.sy, 8, 0, Math.PI * 2);
-        ctx.moveTo(aimPt.sx - 12, aimPt.sy); ctx.lineTo(aimPt.sx + 12, aimPt.sy);
-        ctx.moveTo(aimPt.sx, aimPt.sy - 12); ctx.lineTo(aimPt.sx, aimPt.sy + 12);
-        ctx.stroke();
+      if (effectiveMode === 'chase') {
+        baseAzimuth = 0.0;
+        baseElevation = 0.26;
+        baseDist = 9.0;
+      } else if (effectiveMode === 'nose') {
+        baseAzimuth = Math.PI;
+        baseElevation = 0.20;
+        baseDist = 7.5;
+      } else if (effectiveMode === 'hero') {
+        baseAzimuth = -0.75;
+        baseElevation = -0.28;
+        baseDist = 6.2;
+      } else if (effectiveMode === 'orbit') {
+        baseAzimuth = (now * 0.00045) % (Math.PI * 2);
+        baseElevation = 0.24 + 0.12 * Math.sin(now * 0.0003);
+        baseDist = 8.8;
       }
 
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
+      const finalAzimuth = baseAzimuth + st.userOffset.yaw;
+      const finalElevation = Math.max(-1.3, Math.min(1.3, baseElevation + st.userOffset.pitch));
+      const finalDist = baseDist / Math.max(0.4, Math.min(2.5, st.zoom));
+
+      // Stage 5 Initial Debris Impact Camera Shake
+      let shakeX = 0, shakeY = 0, shakeZ = 0;
+      if (stageId === 5 && stageElapsed >= 0.6 && stageElapsed < 1.8) {
+        const shakeDecay = Math.max(0, 1.0 - (stageElapsed - 0.6) / 1.2);
+        const shakeMag = 0.35 * shakeDecay;
+        shakeX = (Math.sin(now * 0.065) + Math.cos(now * 0.089)) * shakeMag;
+        shakeY = (Math.cos(now * 0.071) - Math.sin(now * 0.093)) * shakeMag;
+        shakeZ = Math.sin(now * 0.082) * shakeMag * 0.7;
+      }
+
+      // Compute camera eye coordinates in world frame
+      const cosA = Math.cos(finalAzimuth);
+      const sinA = Math.sin(finalAzimuth);
+      const cosE = Math.cos(finalElevation);
+      const sinE = Math.sin(finalElevation);
+
+      const camX = shipX - finalDist * cosE * cosA + shakeX;
+      const camY = shipY - finalDist * cosE * sinA + shakeY;
+      const camZ = shipZ + finalDist * sinE + shakeZ;
+
+      camera.position.set(camX, camY, camZ);
+
+      // Smooth camera roll damping
+      const targetCamRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (tlm.omega || 0) * 0.15)) : 0.0);
+      st.smoothRoll += (targetCamRoll - st.smoothRoll) * 0.08;
+
+      // Camera Up vector with subtle roll around line of sight
+      const r_raw = new THREE.Vector3(sinA, -cosA, 0.0);
+      const u_raw = new THREE.Vector3(sinE * cosA, sinE * sinA, cosE);
+      const cosR = Math.cos(st.smoothRoll);
+      const sinR = Math.sin(st.smoothRoll);
+      const camUp = new THREE.Vector3()
+        .addScaledVector(r_raw, -sinR)
+        .addScaledVector(u_raw, cosR);
+
+      camera.up.copy(camUp);
+      camera.lookAt(shipX, shipY, shipZ);
+
+      // Keep celestial starfield centered around camera (Infinite Distance zero parallax)
+      starField.position.set(camX, camY, camZ);
+
+      // WebGL Hardware Render Call
+      renderer.render(scene, camera);
+
+      // ----------------------------------------------------------------------
+      // Lightweight 2D Tactical HUD Overlay
+      // ----------------------------------------------------------------------
+      const hudCtx = hudCanvas.getContext('2d');
+      hudCtx.clearRect(0, 0, clientW, clientH);
+
+      // Helper to project 3D point to 2D HUD Canvas
+      const tempVec = new THREE.Vector3();
+      const toScreen = (wx, wy, wz) => {
+        tempVec.set(wx, wy, wz);
+        tempVec.project(camera);
+        if (tempVec.z > 1.0) return null; // behind far plane or camera
+        const sx = (tempVec.x * 0.5 + 0.5) * clientW;
+        const sy = (-(tempVec.y * 0.5) + 0.5) * clientH;
+        return { sx, sy };
+      };
+
+      // 1. Tactical Crosshair ahead of ship
+      const aimP = toScreen(shipX + 10.0, getPipelineY(shipX + 10.0), 0.0);
+      if (aimP) {
+        hudCtx.save();
+        hudCtx.shadowBlur = 10;
+        hudCtx.shadowColor = '#00f0ff';
+        hudCtx.strokeStyle = 'rgba(0, 240, 255, 0.85)';
+        hudCtx.lineWidth = 1.4;
+        hudCtx.beginPath();
+        hudCtx.arc(aimP.sx, aimP.sy, 8, 0, Math.PI * 2);
+        hudCtx.moveTo(aimP.sx - 12, aimP.sy); hudCtx.lineTo(aimP.sx + 12, aimP.sy);
+        hudCtx.moveTo(aimP.sx, aimP.sy - 12); hudCtx.lineTo(aimP.sx, aimP.sy + 12);
+        hudCtx.stroke();
+        hudCtx.restore();
+      }
+
+      // 2. Stage-Specific HUD Labels
+      hudCtx.font = 'bold 11px monospace';
+      hudCtx.textAlign = 'center';
+
+      if (stageId === 1) {
+        for (const rm of ringMeshes) {
+          const isPassed = rm.rx < shipX - 1.0;
+          const isNext = Math.abs(rm.rx - shipX) < ringSpacing;
+          if (rm.isTarget) {
+            rm.mat.color.setHex(0xeab308);
+            rm.glowMat.color.setHex(0xeab308);
+            rm.mat.opacity = 0.95;
+            rm.glowMat.opacity = 0.50;
+          } else if (isNext) {
+            rm.mat.color.setHex(0x38bdf8);
+            rm.glowMat.color.setHex(0x38bdf8);
+            rm.mat.opacity = 1.0;
+            rm.glowMat.opacity = 0.65;
+          } else if (isPassed) {
+            rm.mat.color.setHex(0x10b981);
+            rm.glowMat.color.setHex(0x059669);
+            rm.mat.opacity = 0.70;
+            rm.glowMat.opacity = 0.25;
+          } else {
+            rm.mat.color.setHex(rm.isGate ? 0x0284c7 : 0x0369a1);
+            rm.glowMat.color.setHex(rm.isGate ? 0x0284c7 : 0x0369a1);
+            rm.mat.opacity = rm.isGate ? 0.85 : 0.60;
+            rm.glowMat.opacity = rm.isGate ? 0.35 : 0.15;
+          }
+          if (rm.isGate) {
+            const p = toScreen(rm.rx, getPipelineY(rm.rx), hexRadius);
+            if (p) {
+              hudCtx.save();
+              hudCtx.shadowBlur = isNext ? 12 : 6;
+              hudCtx.shadowColor = isPassed ? '#10b981' : (isNext ? '#38bdf8' : '#0284c7');
+              hudCtx.fillStyle = isPassed ? '#10b981' : (isNext ? '#38bdf8' : '#94a3b8');
+              hudCtx.fillText(`GATE ${String(Math.round(rm.rx / 5.0)).padStart(2, '0')}`, p.sx, p.sy - 8);
+              hudCtx.restore();
+            }
+          }
+        }
+      } else if (stageId === 2) {
+        // Beacon labels
+        hudCtx.font = '10px monospace';
+        for (const bm of beaconMeshes) {
+          const p = toScreen(bm.bx, 0, 2.5);
+          if (p) {
+            const isPassed = bm.bx < shipX - 1.0;
+            hudCtx.fillStyle = isPassed ? '#10b981' : '#94a3b8';
+            hudCtx.fillText(`BEACON ${Math.round(bm.bx / 10)} (${bm.bx.toFixed(0)}m)`, p.sx, p.sy - 6);
+          }
+        }
+        // Station and Terminal labels
+        const pGeo = toScreen(-2.5, 0, torusOuterR);
+        if (pGeo) {
+          hudCtx.font = 'bold 11px monospace';
+          hudCtx.fillStyle = '#38bdf8';
+          hudCtx.fillText('GEO ORBITAL STATION [ALPHA ANCHOR]', pGeo.sx, pGeo.sy - 8);
+        }
+        const pAst = toScreen(100.0, 0, 3.8);
+        if (pAst) {
+          hudCtx.font = 'bold 12px monospace';
+          hudCtx.fillStyle = '#fde047';
+          hudCtx.fillText('ASTEROID MINING BASE [TERMINAL PORT]', pAst.sx, pAst.sy - 10);
+        }
+      } else if (stageId === 3) {
+        for (const jm of jointMeshes) {
+          const p = toScreen(jm.x, 0, 2.8);
+          if (p) {
+            const isPassed = jm.x < shipX - 0.5;
+            const isClose = Math.abs(shipX - jm.x) <= 0.6;
+            hudCtx.fillStyle = isClose ? '#facc15' : (isPassed ? '#10b981' : '#38bdf8');
+            hudCtx.fillText(jm.name, p.sx, p.sy - 8);
+          }
+        }
+      } else if (stageId === 4) {
+        for (const cpm of cpMeshes) {
+          const p = toScreen(cpm.x, 0, 3.0);
+          if (p) {
+            const isPassed = cpm.x < shipX - 0.5;
+            hudCtx.fillStyle = isPassed ? '#10b981' : '#06b6d4';
+            hudCtx.fillText(cpm.name, p.sx, p.sy - 6);
+          }
+        }
+        const pPort = toScreen(50.0, 0, 3.2);
+        if (pPort) {
+          hudCtx.fillStyle = '#fde047';
+          hudCtx.fillText('TARGET PORT #01 [ROTATING]', pPort.sx, pPort.sy - 10);
+        }
+      } else if (stageId === 5) {
+        // Recovery Gate line
+        const pGate = toScreen(35.0, 0, 6.0);
+        if (pGate) {
+          hudCtx.fillStyle = '#4ade80';
+          hudCtx.fillText('SAFE ORBIT RECOVERY LINE (35m)', pGate.sx, pGate.sy - 12);
+        }
+        // Debris Labels
+        hudCtx.font = '9px monospace';
+        for (let i = 0; i < debrisConfigs.length; i++) {
+          const cfg = debrisConfigs[i];
+          const pDeb = toScreen(cfg.x, cfg.y, cfg.z);
+          if (pDeb) {
+            hudCtx.fillStyle = '#f87171';
+            hudCtx.fillText(`DEBRIS #${i + 1}`, pDeb.sx, pDeb.sy - 8);
+          }
+        }
+      }
+
       animId = requestAnimationFrame(render);
     };
 
-    render();
-    return () => cancelAnimationFrame(animId);
-  }, []); // Continuous 60FPS render loop
+    animId = requestAnimationFrame(render);
 
-  // Mouse Drag Event Handlers for Intuitive Orbit View
-  const handleMouseDown = (e) => {
-    dragRef.current = {
-      isDragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      baseYaw: userOffset.yaw,
-      basePitch: userOffset.pitch
+    return () => {
+      cancelAnimationFrame(animId);
+      if (renderer) renderer.dispose();
+      scene.clear();
     };
+  }, []);
+
+  // Mouse Interaction handlers
+  const handleMouseDown = (e) => {
+    dragRef.current.isDragging = true;
+    dragRef.current.startX = e.clientX;
+    dragRef.current.startY = e.clientY;
+    dragRef.current.baseYaw = userOffset.yaw;
+    dragRef.current.basePitch = userOffset.pitch;
   };
 
   const handleMouseMove = (e) => {
@@ -1773,8 +1490,8 @@ export default function SpaceOrbitViewer3D() {
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     setUserOffset({
-      yaw: dragRef.current.baseYaw + dx * 0.006,
-      pitch: Math.max(-1.3, Math.min(1.3, dragRef.current.basePitch + dy * 0.006))
+      yaw: dragRef.current.baseYaw + dx * 0.007,
+      pitch: Math.max(-1.2, Math.min(1.2, dragRef.current.basePitch + dy * 0.007))
     });
   };
 
@@ -1784,8 +1501,7 @@ export default function SpaceOrbitViewer3D() {
 
   const handleWheel = (e) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom(z => Math.max(0.4, Math.min(2.5, +(z + delta).toFixed(1))));
+    setZoom(prev => Math.max(0.4, Math.min(2.5, prev - e.deltaY * 0.0015)));
   };
 
   const resetView = () => {
@@ -1793,9 +1509,10 @@ export default function SpaceOrbitViewer3D() {
     setZoom(1.0);
   };
 
-  const isManualOffset = (Math.abs(userOffset.yaw) > 0.01 || Math.abs(userOffset.pitch) > 0.01 || zoom !== 1.0);
+  const isManualOffset = userOffset.yaw !== 0.0 || userOffset.pitch !== 0.0 || zoom !== 1.0;
 
   return React.createElement('div', {
+    ref: containerRef,
     style: {
       position: 'relative',
       width: '100%',
@@ -1902,19 +1619,36 @@ export default function SpaceOrbitViewer3D() {
       }, 'RESET VIEW')
     ),
 
-    // 3D Perspective Canvas with Mouse Drag and Wheel Listeners
+    // Layer 1: Hardware-Accelerated 3D WebGL Canvas
     React.createElement('canvas', {
-      ref: canvasRef,
+      ref: glCanvasRef,
       onMouseDown: handleMouseDown,
       onMouseMove: handleMouseMove,
       onMouseUp: handleMouseUp,
       onMouseLeave: handleMouseUp,
       onWheel: handleWheel,
       style: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
         width: '100%',
         height: '100%',
         display: 'block',
         cursor: dragRef.current.isDragging ? 'grabbing' : 'grab'
+      }
+    }),
+
+    // Layer 2: Transparent 2D Tactical HUD Canvas
+    React.createElement('canvas', {
+      ref: hudCanvasRef,
+      style: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        display: 'block',
+        pointerEvents: 'none'
       }
     }),
 
@@ -1931,9 +1665,10 @@ export default function SpaceOrbitViewer3D() {
         padding: '2px 8px',
         borderRadius: '4px',
         border: '1px solid #1e293b',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        zIndex: 10
       }
-    }, 'DRAG: 3D Orbit Rotate | WHEEL: Zoom'),
+    }, 'DRAG: 3D Orbit Rotate | WHEEL: Zoom | 120 FPS WebGL'),
 
     // Bottom-Left Telemetry & Actuator Overlay
     React.createElement('div', {
@@ -1949,7 +1684,8 @@ export default function SpaceOrbitViewer3D() {
         borderRadius: '4px',
         border: '1px solid #1e293b',
         display: 'flex',
-        gap: '12px'
+        gap: '12px',
+        zIndex: 10
       }
     },
       telemetry.stage_id === 2 ? (
@@ -2005,7 +1741,13 @@ export default function SpaceOrbitViewer3D() {
           React.createElement('span', {
             style: { color: (telemetry.fuel || 100) < 30 ? '#ef4444' : '#f59e0b', fontWeight: 'bold' }
           }, `LEAK FUEL: ${(telemetry.fuel || 100).toFixed(1)}%`),
-          React.createElement('span', null, `HITS: ${telemetry.debris_hits || 0}`)
+          React.createElement('span', null, `HITS: ${telemetry.debris_hits || 0}`),
+          React.createElement('span', {
+            style: {
+              color: (Math.abs(telemetry.wheel_rpm_x || 0) > 5000 || Math.abs(telemetry.wheel_rpm_y || 0) > 5000 || Math.abs(telemetry.wheel_rpm_z || 0) > 5000) ? '#ef4444' : '#c084fc',
+              fontWeight: 'bold'
+            }
+          }, `RW: [X:${(telemetry.wheel_rpm_x || 0).toFixed(0)} Y:${(telemetry.wheel_rpm_y || 0).toFixed(0)} Z:${(telemetry.wheel_rpm_z !== undefined ? telemetry.wheel_rpm_z : (telemetry.wheel_rpm || 0)).toFixed(0)}]`)
         );
       })() : (
         React.createElement(React.Fragment, null,

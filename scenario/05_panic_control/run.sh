@@ -31,7 +31,7 @@ if [ "$FBB_ACTIVE" = "1" ]; then
     sleep 0.5
 
     echo "[SpaceGuidance] Launching Stage EX Python Autopilot ($PILOT_SCRIPT)..."
-    ( unset LD_PRELOAD; python3 "$PILOT_SCRIPT" "$@" ) &
+    python3 "$PILOT_SCRIPT" "$@" &
     PILOT_PID=$!
     wait $PILOT_PID 2>/dev/null || true
     cleanup
