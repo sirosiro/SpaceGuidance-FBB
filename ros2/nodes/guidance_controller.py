@@ -67,13 +67,18 @@ class SpaceGuidanceHardware:
     - Physical AMD Xilinx Zynq UIO device (/dev/uio0)
     """
     SHM_LAYOUT = "=12I9d2Ii3I" # 12 uint32 + 9 doubles + 2 uint32 + 1 int32 + 3 uint32 = 144 bytes
-    SIZE = struct.calcsize(SHM_LAYOUT)
+    SIZE = max(struct.calcsize(SHM_LAYOUT), 496)
 
     def __init__(self, dev_path=None, telemetry_uart=None):
         if dev_path is None:
-            dev_path = os.getenv("FBB_SHM_PATH", "/tmp/vfpga_reg")
-            if not os.path.exists(dev_path) and os.path.exists("/tmp/fbb_space_guidance_shm"):
-                dev_path = "/tmp/fbb_space_guidance_shm"
+            dev_path = os.getenv("FBB_SHM_PATH", "")
+            if not dev_path:
+                for candidate in ["/dev/shm/fbb_space_guidance_shm", "/tmp/fbb_space_guidance_shm", "/tmp/vfpga_reg"]:
+                    if os.path.exists(candidate):
+                        dev_path = candidate
+                        break
+            if not dev_path:
+                dev_path = "/tmp/vfpga_reg"
         self.dev_path = dev_path
         if not os.path.exists(dev_path):
             with open(dev_path, "wb") as f:
@@ -89,7 +94,7 @@ class SpaceGuidanceHardware:
     def read_registers(self):
         self.mm.seek(0)
         data = self.mm.read(self.SIZE)
-        unpacked = struct.unpack(self.SHM_LAYOUT, data)
+        unpacked = struct.unpack(self.SHM_LAYOUT, data[:struct.calcsize(self.SHM_LAYOUT)])
         res = {
             "cr_ctrl": unpacked[0],
             "sr_status": unpacked[1],
@@ -112,12 +117,63 @@ class SpaceGuidanceHardware:
             "wheel_rpm": unpacked[20],
             "fdir_mode": unpacked[21],
             "stage_id": unpacked[22],
+            "score": unpacked[23],
             "official_score": unpacked[23],
+            "passed_checkpoints": unpacked[24],
             "passed_gates": unpacked[24],
             "mission_status": unpacked[25],
+            "total_checkpoints": unpacked[26],
             "total_gates": unpacked[26]
         }
-        if os.path.exists("/tmp/space_guidance_telemetry.json"):
+
+        # Zero Disk I/O: Unpack extended 6-DoF telemetry directly from SHM if magic 'SPG1' matches
+        shm_ext_loaded = False
+        if len(data) >= 496:
+            magic, seq = struct.unpack_from("=2I", data, 0xA8)
+            if magic == 0x53504731: # 'SPG1'
+                doubles = struct.unpack_from("=23d", data, 0xB0)
+                res["pos_z"] = doubles[0]
+                res["vel_z"] = doubles[1]
+                res["roll"] = doubles[2]
+                res["pitch"] = doubles[3]
+                res["yaw"] = doubles[4]
+                res["omega_x"] = doubles[5]
+                res["omega_y"] = doubles[6]
+                res["omega_z"] = doubles[7]
+                res["wheel_rpm_x"] = doubles[8]
+                res["wheel_rpm_y"] = doubles[9]
+                res["wheel_rpm_z"] = doubles[10]
+                res["cable_tension"] = doubles[11]
+                res["cable_vibration"] = doubles[12]
+                res["detumble_time"] = doubles[13]
+                res["elapsed_time"] = doubles[14]
+                res["debris_azimuth"] = doubles[15]
+                res["debris_elevation"] = doubles[16]
+                res["debris_spawn_x"] = doubles[17]
+                res["debris_spawn_y"] = doubles[18]
+                res["debris_spawn_z"] = doubles[19]
+                res["debris_impact_x"] = doubles[20]
+                res["debris_impact_y"] = doubles[21]
+                res["debris_impact_z"] = doubles[22]
+
+                ints = struct.unpack_from("=2i8I", data, 0x168)
+                res["checkpoint_score"] = ints[0]
+                res["bonus_score"] = ints[1]
+                res["cable_snapped"] = ints[2]
+                res["thruster_health"] = ints[3]
+                res["is_detumbled"] = ints[4]
+                res["debris_hits"] = ints[5]
+                res["chaos_seed"] = ints[6]
+                res["damaged_thruster_1"] = ints[7]
+                res["damaged_thruster_2"] = ints[8]
+
+                grade_raw = data[0x190:0x1B0].split(b'\x00')[0]
+                event_raw = data[0x1B0:0x1F0].split(b'\x00')[0]
+                res["official_grade"] = grade_raw.decode('utf-8', errors='ignore')
+                res["last_event"] = event_raw.decode('utf-8', errors='ignore')
+                shm_ext_loaded = True
+
+        if not shm_ext_loaded and os.path.exists("/tmp/space_guidance_telemetry.json"):
             for _ in range(3):
                 try:
                     with open("/tmp/space_guidance_telemetry.json", "r") as jf:

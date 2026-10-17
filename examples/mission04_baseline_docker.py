@@ -67,18 +67,14 @@ def run_pilot():
                 print(f"  Docking Time         : {time.time() - start_time:.2f} s")
                 print(f"  Remaining RCS Prop   : {fuel:.1f}%")
                 print(f"  Contact Velocity     : {approach_vel:.3f} m/s")
-                if os.path.exists("/tmp/space_guidance_telemetry.json"):
-                    try:
-                        with open("/tmp/space_guidance_telemetry.json", "r") as jf:
-                            t = json.load(jf)
-                        print(f"  Official Score       : {t.get('score', 0):,} pts")
-                        print(f"  Approach Score       : {t.get('checkpoint_score', 0):,} pts")
-                        print(f"  Contact Bonus        : {t.get('bonus_score', 0):,} pts")
-                        print(f"  Ranges Cleared       : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 7)}")
-                        print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
-                        print(f"  Referee Event        : {t.get('last_event', '')}")
-                    except Exception as e:
-                        print(f"  Telemetry Read Err   : {e}")
+                # Official evaluation from hardware telemetry (Zero Disk I/O)
+                t = hw.read_registers()
+                print(f"  Official Score       : {t.get('score', t.get('official_score', 0)):,} pts")
+                print(f"  Approach Score       : {t.get('checkpoint_score', 0):,} pts")
+                print(f"  Contact Bonus        : {t.get('bonus_score', 0):,} pts")
+                print(f"  Ranges Cleared       : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 7)}")
+                print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
+                print(f"  Referee Event        : {t.get('last_event', '')}")
                 print("======================================================================\n")
                 break
                 break

@@ -20,7 +20,7 @@ trap cleanup EXIT INT TERM
 if [ "$FBB_ACTIVE" = "1" ]; then
     echo "[SpaceGuidance] F-BB Lab environment active."
     cleanup
-    rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
+    rm -f /dev/shm/fbb_space_guidance_shm /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
     # Auto-build space_guidance_daemon if missing (e.g. after clean.sh)
     if [ ! -f "$PLUGIN_ROOT/bin/space_guidance_daemon" ]; then
         echo "[SpaceGuidance] Binary space_guidance_daemon not found. Auto-building via CMake..."
@@ -33,12 +33,12 @@ if [ "$FBB_ACTIVE" = "1" ]; then
         echo "[SpaceGuidance] Build complete."
     fi
     echo "[SpaceGuidance] Launching physics daemon in background..."
-    "$PLUGIN_ROOT/bin/space_guidance_daemon" &
+    ( unset LD_PRELOAD; "$PLUGIN_ROOT/bin/space_guidance_daemon" --stage 1 ) &
     DAEMON_PID=$!
     sleep 0.5
 
     echo "[SpaceGuidance] Launching Stage 1 Python Autopilot ($PILOT_SCRIPT)..."
-    python3 "$PILOT_SCRIPT" "$@" &
+    ( unset LD_PRELOAD; python3 "$PILOT_SCRIPT" "$@" ) &
     PILOT_PID=$!
     wait $PILOT_PID 2>/dev/null || true
     echo "[SpaceGuidance] Autopilot finished. Terminating physics daemon."

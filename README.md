@@ -69,9 +69,8 @@ flowchart TB
     end
 
     subgraph IPC["4. Inter-Process Communication & Data Bus (IPC / データバス)"]
-        HTTP_WS["[F-BB] HTTP / WebSocket サーバー<br/>(Node.js Express / Socket.IO :8080)"]:::fbb
-        JSON_TLM["[SG-FBB] Telemetry JSON ストリーム<br/>(/tmp/space_guidance_telemetry.json)"]:::sg
-        SHM["[F-BB] POSIX 共有メモリ基盤<br/>(/tmp/vfpga_reg: 144バイト MMIO エミュレーション)"]:::fbb
+        HTTP_WS["[F-BB] WebSocket 統合テレメトリバス<br/>(Node.js Express / Socket.IO :8080)"]:::fbb
+        SHM["[F-BB / SG-FBB] POSIX 共有メモリ基盤 (Zero Disk I/O)<br/>(/dev/shm/fbb_space_guidance_shm: 496B MMIO + 6-DoF Seqlock)"]:::sg
     end
 
     subgraph HW["5. Hardware & Sim-to-Real Layer (FPGA RTL / ハードウェア防護)"]
@@ -85,9 +84,8 @@ flowchart TB
     end
 
     %% Connections
-    UI <-->|"HTTP / Socket.IO (:8080)"| HTTP_WS
-    HTTP_WS <-->|"テレメトリ JSON 読み出し"| JSON_TLM
-    DAEMON -->|"50Hz JSON 書き出し"| JSON_TLM
+    UI <-->|"scenario:telemetry (WebSocket)"| HTTP_WS
+    HTTP_WS <-->|"メモリ直読 (Zero Disk I/O)"| SHM
 
     PILOT --> ROS2
     FDIR_SW --> ROS2

@@ -101,18 +101,14 @@ def run_pilot():
                 print(f"  Flywheel RPM (Z)     : {wheel_rpm:.0f} RPM")
                 print(f"  Final Y Position     : {pos_y:+.2f} m (Green Safe Gate: |Y| <= 6.0m)")
                 print(f"  Final Z Position     : {pos_z:+.2f} m")
-                if os.path.exists("/tmp/space_guidance_telemetry.json"):
-                    try:
-                        with open("/tmp/space_guidance_telemetry.json", "r") as jf:
-                            t = json.load(jf)
-                        print(f"  Official Score       : {t.get('score', 0):,} pts")
-                        print(f"  Checkpoint Score     : {t.get('checkpoint_score', 0):,} pts")
-                        print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
-                        print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
-                        print(f"  Debris Collisions    : {t.get('debris_hits', 0)} hits")
-                        print(f"  Referee Event        : {t.get('last_event', '')}")
-                    except Exception as e:
-                        print(f"  Telemetry Read Err   : {e}")
+                # Official evaluation from hardware telemetry (Zero Disk I/O)
+                t = hw.read_registers()
+                print(f"  Official Score       : {t.get('score', t.get('official_score', 0)):,} pts")
+                print(f"  Checkpoint Score     : {t.get('checkpoint_score', 0):,} pts")
+                print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
+                print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
+                print(f"  Debris Collisions    : {t.get('debris_hits', 0)} hits")
+                print(f"  Referee Event        : {t.get('last_event', '')}")
                 print("======================================================================\n")
                 break
 

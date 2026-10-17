@@ -4,6 +4,18 @@ export default function ChaosFdirConsole() {
   const React = window.React || window.FBB?.React;
   const { useState, useEffect } = window.FBB?.hooks || React;
 
+  const initialStage = (() => {
+    try {
+      const m = window.FBB?.useDashboard ? window.FBB.useDashboard().manifest : null;
+      const sDir = (m?.scenario_dir || '').toLowerCase();
+      if (sDir.includes('05_panic') || sDir.includes('panic_control')) return 5;
+      if (sDir.includes('02_tether') || sDir.includes('tether_climber')) return 2;
+      if (sDir.includes('03_iss') || sDir.includes('iss_truss')) return 3;
+      if (sDir.includes('04_laser') || sDir.includes('laser_docking')) return 4;
+    } catch (e) {}
+    return 1;
+  })();
+
   const [status, setStatus] = useState({
     fdir_mode: 0,
     cross_track_err: 0.0,
@@ -13,7 +25,8 @@ export default function ChaosFdirConsole() {
     checkpoint_score: 0,
     bonus_score: 0,
     passed_checkpoints: 0,
-    total_checkpoints: 9,
+    total_checkpoints: initialStage === 5 ? 0 : 9,
+    stage_id: initialStage,
     official_grade: 'IN_FLIGHT',
     last_event: ''
   });

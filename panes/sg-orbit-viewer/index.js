@@ -222,7 +222,20 @@ export default function SpaceOrbitViewer3D() {
       // Spacecraft coasts autonomously with physical velocities (no packet wait stalls)
       // and gently converges to incoming telemetry positions.
       // ====================================================================
-      const stageId = tlm.stage_id || 1;
+      let stageId = tlm.stage_id;
+      if (!stageId) {
+        try {
+          const m = window.FBB?.useDashboard ? window.FBB.useDashboard().manifest : null;
+          const sDir = (m?.scenario_dir || '').toLowerCase();
+          if (sDir.includes('05_panic') || sDir.includes('panic_control')) stageId = 5;
+          else if (sDir.includes('02_tether') || sDir.includes('tether_climber')) stageId = 2;
+          else if (sDir.includes('03_iss') || sDir.includes('iss_truss')) stageId = 3;
+          else if (sDir.includes('04_laser') || sDir.includes('laser_docking')) stageId = 4;
+          else stageId = 1;
+        } catch (e) {
+          stageId = 1;
+        }
+      }
       const targetX = tlm.pos_x !== undefined ? tlm.pos_x : sm.x;
       const targetY = tlm.pos_y !== undefined ? tlm.pos_y : sm.y;
       const targetZ = tlm.pos_z || 0.0;

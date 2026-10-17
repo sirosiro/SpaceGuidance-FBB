@@ -12,42 +12,9 @@
 #include <cmath>
 #include <algorithm>
 #include <random>
+#include <atomic>
 #include "space_physics.hpp"
-
-// Shared memory layout for F-BB / UIO simulation
-struct ShmSpaceGuidance {
-    uint32_t cr_ctrl;          // 0x00
-    uint32_t sr_status;        // 0x04
-    uint32_t sensor_raw;       // 0x08
-    uint32_t sensor_edge;      // 0x0C
-    uint32_t thrust_cmd_x;     // 0x10
-    uint32_t thrust_cmd_y;     // 0x14
-    uint32_t thrust_cmd_z;     // 0x18
-    uint32_t torque_cmd;       // 0x1C
-    uint32_t safety_limit;     // 0x20
-    uint32_t watchdog_kick;    // 0x24
-    uint32_t chaos_fault_inj;  // 0x28
-    uint32_t wheel_torque_cmd; // 0x2C (Reaction Wheel torque command: Q16.16)
-
-    // Telemetry export for Web UI / DPPA (8-byte aligned)
-    double pos_x;              // 0x30
-    double pos_y;              // 0x38
-    double vel_x;              // 0x40
-    double vel_y;              // 0x48
-    double angle;              // 0x50
-    double omega;              // 0x58
-    double fuel;               // 0x60
-    double cross_track_err;    // 0x68
-    double wheel_rpm;          // 0x70 (Reaction Wheel flywheel speed: RPM)
-    uint32_t fdir_mode;        // 0x78
-    uint32_t stage_id;         // 0x7C (Active Mission Stage ID: 1, 2, 3, 4)
-
-    // Official Referee & Scoring Engine (Single Source of Truth)
-    int32_t official_score;    // 0x80 (Official Score in pts)
-    uint32_t passed_gates;     // 0x84 (Count of passed checkpoints)
-    uint32_t mission_status;   // 0x88 (0: Active, 1: Complete, 2: Failed)
-    uint32_t total_gates;      // 0x8C (Total checkpoints in stage)
-};
+#include "space_guidance_shm.h"
 
 class OfficialReferee {
 public:
@@ -409,11 +376,17 @@ int main(int argc, char** argv) {
     if (lstat(legacy_shm_link, &st) == 0) {
         unlink(legacy_shm_link);
     }
-    if (symlink(shm_path, legacy_shm_link) != 0) {
-        // Ignored
+    symlink(shm_path, legacy_shm_link);
+
+    const char* dev_shm_link = "/dev/shm/fbb_space_guidance_shm";
+    if (lstat(dev_shm_link, &st) == 0) {
+        unlink(dev_shm_link);
     }
+    symlink(shm_path, dev_shm_link);
 
     memset(shm, 0, 4096);
+    shm->magic = SPACE_GUIDANCE_SHM_MAGIC;
+    shm->seq_num = 0;
 
     SpacePhysicsEngine physics(100.0, 25.0, stage_id);
     if (stage_id == 5) {
@@ -438,13 +411,10 @@ int main(int argc, char** argv) {
     OfficialReferee referee;
     referee.init(stage_id, t_start_sec);
 
-    {
-        std::ofstream jf("/tmp/space_guidance_telemetry.json");
-        jf << "{\"stage_id\":" << stage_id 
-           << ",\"pos_x\":0.0,\"pos_y\":0.0,\"vel_x\":0.0,\"vel_y\":0.0,\"angle\":0.0,\"omega\":0.0,\"fuel\":100.0,\"cross_track_err\":0.0,\"sensor_raw\":0,\"fdir_mode\":0"
-           << ",\"score\":0,\"checkpoint_score\":0,\"bonus_score\":0,\"passed_checkpoints\":0,\"total_checkpoints\":" << referee.total_checkpoints
-           << ",\"mission_status\":\"ACTIVE\",\"official_grade\":\"IN_FLIGHT\",\"last_event\":\"[REFEREE] Mission Started\",\"elapsed_time\":0.0}\n";
-    }
+    strncpy(shm->ext.official_grade, referee.official_grade.c_str(), sizeof(shm->ext.official_grade) - 1);
+    shm->ext.official_grade[sizeof(shm->ext.official_grade) - 1] = '\0';
+    strncpy(shm->ext.last_event, referee.last_event.c_str(), sizeof(shm->ext.last_event) - 1);
+    shm->ext.last_event[sizeof(shm->ext.last_event) - 1] = '\0';
 
     int tick_cnt = 0;
     uint32_t current_seed = chaos_seed;
@@ -536,69 +506,55 @@ int main(int argc, char** argv) {
         shm->mission_status = referee.is_failed ? 2 : (referee.is_completed ? 1 : 0);
         shm->total_gates = referee.total_checkpoints;
 
-        {
-            std::ofstream jf("/tmp/space_guidance_telemetry.json.tmp");
-            jf << "{"
-               << "\"stage_id\":" << stage_id << ","
-               << "\"pos_x\":" << state.pos.x << ","
-               << "\"pos_y\":" << state.pos.y << ","
-               << "\"pos_z\":" << state.pos_z << ","
-               << "\"vel_x\":" << state.vel.x << ","
-               << "\"vel_y\":" << state.vel.y << ","
-               << "\"vel_z\":" << state.vel_z << ","
-               << "\"angle\":" << state.angle << ","
-               << "\"omega\":" << state.omega << ","
-               << "\"roll\":" << state.roll << ","
-               << "\"pitch\":" << state.pitch << ","
-               << "\"yaw\":" << state.yaw << ","
-               << "\"omega_x\":" << state.omega_x << ","
-               << "\"omega_y\":" << state.omega_y << ","
-               << "\"omega_z\":" << state.omega_z << ","
-               << "\"fuel\":" << state.fuel << ","
-               << "\"cross_track_err\":" << shm->cross_track_err << ","
-               << "\"cable_tension\":" << state.cable_tension << ","
-               << "\"cable_vibration\":" << state.cable_vibration << ","
-               << "\"cable_snapped\":" << (state.is_cable_snapped ? 1 : 0) << ","
-               << "\"sensor_raw\":" << adc << ","
-               << "\"sensor_edge\":" << shm->sensor_edge << ","
-               << "\"fdir_mode\":" << shm->fdir_mode << ","
-               << "\"thrust_x\":" << (static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0) << ","
-               << "\"thrust_y\":" << (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0) << ","
-               << "\"thrust_z\":" << shm->thrust_cmd_z << ","
-               << "\"torque\":" << (static_cast<int32_t>(shm->torque_cmd) / 65536.0) << ","
-               << "\"wheel_rpm\":" << state.wheel_rpm << ","
-               << "\"wheel_rpm_x\":" << state.wheel_rpm_x << ","
-               << "\"wheel_rpm_y\":" << state.wheel_rpm_y << ","
-               << "\"wheel_rpm_z\":" << state.wheel_rpm_z << ","
-               << "\"wheel_torque\":" << (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0) << ","
-               << "\"score\":" << referee.total_score << ","
-               << "\"checkpoint_score\":" << referee.checkpoint_score << ","
-               << "\"bonus_score\":" << referee.bonus_score << ","
-               << "\"passed_checkpoints\":" << referee.passed_checkpoints << ","
-               << "\"total_checkpoints\":" << referee.total_checkpoints << ","
-               << "\"mission_status\":\"" << (referee.is_failed ? "FAILED" : (referee.is_completed ? "COMPLETE" : "ACTIVE")) << "\","
-               << "\"official_grade\":\"" << referee.official_grade << "\","
-               << "\"last_event\":\"" << referee.last_event << "\","
-               << "\"elapsed_time\":" << referee.elapsed_time << ","
-               << "\"thruster_health\":" << physics.get_thruster_health() << ","
-               << "\"detumble_time\":" << physics.get_detumble_time() << ","
-               << "\"is_detumbled\":" << (physics.is_detumbled() ? 1 : 0) << ","
-               << "\"debris_hits\":" << physics.get_debris_hits() << ","
-               << "\"chaos_seed\":" << physics.get_chaos_seed() << ","
-               << "\"debris_azimuth\":" << physics.get_impact_scenario().approach_azimuth << ","
-               << "\"debris_elevation\":" << physics.get_impact_scenario().approach_elevation << ","
-               << "\"debris_spawn_x\":" << physics.get_impact_scenario().spawn_point.x << ","
-               << "\"debris_spawn_y\":" << physics.get_impact_scenario().spawn_point.y << ","
-               << "\"debris_spawn_z\":" << physics.get_impact_scenario().spawn_point.z << ","
-               << "\"debris_impact_x\":" << physics.get_impact_scenario().impact_point.x << ","
-               << "\"debris_impact_y\":" << physics.get_impact_scenario().impact_point.y << ","
-               << "\"debris_impact_z\":" << physics.get_impact_scenario().impact_point.z << ","
-               << "\"damaged_thruster_1\":" << physics.get_impact_scenario().primary_damaged_id << ","
-               << "\"damaged_thruster_2\":" << physics.get_impact_scenario().secondary_damaged_id
-               << "}\n";
-            jf.close();
-            rename("/tmp/space_guidance_telemetry.json.tmp", "/tmp/space_guidance_telemetry.json");
-        }
+        // Update extended 6-DoF telemetry in SHM via Seqlock (Zero Disk I/O)
+        shm->seq_num++; // Odd: write in progress
+        std::atomic_signal_fence(std::memory_order_release);
+
+        shm->ext.pos_z = state.pos_z;
+        shm->ext.vel_z = state.vel_z;
+        shm->ext.roll = state.roll;
+        shm->ext.pitch = state.pitch;
+        shm->ext.yaw = state.yaw;
+        shm->ext.omega_x = state.omega_x;
+        shm->ext.omega_y = state.omega_y;
+        shm->ext.omega_z = state.omega_z;
+        shm->ext.wheel_rpm_x = state.wheel_rpm_x;
+        shm->ext.wheel_rpm_y = state.wheel_rpm_y;
+        shm->ext.wheel_rpm_z = state.wheel_rpm_z;
+        shm->ext.cable_tension = state.cable_tension;
+        shm->ext.cable_vibration = state.cable_vibration;
+        shm->ext.detumble_time = physics.get_detumble_time();
+        shm->ext.elapsed_time = referee.elapsed_time;
+
+        const auto& impact = physics.get_impact_scenario();
+        shm->ext.debris_azimuth = impact.approach_azimuth;
+        shm->ext.debris_elevation = impact.approach_elevation;
+        shm->ext.debris_spawn_x = impact.spawn_point.x;
+        shm->ext.debris_spawn_y = impact.spawn_point.y;
+        shm->ext.debris_spawn_z = impact.spawn_point.z;
+        shm->ext.debris_impact_x = impact.impact_point.x;
+        shm->ext.debris_impact_y = impact.impact_point.y;
+        shm->ext.debris_impact_z = impact.impact_point.z;
+
+        shm->ext.checkpoint_score = referee.checkpoint_score;
+        shm->ext.bonus_score = referee.bonus_score;
+        shm->ext.cable_snapped = state.is_cable_snapped ? 1 : 0;
+        shm->ext.thruster_health = physics.get_thruster_health();
+        shm->ext.is_detumbled = physics.is_detumbled() ? 1 : 0;
+        shm->ext.debris_hits = physics.get_debris_hits();
+        shm->ext.chaos_seed = physics.get_chaos_seed();
+        shm->ext.damaged_thruster_1 = impact.primary_damaged_id;
+        shm->ext.damaged_thruster_2 = impact.secondary_damaged_id;
+        shm->ext.mission_status_code = referee.is_failed ? 2 : (referee.is_completed ? 1 : 0);
+
+        strncpy(shm->ext.official_grade, referee.official_grade.c_str(), sizeof(shm->ext.official_grade) - 1);
+        shm->ext.official_grade[sizeof(shm->ext.official_grade) - 1] = '\0';
+
+        strncpy(shm->ext.last_event, referee.last_event.c_str(), sizeof(shm->ext.last_event) - 1);
+        shm->ext.last_event[sizeof(shm->ext.last_event) - 1] = '\0';
+
+        std::atomic_signal_fence(std::memory_order_release);
+        shm->seq_num++; // Even: write complete, safe to read
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
