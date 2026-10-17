@@ -985,12 +985,12 @@ export default function SpaceOrbitViewer3D() {
         // Stage 5: Panic Control - Deep Space Debris Field & Safe Orbit Gate
         // --------------------------------------------------------------------
         const debrisCoords = [
-          { x: 6.0, y: 3.5, z: 0.5, r: 0.42 },
-          { x: 12.0, y: -4.0, z: -0.6, r: 0.48 },
-          { x: 18.0, y: 5.0, z: 0.8, r: 0.38 },
-          { x: 22.0, y: -3.5, z: -0.4, r: 0.45 },
-          { x: 28.0, y: 4.0, z: 0.6, r: 0.50 },
-          { x: 32.0, y: -2.5, z: -0.5, r: 0.40 }
+          { x:  7.0, y:  3.8, z:  2.5, r: 0.45 },
+          { x: 13.0, y: -4.2, z: -2.8, r: 0.48 },
+          { x: 18.5, y:  4.5, z: -2.0, r: 0.40 },
+          { x: 23.0, y: -3.2, z:  3.2, r: 0.46 },
+          { x: 27.5, y:  3.6, z: -3.0, r: 0.50 },
+          { x: 32.0, y: -2.2, z:  1.8, r: 0.42 }
         ];
 
         // 1. Draw 3D Floating Debris Shards (Realistic decimeter-scale satellite fragment plates)

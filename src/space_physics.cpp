@@ -29,14 +29,14 @@ void SpacePhysicsEngine::init_stage5_panic_control() {
         track_.push_back({x, 0.0});
     }
 
-    // Scatter secondary floating debris (6 obstacles)
+    // Scatter secondary floating debris (6 obstacles scattered in 3D)
     floating_debris_.clear();
-    floating_debris_.push_back({6.0, 3.5});
-    floating_debris_.push_back({12.0, -4.0});
-    floating_debris_.push_back({18.0, 5.0});
-    floating_debris_.push_back({22.0, -3.5});
-    floating_debris_.push_back({28.0, 4.0});
-    floating_debris_.push_back({32.0, -2.5});
+    floating_debris_.push_back({7.0, 3.8, 2.5});
+    floating_debris_.push_back({13.0, -4.2, -2.8});
+    floating_debris_.push_back({18.5, 4.5, -2.0});
+    floating_debris_.push_back({23.0, -3.2, 3.2});
+    floating_debris_.push_back({27.5, 3.6, -3.0});
+    floating_debris_.push_back({32.0, -2.2, 1.8});
 
     // Initial state before collision (T < 0.6s):
     // Nominal stable 6-DoF flight approaching debris field
@@ -433,7 +433,7 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         for (const auto& deb : floating_debris_) {
             double dx = state_.pos.x - deb.x;
             double dy = state_.pos.y - deb.y;
-            double dz = state_.pos_z;
+            double dz = state_.pos_z - deb.z;
             if (dx * dx + dy * dy + dz * dz < 1.5 * 1.5) {
                 state_.debris_hits++;
             }

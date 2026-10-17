@@ -107,7 +107,7 @@ public:
     double get_detumble_time() const { return state_.detumble_time; }
     bool is_detumbled() const { return state_.is_detumbled; }
     bool is_escaped() const { return state_.is_escaped; }
-    const std::vector<Vec2>& get_floating_debris() const { return floating_debris_; }
+    const std::vector<Vec3>& get_floating_debris() const { return floating_debris_; }
     void set_chaos_seed(uint32_t seed);
     uint32_t get_chaos_seed() const { return impact_scenario_.seed; }
     const DebrisImpactScenario& get_impact_scenario() const { return impact_scenario_; }
@@ -133,7 +133,7 @@ private:
     double target_angle_ = 0.0;
 
     // Stage 5 Panic Control dynamics & debris field
-    std::vector<Vec2> floating_debris_;
+    std::vector<Vec3> floating_debris_;
     double detumble_hold_timer_ = 0.0;
     double stage5_elapsed_time_ = 0.0;
     bool has_impacted_ = false;
