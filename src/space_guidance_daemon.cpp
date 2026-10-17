@@ -11,6 +11,7 @@
 #include <string>
 #include <cmath>
 #include <algorithm>
+#include <random>
 #include "space_physics.hpp"
 
 // Shared memory layout for F-BB / UIO simulation
@@ -85,6 +86,7 @@ public:
         else if (stage == 2) total_checkpoints = 9;
         else if (stage == 3) total_checkpoints = 4;
         else if (stage == 4) total_checkpoints = 7;
+        else if (stage == 5) total_checkpoints = 3;
     }
 
     void update(const SpacecraftState& state, double cross_track_err, uint32_t fdir_mode, double dt, double t_now) {
@@ -256,23 +258,124 @@ public:
                 std::cout << "[Referee] " << last_event << std::endl;
                 std::cout << "============================================================\n" << std::endl;
             }
+        } else if (stage_id == 5) {
+            // Stage 5: Panic Control (3 Checkpoints / Milestones)
+            // Phase 1: Detumble Milestone (|omega| < 0.05 rad/s)
+            if (!checked[0] && state.is_detumbled) {
+                checked[0] = true;
+                passed_checkpoints++;
+                int detumble_pts = std::max(0, static_cast<int>((15.0 - state.detumble_time) * 200.0));
+                checkpoint_score += detumble_pts;
+                total_score = checkpoint_score;
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[FDIR] Detumble Achieved in %4.2fs! | +%4d pts | Score: %5d pts",
+                         state.detumble_time, detumble_pts, total_score);
+                last_event = buf;
+                std::cout << "[Referee] " << last_event << std::endl;
+            }
+
+            // Phase 2: Steady Cruise / SysID verification (X >= 15.0m)
+            if (!checked[1] && state.pos.x >= 15.0) {
+                checked[1] = true;
+                passed_checkpoints++;
+                int hold_pts = 1000;
+                checkpoint_score += hold_pts;
+                total_score = checkpoint_score;
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[WAYPOINT 15m] Corridor Steady Burn | +%4d pts | Score: %5d pts",
+                         hold_pts, total_score);
+                last_event = buf;
+                std::cout << "[Referee] " << last_event << std::endl;
+            }
+
+            // Phase 3: Safe Orbit Escape (X >= 35.0m)
+            if (state.pos.x >= 35.0 && !is_completed) {
+                is_completed = true;
+                passed_checkpoints = 3;
+                bool in_gate = (std::abs(state.pos.y) <= 6.0);
+                int base_escape = 1500;
+                int gate_bonus = in_gate ? 1500 : 0;
+                int fuel_bonus = static_cast<int>(state.fuel * 25.0);
+                int debris_bonus = (state.debris_hits == 0) ? 1500 : 0;
+                bonus_score = base_escape + gate_bonus + fuel_bonus + debris_bonus;
+                total_score = checkpoint_score + bonus_score;
+
+                if (total_score >= 8000) official_grade = "GRADE S (Elite Astronaut)";
+                else if (total_score >= 6500) official_grade = "GRADE A (Certified)";
+                else if (total_score >= 5000) official_grade = "GRADE B (Standard)";
+                else official_grade = "GRADE C (Pass)";
+
+                char buf[256];
+                snprintf(buf, sizeof(buf), "[REFEREE COMPLETE] Safe Orbit Escaped! Hits=%d | Fuel=%4.1f%% | Total: %5d pts (%s)",
+                         state.debris_hits, state.fuel, total_score, official_grade.c_str());
+                last_event = buf;
+                std::cout << "\n============================================================" << std::endl;
+                std::cout << "[Referee] " << last_event << std::endl;
+                std::cout << "============================================================\n" << std::endl;
+            }
+
+            // Fuel depletion failure
+            if (state.fuel <= 0.0 && !is_completed) {
+                is_failed = true;
+                official_grade = "FAILED (PROPELLANT DEPLETED)";
+                last_event = "[REFEREE FAILED] Propellant Depleted in Debris Field!";
+                std::cout << "\n============================================================" << std::endl;
+                std::cout << "[Referee] " << last_event << std::endl;
+                std::cout << "============================================================\n" << std::endl;
+            }
         }
     }
 };
 
 int main(int argc, char** argv) {
     int stage_id = 1;
+    uint32_t chaos_seed = 0;
+    bool explicit_seed = false;
+
     for (int i = 1; i < argc; ++i) {
         if (strncmp(argv[i], "--stage=", 8) == 0) {
             stage_id = atoi(argv[i] + 8);
         } else if (strcmp(argv[i], "--stage") == 0 && i + 1 < argc) {
             stage_id = atoi(argv[++i]);
+        } else if (strncmp(argv[i], "--seed=", 7) == 0) {
+            chaos_seed = static_cast<uint32_t>(strtoul(argv[i] + 7, nullptr, 0));
+            explicit_seed = true;
+        } else if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
+            chaos_seed = static_cast<uint32_t>(strtoul(argv[++i], nullptr, 0));
+            explicit_seed = true;
         }
     }
     if (const char* stage_env = getenv("SPACE_GUIDANCE_STAGE")) {
         stage_id = atoi(stage_env);
     } else if (const char* fbb_stage = getenv("FBB_STAGE")) {
         stage_id = atoi(fbb_stage);
+    }
+
+    if (!explicit_seed) {
+        if (const char* env_s = getenv("FBB_CHAOS_SEED")) {
+            chaos_seed = static_cast<uint32_t>(strtoul(env_s, nullptr, 0));
+            explicit_seed = true;
+        } else if (const char* env_cs = getenv("CHAOS_SEED")) {
+            chaos_seed = static_cast<uint32_t>(strtoul(env_cs, nullptr, 0));
+            explicit_seed = true;
+        } else {
+            std::ifstream sf("/tmp/fbb_chaos_seed.txt");
+            if (sf.is_open()) {
+                unsigned long long fseed = 0;
+                if (sf >> fseed && fseed != 0) {
+                    chaos_seed = static_cast<uint32_t>(fseed & 0xFFFFFFFF);
+                    explicit_seed = true;
+                }
+            }
+        }
+    }
+
+    if (!explicit_seed && stage_id == 5) {
+        // True dynamic randomness on every launch!
+        std::random_device rd;
+        auto now_ns = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        chaos_seed = static_cast<uint32_t>((now_ns ^ (static_cast<uint64_t>(rd()) << 16)) & 0xFFFFFFFF);
+        if (chaos_seed == 0 || chaos_seed == 0x1337) chaos_seed = 0x2026;
     }
 
     std::cout << "[SpaceGuidance Daemon] Initializing simulation daemon for Stage " << stage_id << "..." << std::endl;
@@ -313,12 +416,22 @@ int main(int argc, char** argv) {
     memset(shm, 0, 4096);
 
     SpacePhysicsEngine physics(100.0, 25.0, stage_id);
-    std::cout << "[SpaceGuidance Daemon] Ready. Running physics for Stage " << stage_id << " at 100Hz." << std::endl;
+    if (stage_id == 5) {
+        physics.set_chaos_seed(chaos_seed);
+    }
+    std::cout << "[SpaceGuidance Daemon] Ready. Running physics for Stage " << stage_id 
+              << " (Chaos Seed: 0x" << std::hex << chaos_seed << std::dec << ") at 100Hz." << std::endl;
 
     shm->cr_ctrl = 1;
     shm->safety_limit = 0x00010000;
     shm->fuel = 100.0;
     shm->stage_id = stage_id;
+    shm->chaos_fault_inj = chaos_seed;
+    shm->thrust_cmd_x = 0;
+    shm->thrust_cmd_y = 0;
+    shm->thrust_cmd_z = 0;
+    shm->torque_cmd = 0;
+    shm->wheel_torque_cmd = 0;
 
     auto start_tp = std::chrono::steady_clock::now();
     double t_start_sec = 0.0;
@@ -334,6 +447,7 @@ int main(int argc, char** argv) {
     }
 
     int tick_cnt = 0;
+    uint32_t current_seed = chaos_seed;
     while (shm->cr_ctrl & 0x01) {
         auto now_tp = std::chrono::steady_clock::now();
         double t_now_sec = std::chrono::duration<double>(now_tp - start_tp).count();
@@ -342,8 +456,30 @@ int main(int argc, char** argv) {
         double fy = static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0 * 50.0;
         double tau_rcs = static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0;
         double tau_wheel = static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0;
+        uint32_t direct_thruster_mask = shm->thrust_cmd_z;
 
-        physics.step(fx, fy, tau_rcs, tau_wheel, 0.01);
+        if (stage_id == 5 && shm->chaos_fault_inj != 0 && shm->chaos_fault_inj != current_seed) {
+            current_seed = shm->chaos_fault_inj;
+            physics.set_chaos_seed(current_seed);
+            std::cout << "[SpaceGuidance Daemon] Chaos seed dynamically updated to 0x" 
+                      << std::hex << current_seed << std::dec << std::endl;
+        }
+
+        double tau_x = 0.0;
+        double tau_y = 0.0;
+        double tau_w_x = 0.0;
+        double tau_w_y = 0.0;
+        double fz = 0.0;
+        if (stage_id == 5) {
+            int32_t* ext_cmd = reinterpret_cast<int32_t*>(reinterpret_cast<char*>(shm) + 0x90);
+            tau_x   = ext_cmd[0] / 65536.0 * 20.0; // torque_x_cmd
+            tau_y   = ext_cmd[1] / 65536.0 * 20.0; // torque_y_cmd
+            tau_w_x = ext_cmd[2] / 65536.0 * 20.0; // wheel_torque_x_cmd
+            tau_w_y = ext_cmd[3] / 65536.0 * 20.0; // wheel_torque_y_cmd
+            fz      = ext_cmd[4] / 65536.0 * 50.0; // thrust_vertical_cmd
+        }
+
+        physics.step(fx, fy, tau_rcs, tau_wheel, 0.01, direct_thruster_mask, tau_x, tau_y, tau_w_x, tau_w_y, fz);
 
         uint32_t adc = physics.compute_sensor_adc();
         shm->sensor_raw = adc;
@@ -362,6 +498,8 @@ int main(int argc, char** argv) {
         } else if (stage_id == 4) {
             int32_t offset_q16 = static_cast<int32_t>(physics.get_state().pos.y * 65536.0);
             shm->sensor_edge = static_cast<uint32_t>(offset_q16);
+        } else if (stage_id == 5) {
+            shm->sensor_edge = physics.get_thruster_health();
         } else {
             uint32_t sum_weights = 0;
             uint32_t weighted_pos = 0;
@@ -398,16 +536,24 @@ int main(int argc, char** argv) {
         shm->mission_status = referee.is_failed ? 2 : (referee.is_completed ? 1 : 0);
         shm->total_gates = referee.total_checkpoints;
 
-        if (++tick_cnt % 2 == 0) {
-            std::ofstream jf("/tmp/space_guidance_telemetry.json");
+        {
+            std::ofstream jf("/tmp/space_guidance_telemetry.json.tmp");
             jf << "{"
                << "\"stage_id\":" << stage_id << ","
                << "\"pos_x\":" << state.pos.x << ","
                << "\"pos_y\":" << state.pos.y << ","
+               << "\"pos_z\":" << state.pos_z << ","
                << "\"vel_x\":" << state.vel.x << ","
                << "\"vel_y\":" << state.vel.y << ","
+               << "\"vel_z\":" << state.vel_z << ","
                << "\"angle\":" << state.angle << ","
                << "\"omega\":" << state.omega << ","
+               << "\"roll\":" << state.roll << ","
+               << "\"pitch\":" << state.pitch << ","
+               << "\"yaw\":" << state.yaw << ","
+               << "\"omega_x\":" << state.omega_x << ","
+               << "\"omega_y\":" << state.omega_y << ","
+               << "\"omega_z\":" << state.omega_z << ","
                << "\"fuel\":" << state.fuel << ","
                << "\"cross_track_err\":" << shm->cross_track_err << ","
                << "\"cable_tension\":" << state.cable_tension << ","
@@ -418,8 +564,12 @@ int main(int argc, char** argv) {
                << "\"fdir_mode\":" << shm->fdir_mode << ","
                << "\"thrust_x\":" << (static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0) << ","
                << "\"thrust_y\":" << (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0) << ","
+               << "\"thrust_z\":" << shm->thrust_cmd_z << ","
                << "\"torque\":" << (static_cast<int32_t>(shm->torque_cmd) / 65536.0) << ","
                << "\"wheel_rpm\":" << state.wheel_rpm << ","
+               << "\"wheel_rpm_x\":" << state.wheel_rpm_x << ","
+               << "\"wheel_rpm_y\":" << state.wheel_rpm_y << ","
+               << "\"wheel_rpm_z\":" << state.wheel_rpm_z << ","
                << "\"wheel_torque\":" << (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0) << ","
                << "\"score\":" << referee.total_score << ","
                << "\"checkpoint_score\":" << referee.checkpoint_score << ","
@@ -429,8 +579,25 @@ int main(int argc, char** argv) {
                << "\"mission_status\":\"" << (referee.is_failed ? "FAILED" : (referee.is_completed ? "COMPLETE" : "ACTIVE")) << "\","
                << "\"official_grade\":\"" << referee.official_grade << "\","
                << "\"last_event\":\"" << referee.last_event << "\","
-               << "\"elapsed_time\":" << referee.elapsed_time
+               << "\"elapsed_time\":" << referee.elapsed_time << ","
+               << "\"thruster_health\":" << physics.get_thruster_health() << ","
+               << "\"detumble_time\":" << physics.get_detumble_time() << ","
+               << "\"is_detumbled\":" << (physics.is_detumbled() ? 1 : 0) << ","
+               << "\"debris_hits\":" << physics.get_debris_hits() << ","
+               << "\"chaos_seed\":" << physics.get_chaos_seed() << ","
+               << "\"debris_azimuth\":" << physics.get_impact_scenario().approach_azimuth << ","
+               << "\"debris_elevation\":" << physics.get_impact_scenario().approach_elevation << ","
+               << "\"debris_spawn_x\":" << physics.get_impact_scenario().spawn_point.x << ","
+               << "\"debris_spawn_y\":" << physics.get_impact_scenario().spawn_point.y << ","
+               << "\"debris_spawn_z\":" << physics.get_impact_scenario().spawn_point.z << ","
+               << "\"debris_impact_x\":" << physics.get_impact_scenario().impact_point.x << ","
+               << "\"debris_impact_y\":" << physics.get_impact_scenario().impact_point.y << ","
+               << "\"debris_impact_z\":" << physics.get_impact_scenario().impact_point.z << ","
+               << "\"damaged_thruster_1\":" << physics.get_impact_scenario().primary_damaged_id << ","
+               << "\"damaged_thruster_2\":" << physics.get_impact_scenario().secondary_damaged_id
                << "}\n";
+            jf.close();
+            rename("/tmp/space_guidance_telemetry.json.tmp", "/tmp/space_guidance_telemetry.json");
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

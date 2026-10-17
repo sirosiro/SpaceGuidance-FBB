@@ -9,6 +9,12 @@ struct Vec2 {
     double y = 0.0;
 };
 
+struct Vec3 {
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+
 struct SpacecraftState {
     Vec2 pos;          // Position (meters): Stage 1 (X, Y), Stage 2 (Height X, Vibration Y), Stage 3 (Rail X, Y), Stage 4 (Range X, Lateral Y)
     Vec2 vel;          // Velocity (m/s)
@@ -22,11 +28,42 @@ struct SpacecraftState {
     bool is_cable_snapped = false;  // Stage 2: Cable rupture flag
     double rail_load = 0.0;         // Stage 3: Centrifugal / contact rail force (N)
     double laser_offset = 0.0;      // Stage 4: QPD beam offset (m)
+
+    // Stage 5: Full-Spec 6-DoF Panic Control
+    double pos_z = 0.0;
+    double vel_z = 0.0;
+    double roll = 0.0;          // Roll Euler angle (phi)
+    double pitch = 0.0;         // Pitch Euler angle (theta)
+    double yaw = 0.0;           // Yaw Euler angle (psi, synonymous with angle)
+    double omega_x = 0.0;       // Roll rate P (rad/s)
+    double omega_y = 0.0;       // Pitch rate Q (rad/s)
+    double omega_z = 0.0;       // Yaw rate R (rad/s, synonymous with omega)
+    double wheel_rpm_x = 0.0;   // 3-axis Reaction Wheel X (RPM)
+    double wheel_rpm_y = 0.0;   // 3-axis Reaction Wheel Y (RPM)
+    double wheel_rpm_z = 0.0;   // 3-axis Reaction Wheel Z (RPM)
+    uint32_t thruster_health_mask = 0x0FFF; // 12-channel mask (bits 1 and 6 damaged: 0b111110111101)
+    double detumble_time = 0.0;     // Time taken to achieve detumble (s)
+    bool is_detumbled = false;      // True when |omega| < 0.05 rad/s achieved
+    int debris_hits = 0;            // Count of secondary debris collisions
+    bool is_escaped = false;        // Reached safe orbit boundary (X >= 35m)
 };
 
 struct PipelinePoint {
     double x;
     double y;
+};
+
+struct DebrisImpactScenario {
+    uint32_t seed = 0x1337;
+    double approach_azimuth = -2.45;     // rad (angle around Z axis)
+    double approach_elevation = 0.28;    // rad (angle above/below XY plane)
+    Vec3 impact_point{-1.1, 1.2, 0.15};  // body coordinates (m)
+    Vec3 spawn_point{-16.0, -12.0, 3.5}; // relative spawn coordinates (m)
+    Vec3 linear_drift{0.35, -0.20, 0.12};// velocity jump (m/s)
+    Vec3 angular_rate{0.8, 0.6, 2.4};    // initial tumble (rad/s)
+    uint32_t damage_mask = 0x0FBD;       // which thrusters damaged
+    int primary_damaged_id = 1;
+    int secondary_damaged_id = 6;
 };
 
 class SpacePhysicsEngine {
@@ -39,9 +76,14 @@ public:
     void init_stage2_tether();
     void init_stage3_iss_truss();
     void init_stage4_laser_docking();
+    void init_stage5_panic_control();
 
-    // Step physics with applied thruster forces (Newtons) and torque (N*m)
-    void step(double thrust_forward, double thrust_lateral, double rcs_torque, double wheel_torque = 0.0, double dt = 0.01);
+    // Step physics with applied thruster forces (Newtons) and torque (N*m), supports full 6-DoF
+    void step(double thrust_forward, double thrust_lateral, double rcs_torque, double wheel_torque = 0.0,
+              double dt = 0.01, uint32_t direct_thruster_mask = 0,
+              double torque_x = 0.0, double torque_y = 0.0,
+              double wheel_torque_x = 0.0, double wheel_torque_y = 0.0,
+              double thrust_vertical = 0.0);
 
     // Compute sensor ADC values (packed into 32-bit uint)
     uint32_t compute_sensor_adc() const;
@@ -56,8 +98,19 @@ public:
     int get_stage() const { return stage_id_; }
     double get_cable_tension() const { return state_.cable_tension; }
     double get_cable_vibration() const { return state_.cable_vibration; }
-    bool is_cable_snapped() const { return state_.is_cable_snapped; }
     double get_rail_load() const { return state_.rail_load; }
+
+    // Stage 5 Getters & Setters
+    uint32_t get_thruster_health() const { return state_.thruster_health_mask; }
+    void set_thruster_health(uint32_t mask) { state_.thruster_health_mask = mask; }
+    int get_debris_hits() const { return state_.debris_hits; }
+    double get_detumble_time() const { return state_.detumble_time; }
+    bool is_detumbled() const { return state_.is_detumbled; }
+    bool is_escaped() const { return state_.is_escaped; }
+    const std::vector<Vec2>& get_floating_debris() const { return floating_debris_; }
+    void set_chaos_seed(uint32_t seed);
+    uint32_t get_chaos_seed() const { return impact_scenario_.seed; }
+    const DebrisImpactScenario& get_impact_scenario() const { return impact_scenario_; }
 
 private:
     int stage_id_ = 1;
@@ -79,5 +132,13 @@ private:
     // Stage 4 Laser Docking target
     double target_angle_ = 0.0;
 
+    // Stage 5 Panic Control dynamics & debris field
+    std::vector<Vec2> floating_debris_;
+    double detumble_hold_timer_ = 0.0;
+    double stage5_elapsed_time_ = 0.0;
+    bool has_impacted_ = false;
+    DebrisImpactScenario impact_scenario_;
+
+    void calculate_impact_scenario(uint32_t seed);
     double get_distance_to_track(double px, double py) const;
 };

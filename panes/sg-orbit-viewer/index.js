@@ -79,7 +79,10 @@ export default function SpaceOrbitViewer3D() {
   const smoothRef = useRef({
     x: 0.0,
     y: 0.0,
+    z: 0.0,
     yaw: 0.0,
+    pitch: 0.0,
+    roll: 0.0,
     bank: 0.0,
     initialized: false
   });
@@ -154,38 +157,57 @@ export default function SpaceOrbitViewer3D() {
       if (!sm.initialized && (initTlm.pos_x !== 0.0 || initTlm.vel_x !== 0.0)) {
         sm.x = initTlm.pos_x;
         sm.y = initTlm.pos_y;
-        sm.yaw = initTlm.angle;
+        sm.z = initTlm.pos_z || 0.0;
+        sm.yaw = initTlm.yaw !== undefined ? initTlm.yaw : initTlm.angle;
+        sm.pitch = initTlm.pitch || 0.0;
+        sm.roll = initTlm.roll || 0.0;
         sm.bank = -(initTlm.omega || 0) * 1.1;
         sm.initialized = true;
       }
 
       // Continuous 60FPS Spring-Damper Interpolation (Rotational & Translational Inertia)
       const tlm = telemetryRef.current || telemetry;
+      const stageId = tlm.stage_id || 1;
       const targetX = tlm.pos_x;
       const targetY = tlm.pos_y;
-      const targetYaw = tlm.angle;
+      const targetZ = tlm.pos_z || 0.0;
+      const targetYaw = tlm.yaw !== undefined ? tlm.yaw : tlm.angle;
+      const targetPitch = tlm.pitch || 0.0;
       const targetBank = -Math.max(-0.45, Math.min(0.45, (tlm.omega || 0) * 1.2));
+      const targetRoll = tlm.roll !== undefined ? tlm.roll : targetBank;
 
       sm.x += (targetX - sm.x) * 0.28;
       sm.y += (targetY - sm.y) * 0.28;
+      sm.z += (targetZ - sm.z) * 0.28;
 
       let dYaw = targetYaw - sm.yaw;
       while (dYaw > Math.PI) dYaw -= Math.PI * 2;
       while (dYaw < -Math.PI) dYaw += Math.PI * 2;
       sm.yaw += dYaw * 0.24;
 
+      let dPitch = targetPitch - sm.pitch;
+      while (dPitch > Math.PI) dPitch -= Math.PI * 2;
+      while (dPitch < -Math.PI) dPitch += Math.PI * 2;
+      sm.pitch += dPitch * 0.24;
+
+      let dRoll = targetRoll - sm.roll;
+      while (dRoll > Math.PI) dRoll -= Math.PI * 2;
+      while (dRoll < -Math.PI) dRoll += Math.PI * 2;
+      sm.roll += dRoll * 0.24;
+
       // Authentic angular roll inertia (wings smoothly tilt into curves and level out)
       sm.bank += (targetBank - sm.bank) * 0.16;
 
       const shipX = sm.x;
       const shipY = sm.y;
-      const shipZ = 0.0;
+      const shipZ = sm.z;
       const shipYaw = sm.yaw;
-      const rawBank = sm.bank;
+      const shipPitch = sm.pitch;
+      const shipRoll = stageId === 5 ? sm.roll : sm.bank;
 
       // Smooth camera roll damping (subtle natural horizon reaction, max 6 deg)
-      const targetRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (tlm.omega || 0) * 0.15)) : 0.0);
-      st.smoothRoll += (targetRoll - st.smoothRoll) * 0.08;
+      const targetCamRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (tlm.omega || 0) * 0.15)) : 0.0);
+      st.smoothRoll += (targetCamRoll - st.smoothRoll) * 0.08;
 
       // Camera preset parameters
       const cinemaModes = ['chase', 'nose', 'hero', 'orbit'];
@@ -238,11 +260,22 @@ export default function SpaceOrbitViewer3D() {
       const cosE = Math.cos(finalElevation);
       const sinE = Math.sin(finalElevation);
 
+      // Stage 5 Initial Debris Collision Camera Shake (Only during impact: 0.6s to 1.8s)
+      let shakeX = 0, shakeY = 0, shakeZ = 0;
+      const stageElapsed = tlm.elapsed_time !== undefined ? tlm.elapsed_time : 0.0;
+      if (stageId === 5 && stageElapsed >= 0.6 && stageElapsed < 1.8) {
+        const shakeDecay = Math.max(0, 1.0 - (stageElapsed - 0.6) / 1.2);
+        const shakeMag = 0.35 * shakeDecay;
+        shakeX = (Math.sin(now * 0.065) + Math.cos(now * 0.089)) * shakeMag;
+        shakeY = (Math.cos(now * 0.071) - Math.sin(now * 0.093)) * shakeMag;
+        shakeZ = Math.sin(now * 0.082) * shakeMag * 0.7;
+      }
+
       // Camera position relative to target ship
       const cam = {
-        x: shipX - finalDist * cosE * cosA,
-        y: shipY - finalDist * cosE * sinA,
-        z: shipZ + finalDist * sinE
+        x: shipX - finalDist * cosE * cosA + shakeX,
+        y: shipY - finalDist * cosE * sinA + shakeY,
+        z: shipZ + finalDist * sinE + shakeZ
       };
 
       // Optical Forward Vector (from Camera to Target)
@@ -303,6 +336,41 @@ export default function SpaceOrbitViewer3D() {
           scale,
           depth: z_cam
         };
+      };
+
+      const cosSY = Math.cos(shipYaw);
+      const sinSY = Math.sin(shipYaw);
+      const cosSP = Math.cos(shipPitch);
+      const sinSP = Math.sin(shipPitch);
+      const cosSR = Math.cos(shipRoll);
+      const sinSR = Math.sin(shipRoll);
+
+      const transformShipPoint = (bx, by, bz) => {
+        // Step 1: Roll around body X axis
+        const x1 = bx;
+        const y1 = by * cosSR - bz * sinSR;
+        const z1 = by * sinSR + bz * cosSR;
+
+        // Step 2: Pitch around intermediate Y axis
+        const x2 = x1 * cosSP + z1 * sinSP;
+        const y2 = y1;
+        const z2 = -x1 * sinSP + z1 * cosSP;
+
+        // Step 3: Yaw around World Z axis and translate
+        const wx = shipX + x2 * cosSY - y2 * sinSY;
+        const wy = shipY + x2 * sinSY + y2 * cosSY;
+        const wz = shipZ + z2;
+
+        return project3D(wx, wy, wz);
+      };
+
+      const draw3DEdge = (p1, p2) => {
+        if (p1 && p2) {
+          ctx.beginPath();
+          ctx.moveTo(p1.sx, p1.sy);
+          ctx.lineTo(p2.sx, p2.sy);
+          ctx.stroke();
+        }
       };
 
       // ------------------------------------------------------------------------
@@ -383,7 +451,6 @@ export default function SpaceOrbitViewer3D() {
       const ringSpacing = 2.5;
       const hexRadius = 3.6;
       const hexAngles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
-      const stageId = tlm.stage_id || 1;
 
       if (stageId === 2) {
         // --------------------------------------------------------------------
@@ -901,6 +968,233 @@ export default function SpaceOrbitViewer3D() {
           ctx.restore();
         }
         ctx.shadowBlur = 0;
+      } else if (stageId === 5) {
+        // --------------------------------------------------------------------
+        // Stage 5: Panic Control - Deep Space Debris Field & Safe Orbit Gate
+        // --------------------------------------------------------------------
+        const debrisCoords = [
+          { x: 6.0, y: 3.5, z: 0.5, r: 0.42 },
+          { x: 12.0, y: -4.0, z: -0.6, r: 0.48 },
+          { x: 18.0, y: 5.0, z: 0.8, r: 0.38 },
+          { x: 22.0, y: -3.5, z: -0.4, r: 0.45 },
+          { x: 28.0, y: 4.0, z: 0.6, r: 0.50 },
+          { x: 32.0, y: -2.5, z: -0.5, r: 0.40 }
+        ];
+
+        // 1. Draw 3D Floating Debris Shards (Realistic decimeter-scale satellite fragment plates)
+        debrisCoords.forEach((deb, didx) => {
+          const debRot = (now * 0.0012 * (didx % 2 === 0 ? 1 : -1)) + didx * 1.5;
+          const w = deb.r * 1.2;
+          const h = deb.r * 0.8;
+          const cornerLocal = [
+            { x: -w * 0.5, y: -h * 0.5, z: 0 },
+            { x:  w * 0.5, y: -h * 0.4, z: deb.r * 0.25 },
+            { x:  w * 0.4, y:  h * 0.5, z: -deb.r * 0.15 },
+            { x: -w * 0.5, y:  h * 0.4, z: 0 }
+          ];
+
+          const cosR = Math.cos(debRot);
+          const sinR = Math.sin(debRot);
+          const pCorners = [];
+          for (const c of cornerLocal) {
+            const rx = c.x * cosR - c.y * sinR;
+            const ry = c.x * sinR + c.y * cosR;
+            const p = project3D(deb.x + rx, deb.y + ry, deb.z + c.z);
+            if (p) pCorners.push(p);
+          }
+
+          if (pCorners.length === 4) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.shadowColor = '#ef4444';
+            ctx.shadowBlur = 6;
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(pCorners[0].sx, pCorners[0].sy);
+            for (let vi = 1; vi < 4; vi++) ctx.lineTo(pCorners[vi].sx, pCorners[vi].sy);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Solar cell / structural gridline across shard
+            const mid1 = project3D(deb.x - w * 0.2 * cosR, deb.y - w * 0.2 * sinR, deb.z);
+            const mid2 = project3D(deb.x + w * 0.2 * cosR, deb.y + w * 0.2 * sinR, deb.z);
+            if (mid1 && mid2) {
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(mid1.sx, mid1.sy);
+              ctx.lineTo(mid2.sx, mid2.sy);
+              ctx.stroke();
+            }
+
+            const pCenter = project3D(deb.x, deb.y, deb.z);
+            if (pCenter) {
+              ctx.fillStyle = '#f87171';
+              ctx.font = '9px monospace';
+              ctx.textAlign = 'center';
+              ctx.fillText(`DEBRIS #${didx + 1}`, pCenter.sx, pCenter.sy - 8);
+            }
+          }
+        });
+
+        // 2. Prologue Impactor Collision Event & Kinetic Shrapnel (Active only during active impact window: 0.05s to 1.8s)
+        const stageElapsed = tlm.elapsed_time !== undefined ? tlm.elapsed_time : 0.0;
+        if (stageElapsed >= 0.05 && stageElapsed < 1.8) {
+          const tImpact = 0.6;
+          const spawnX = tlm.debris_spawn_x !== undefined ? tlm.debris_spawn_x : -16.0;
+          const spawnY = tlm.debris_spawn_y !== undefined ? tlm.debris_spawn_y : -12.0;
+          const spawnZ = tlm.debris_spawn_z !== undefined ? tlm.debris_spawn_z : 3.5;
+          const impPtX = tlm.debris_impact_x !== undefined ? tlm.debris_impact_x : 0.8;
+          const impPtY = tlm.debris_impact_y !== undefined ? tlm.debris_impact_y : -0.65;
+          const impPtZ = tlm.debris_impact_z !== undefined ? tlm.debris_impact_z : 0.0;
+
+          let impX, impY, impZ;
+          if (stageElapsed < tImpact) {
+            const prog = Math.max(0.0, (stageElapsed - 0.05) / (tImpact - 0.05));
+            impX = shipX + (spawnX * (1.0 - prog) + impPtX * prog);
+            impY = shipY + (spawnY * (1.0 - prog) + impPtY * prog);
+            impZ = (shipZ || 0) + (spawnZ * (1.0 - prog) + impPtZ * prog);
+          } else {
+            const tPost = stageElapsed - tImpact;
+            // Physical deflection/ricochet after kinetic impact
+            const vinX = (impPtX - spawnX) / 0.55;
+            const vinY = (impPtY - spawnY) / 0.55;
+            const vinZ = (impPtZ - spawnZ) / 0.55;
+            const nNorm = Math.hypot(impPtX, impPtY, impPtZ) || 1.0;
+            const nx = impPtX / nNorm, ny = impPtY / nNorm, nz = impPtZ / nNorm;
+            const vDotN = vinX * nx + vinY * ny + vinZ * nz;
+            const ricX = (vinX - 1.4 * vDotN * nx) * 0.45;
+            const ricY = (vinY - 1.4 * vDotN * ny) * 0.45;
+            const ricZ = (vinZ - 1.4 * vDotN * nz) * 0.45;
+
+            impX = shipX + impPtX + tPost * ricX;
+            impY = shipY + impPtY + tPost * ricY;
+            impZ = (shipZ || 0) + impPtZ + tPost * ricZ;
+          }
+
+          // Impactor fragment (sharp 3D metal wedge, ~0.32m) - only while near ship
+          if (stageElapsed < 1.3) {
+            const impRot = now * 0.03;
+            const iRad = 0.32;
+            const iPts = [];
+            for (let k = 0; k < 4; k++) {
+              const ia = impRot + k * Math.PI / 2;
+              const px = impX + iRad * Math.cos(ia);
+              const py = impY + iRad * 0.6 * Math.sin(ia);
+              const pz = impZ + (k % 2 === 0 ? 0.12 : -0.12);
+              const p = project3D(px, py, pz);
+              if (p) iPts.push(p);
+            }
+            if (iPts.length === 4) {
+              ctx.strokeStyle = '#f87171';
+              ctx.shadowColor = '#ef4444';
+              ctx.shadowBlur = 14;
+              ctx.lineWidth = 1.8;
+              ctx.beginPath();
+              ctx.moveTo(iPts[0].sx, iPts[0].sy);
+              for (let k = 1; k < 4; k++) ctx.lineTo(iPts[k].sx, iPts[k].sy);
+              ctx.closePath();
+              ctx.stroke();
+            }
+          }
+
+          // Collision Impact Shockwave & Sparks at instant of impact (0.6s to 1.8s)
+          if (stageElapsed >= 0.6 && stageElapsed <= 1.8) {
+            const flashAge = stageElapsed - 0.6;
+            const flashRad = Math.min(3.0, flashAge * 3.5);
+            const flashAlpha = Math.max(0, 1.0 - flashAge / 1.2);
+
+            const pImp = transformShipPoint(impPtX, impPtY, impPtZ);
+            if (pImp && flashAlpha > 0) {
+              // Expanding Cyan/White Shockwave Ring
+              ctx.strokeStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+              ctx.shadowColor = '#38bdf8';
+              ctx.shadowBlur = 18;
+              ctx.lineWidth = 2.5;
+              ctx.beginPath();
+              ctx.arc(pImp.sx, pImp.sy, flashRad * 16, 0, Math.PI * 2);
+              ctx.stroke();
+
+              // Kinetic Sparks
+              ctx.strokeStyle = `rgba(245, 158, 11, ${flashAlpha})`;
+              ctx.lineWidth = 1.6;
+              for (let sp = 0; sp < 8; sp++) {
+                const spAng = (sp * Math.PI * 2 / 8) + (sp * 0.4);
+                const spDist = flashAge * (28 + (sp % 3) * 16);
+                ctx.beginPath();
+                ctx.moveTo(pImp.sx, pImp.sy);
+                ctx.lineTo(pImp.sx + Math.cos(spAng) * spDist, pImp.sy + Math.sin(spAng) * spDist);
+                ctx.stroke();
+              }
+            }
+          }
+        }
+
+        // 3. Continuous Propellant Leak Vapor Trail from Damaged Thruster Pod (starts after impact)
+        if (stageElapsed >= 0.6 && (tlm.fuel || 0) > 0) {
+          const thrusterPositions = [
+            [-1.6, -0.4, 0.0],  // T0
+            [-1.6, 0.4, 0.0],   // T1
+            [1.2, -0.65, 0.0],  // T2
+            [1.2, 0.65, 0.0],   // T3
+            [-1.3, -1.8, 0.0],  // T4
+            [0.8, -0.65, 0.0],  // T5
+            [-1.3, 1.8, 0.0],   // T6
+            [0.8, 0.65, 0.0],   // T7
+            [1.2, 0.0, 0.4],    // T8
+            [1.2, 0.0, -0.4],   // T9
+            [-1.2, 0.0, 0.4],   // T10
+            [-1.2, 0.0, -0.4]   // T11
+          ];
+          const leakThrusterId = (tlm.damaged_thruster_1 !== undefined && tlm.damaged_thruster_1 >= 0) ? tlm.damaged_thruster_1 : 1;
+          const lPos = (leakThrusterId >= 0 && leakThrusterId < 12) ? thrusterPositions[leakThrusterId] : [-1.3, -1.8, 0];
+          const leakOrigin = transformShipPoint(lPos[0], lPos[1], lPos[2]);
+          if (leakOrigin) {
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.40)';
+            ctx.shadowColor = '#0284c7';
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 1.4;
+            ctx.setLineDash([2, 4]);
+            for (let lp = 0; lp < 5; lp++) {
+              const puffAge = ((now * 0.003 + lp * 0.2) % 1.0);
+              const puffLen = puffAge * 2.5;
+              const puffSpread = puffAge * 0.7;
+              const puffTip = transformShipPoint(lPos[0] - puffLen, lPos[1] - (lPos[1] >= 0 ? puffSpread : -puffSpread), lPos[2] + puffSpread * 0.5);
+              if (puffTip) {
+                ctx.beginPath();
+                ctx.moveTo(leakOrigin.sx, leakOrigin.sy);
+                ctx.lineTo(puffTip.sx, puffTip.sy);
+                ctx.stroke();
+              }
+            }
+            ctx.setLineDash([]);
+          }
+        }
+
+        // 2. Safe Orbit Escape Line (X = 35.0m)
+        const escX = 35.0;
+        const escRad = 6.0;
+        const gatePts = [];
+        for (let a = 0; a < 8; a++) {
+          const ang = a * 2 * Math.PI / 8;
+          const p = project3D(escX, escRad * Math.cos(ang), escRad * Math.sin(ang));
+          if (p) gatePts.push(p);
+        }
+        if (gatePts.length === 8) {
+          ctx.strokeStyle = '#22c55e';
+          ctx.shadowColor = '#22c55e';
+          ctx.shadowBlur = 14;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(gatePts[0].sx, gatePts[0].sy);
+          for (let a = 1; a < 8; a++) ctx.lineTo(gatePts[a].sx, gatePts[a].sy);
+          ctx.closePath();
+          ctx.stroke();
+
+          ctx.fillStyle = '#4ade80';
+          ctx.font = 'bold 12px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('SAFE ORBIT RECOVERY LINE (35m)', gatePts[0].sx, gatePts[0].sy - 14);
+        }
+        ctx.shadowBlur = 0;
       } else {
         // --------------------------------------------------------------------
         // Stage 1: Asteroid Surface Pipeline with Hexagonal Safety Ring Tunnel
@@ -979,31 +1273,27 @@ export default function SpaceOrbitViewer3D() {
       // ------------------------------------------------------------------------
       // 4. Draw True 3D Spacecraft Polyhedral Model with Yaw & Bank Roll
       // ------------------------------------------------------------------------
-      const isGhost = tlm.carrier_lost || tlm.fdir_mode === 1;
-      const cosSY = Math.cos(shipYaw);
-      const sinSY = Math.sin(shipYaw);
-      const cosSB = Math.cos(rawBank);
-      const sinSB = Math.sin(rawBank);
+      let isGhost = false;
+      let isPanicTumbling = false;
 
-      const transformShipPoint = (bx, by, bz) => {
-        // Roll around ship body X axis
-        const ry = by * cosSB - bz * sinSB;
-        const rz = by * sinSB + bz * cosSB;
-        // Yaw around World Z axis
-        const wx = shipX + bx * cosSY - ry * sinSY;
-        const wy = shipY + bx * sinSY + ry * cosSY;
-        const wz = shipZ + rz;
-        return project3D(wx, wy, wz);
-      };
-
-      const draw3DEdge = (p1, p2) => {
-        if (p1 && p2) {
-          ctx.beginPath();
-          ctx.moveTo(p1.sx, p1.sy);
-          ctx.lineTo(p2.sx, p2.sy);
-          ctx.stroke();
+      if (stageId === 5) {
+        const stageElapsed = tlm.elapsed_time !== undefined ? tlm.elapsed_time : 0.0;
+        // Stage EX (Panic Control):
+        // 1. Pre-impact (T < 0.6s): Nominal intact spacecraft (Solid line, cyan)
+        // 2. Post-impact prologue (T >= 0.6s and fdir_mode == 0):
+        //    Debris crash damage & uncontrolled passive tumbling (Dashed line, alert flicker)
+        // 3. Active pilot control engaged (fdir_mode >= 1):
+        //    Solid line restored! Autopilot arrests tumbling inertia with reaction wheel & RCS.
+        if (stageElapsed >= 0.6 && (tlm.fdir_mode === 0 || tlm.fdir_mode === undefined)) {
+          isGhost = true;
+          isPanicTumbling = true;
+        } else {
+          isGhost = false;
+          isPanicTumbling = false;
         }
-      };
+      } else {
+        isGhost = tlm.carrier_lost || tlm.fdir_mode === 1;
+      }
 
       if (stageId === 2) {
         // ====================================================================
@@ -1188,14 +1478,19 @@ export default function SpaceOrbitViewer3D() {
         ctx.shadowBlur = 0;
       } else {
         // ====================================================================
-        // STAGE 1, 3, 4: Aerospace Spacecraft Fighter / Explorer Model
+        // STAGE 1, 3, 4, 5: Aerospace Spacecraft Fighter / Explorer Model
         // ====================================================================
-        const shipColor = isGhost ? '#f59e0b' : '#38bdf8';
+        let shipColor = isGhost ? '#f59e0b' : '#38bdf8';
+        if (isPanicTumbling) {
+          // In Stage 5 tumbling prologue: alert flicker between red & amber
+          shipColor = Math.floor(now * 0.008) % 2 === 0 ? '#ef4444' : '#f59e0b';
+        }
         ctx.strokeStyle = shipColor;
         ctx.shadowColor = shipColor;
-        ctx.shadowBlur = isGhost ? 4 : 12;
+        ctx.shadowBlur = isGhost ? 6 : 12;
         ctx.lineWidth = 2.0;
         if (isGhost) ctx.setLineDash([4, 4]);
+        else ctx.setLineDash([]);
 
         const V = {
           nose: transformShipPoint(2.2, 0, 0),
@@ -1264,83 +1559,129 @@ export default function SpaceOrbitViewer3D() {
         }
         ctx.stroke();
 
-        // RCS Pod Hardware Brackets
-        const drawRcsPod = (p) => {
+        // RCS Pod Hardware Brackets & Health Status
+        const healthMask = (tlm.thruster_health !== undefined) ? tlm.thruster_health : 0xFFF;
+        const isDamaged = (id) => (healthMask & (1 << id)) === 0;
+
+        const drawRcsPod = (p, isDamaged) => {
           if (!p) return;
-          ctx.fillStyle = '#f59e0b';
-          ctx.shadowColor = '#f59e0b';
-          ctx.shadowBlur = 4;
+          ctx.fillStyle = isDamaged ? '#ef4444' : '#f59e0b';
+          ctx.shadowColor = isDamaged ? '#ef4444' : '#f59e0b';
+          ctx.shadowBlur = isDamaged ? 8 : 4;
           ctx.fillRect(p.sx - 2.5, p.sy - 2.5, 5, 5);
         };
-        drawRcsPod(V.rcsBowL);
-        drawRcsPod(V.rcsBowR);
-        drawRcsPod(V.rcsSternL);
-        drawRcsPod(V.rcsSternR);
+        drawRcsPod(V.rcsBowL, isDamaged(2) || isDamaged(5));
+        drawRcsPod(V.rcsBowR, isDamaged(3) || isDamaged(7));
+        drawRcsPod(V.rcsSternL, isDamaged(4));
+        drawRcsPod(V.rcsSternR, isDamaged(6));
+        drawRcsPod(V.nozzleL, isDamaged(0));
+        drawRcsPod(V.nozzleR, isDamaged(1));
 
-        // Optical Line Sensor Bar ahead of nose
-        const sensorL = transformShipPoint(1.2, -0.8, 0);
-        const sensorR = transformShipPoint(1.2, 0.8, 0);
-        if (sensorL && sensorR) {
-          ctx.strokeStyle = '#22c55e';
-          ctx.shadowColor = '#22c55e';
-          ctx.shadowBlur = 8;
-          ctx.lineWidth = 2.5;
-          ctx.setLineDash([]);
-          draw3DEdge(sensorL, sensorR);
+        // Optical Line Sensor Bar ahead of nose (Stage 1 Asteroid Pipeline Tracking only)
+        if (stageId === 1) {
+          const sensorL = transformShipPoint(1.2, -0.8, 0);
+          const sensorR = transformShipPoint(1.2, 0.8, 0);
+          if (sensorL && sensorR) {
+            ctx.strokeStyle = '#22c55e';
+            ctx.shadowColor = '#22c55e';
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([]);
+            draw3DEdge(sensorL, sensorR);
+          }
         }
 
-        // Main Engine Thruster Plumes
+        // ====================================================================
+        // Thruster Exhaust Plumes (Main Engines & Multi-Nozzle RCS)
+        // ====================================================================
         const hasFuel = (tlm.fuel === undefined || tlm.fuel > 0);
-        const isCruising = ((tlm.vel_x || 0) > 0.05);
-        const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : (isCruising ? 0.15 : 0.0);
-
-        if ((actualFx > 0.005 || (isCruising && actualFx >= -0.005)) && hasFuel) {
-          const cmdPower = (actualFx > 0.005) ? actualFx : 0.08;
-          const throttle = Math.min(1.0, Math.max(0.20, cmdPower / 0.25));
-          const plumeLen = 0.6 + throttle * (1.6 + Math.random() * 0.5);
-          const jitter = (Math.random() - 0.5) * 0.12 * throttle;
-
-          ctx.strokeStyle = '#38bdf8';
-          ctx.shadowColor = '#0284c7';
-          ctx.shadowBlur = 16;
-          ctx.lineWidth = 2.0 * throttle + 1.0;
-          ctx.setLineDash([]);
-
-          const nozL = V.nozzleL;
-          const tipL = transformShipPoint(-1.6 - plumeLen, -0.4 + jitter, jitter * 0.5);
-          draw3DEdge(nozL, tipL);
-
-          const nozR = V.nozzleR;
-          const tipR = transformShipPoint(-1.6 - plumeLen, 0.4 + jitter, -jitter * 0.5);
-          draw3DEdge(nozR, tipR);
-
-          // Inner hot plasma core
-          ctx.strokeStyle = '#ffffff';
-          ctx.shadowColor = '#38bdf8';
-          ctx.shadowBlur = 8;
-          ctx.lineWidth = 1.0;
-          const coreL = transformShipPoint(-1.6 - plumeLen * 0.45, -0.4, 0);
-          draw3DEdge(nozL, coreL);
-          const coreR = transformShipPoint(-1.6 - plumeLen * 0.45, 0.4, 0);
-          draw3DEdge(nozR, coreR);
-        }
-
-        // Lateral RCS Thruster Jets
+        const thrustMask = (tlm.thrust_z !== undefined) ? (tlm.thrust_z & 0xFF) : 0;
+        const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
+        const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
         const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
-        if (Math.abs(actualFy) > 0.01 && hasFuel) {
-          const jetLen = 0.4 + Math.min(0.8, Math.abs(actualFy) * 1.5);
-          ctx.strokeStyle = '#f59e0b';
-          ctx.shadowColor = '#d97706';
-          ctx.shadowBlur = 10;
-          ctx.lineWidth = 1.8;
-          ctx.setLineDash([]);
 
-          if (actualFy > 0.01) {
-            draw3DEdge(V.rcsBowR, transformShipPoint(0.8, 0.65 + jetLen, 0));
-            draw3DEdge(V.rcsSternR, transformShipPoint(-1.3, 1.8 + jetLen, 0));
-          } else {
-            draw3DEdge(V.rcsBowL, transformShipPoint(0.8, -0.65 - jetLen, 0));
-            draw3DEdge(V.rcsSternL, transformShipPoint(-1.3, -1.8 - jetLen, 0));
+        const drawJet = (pOrigin, pVector, color = '#38bdf8', glow = '#0284c7', width = 2.0) => {
+          if (!pOrigin || !pVector || !hasFuel) return;
+          ctx.strokeStyle = color;
+          ctx.shadowColor = glow;
+          ctx.shadowBlur = 12;
+          ctx.lineWidth = width;
+          ctx.setLineDash([]);
+          draw3DEdge(pOrigin, pVector);
+        };
+
+        if (hasFuel) {
+          // --- Main Thrusters (T0: Port / V.nozzleL, T1: Starboard / V.nozzleR) ---
+          const isT0Firing = !isDamaged(0) && ((thrustMask & (1 << 0)) || (stageId !== 5 && actualFx > 0.005));
+          const isT1Firing = !isDamaged(1) && ((thrustMask & (1 << 1)) || (stageId !== 5 && actualFx > 0.005));
+
+          if (isT0Firing) {
+            const plumeLen = 1.0 + Math.random() * 0.5;
+            const jx = (Math.random() - 0.5) * 0.1;
+            const tipL = transformShipPoint(-1.6 - plumeLen, -0.4 + jx, jx);
+            drawJet(V.nozzleL, tipL, '#38bdf8', '#0284c7', 2.8);
+            // Hot inner core
+            const coreL = transformShipPoint(-1.6 - plumeLen * 0.45, -0.4, 0);
+            drawJet(V.nozzleL, coreL, '#ffffff', '#38bdf8', 1.2);
+          }
+
+          if (isT1Firing) {
+            const plumeLen = 1.0 + Math.random() * 0.5;
+            const jx = (Math.random() - 0.5) * 0.1;
+            const tipR = transformShipPoint(-1.6 - plumeLen, 0.4 + jx, jx);
+            drawJet(V.nozzleR, tipR, '#38bdf8', '#0284c7', 2.8);
+            // Hot inner core
+            const coreR = transformShipPoint(-1.6 - plumeLen * 0.45, 0.4, 0);
+            drawJet(V.nozzleR, coreR, '#ffffff', '#38bdf8', 1.2);
+          }
+
+          // --- Lateral & Torque RCS Pod Jets (T4, T5, T6, T7, and detumble torque) ---
+          const isT5Firing = !isDamaged(5) && ((thrustMask & (1 << 5)) || actualFy > 0.01 || actualTau > 0.02); // Front Port (+Y)
+          const isT7Firing = !isDamaged(7) && ((thrustMask & (1 << 7)) || actualFy < -0.01 || actualTau < -0.02); // Front Stbd (-Y)
+          const isT4Firing = !isDamaged(4) && ((thrustMask & (1 << 4)) || actualFy > 0.01 || actualTau < -0.02); // Aft Port (+Y)
+          const isT6Firing = !isDamaged(6) && ((thrustMask & (1 << 6)) || actualFy < -0.01 || actualTau > 0.02); // Aft Stbd (-Y)
+
+          if (isT5Firing) {
+            const jetLen = 0.5 + Math.random() * 0.35;
+            drawJet(V.rcsBowL, transformShipPoint(0.8, -0.65 - jetLen, 0), '#f59e0b', '#d97706', 2.0);
+          }
+          if (isT7Firing) {
+            const jetLen = 0.5 + Math.random() * 0.35;
+            drawJet(V.rcsBowR, transformShipPoint(0.8, 0.65 + jetLen, 0), '#f59e0b', '#d97706', 2.0);
+          }
+          if (isT4Firing) {
+            const jetLen = 0.5 + Math.random() * 0.35;
+            drawJet(V.rcsSternL, transformShipPoint(-1.3, -1.8 - jetLen, 0), '#f59e0b', '#d97706', 2.0);
+          }
+          if (isT6Firing) {
+            const jetLen = 0.5 + Math.random() * 0.35;
+            drawJet(V.rcsSternR, transformShipPoint(-1.3, 1.8 + jetLen, 0), '#f59e0b', '#d97706', 2.0);
+          }
+
+          // Reverse Braking Thrusters (T2, T3 - firing forward +X during SysID or braking)
+          if (!isDamaged(2) && (thrustMask & (1 << 2))) {
+            drawJet(V.rcsBowL, transformShipPoint(1.4, -0.65, 0), '#f59e0b', '#d97706', 2.0);
+          }
+          if (!isDamaged(3) && (thrustMask & (1 << 3))) {
+            drawJet(V.rcsBowR, transformShipPoint(1.4, 0.65, 0), '#f59e0b', '#d97706', 2.0);
+          }
+
+          // Vertical Dorsal / Ventral Thrusters (T8..T11)
+          if (!isDamaged(8) && (thrustMask & (1 << 8))) {
+            // T8: Forward Dorsal (+Z thrust: downwards jet)
+            drawJet(transformShipPoint(1.2, 0, 0.4), transformShipPoint(1.2, 0, 1.1), '#38bdf8', '#0284c7', 2.4);
+          }
+          if (!isDamaged(9) && (thrustMask & (1 << 9))) {
+            // T9: Forward Ventral (-Z thrust: upwards jet)
+            drawJet(transformShipPoint(1.2, 0, -0.4), transformShipPoint(1.2, 0, -1.1), '#38bdf8', '#0284c7', 2.4);
+          }
+          if (!isDamaged(10) && (thrustMask & (1 << 10))) {
+            // T10: Aft Dorsal (+Z thrust: downwards jet)
+            drawJet(transformShipPoint(-1.2, 0, 0.4), transformShipPoint(-1.2, 0, 1.1), '#38bdf8', '#0284c7', 2.4);
+          }
+          if (!isDamaged(11) && (thrustMask & (1 << 11))) {
+            // T11: Aft Ventral (-Z thrust: upwards jet)
+            drawJet(transformShipPoint(-1.2, 0, -0.4), transformShipPoint(-1.2, 0, -1.1), '#38bdf8', '#0284c7', 2.4);
           }
         }
       }
@@ -1593,7 +1934,27 @@ export default function SpaceOrbitViewer3D() {
             style: { color: (50.0 - telemetry.pos_x) <= 0.05 ? '#10b981' : '#f59e0b', fontWeight: 'bold' }
           }, (50.0 - telemetry.pos_x) <= 0.05 ? '[LATCH ENGAGED]' : '[APPROACH]')
         )
-      ) : (
+      ) : telemetry.stage_id === 5 ? (() => {
+        const azDeg = telemetry.debris_azimuth !== undefined ? (telemetry.debris_azimuth * 180.0 / Math.PI) : -140;
+        const elDeg = telemetry.debris_elevation !== undefined ? (telemetry.debris_elevation * 180.0 / Math.PI) : 16;
+        const dStr = (azDeg > -45 && azDeg <= 45) ? "BOW" : (azDeg > 45 && azDeg <= 135) ? "PORT" : (azDeg < -45 && azDeg >= -135) ? "STBD" : "STERN";
+        const vStr = elDeg > 5 ? "UPPER" : (elDeg < -5 ? "LOWER" : "HORIZ");
+        return React.createElement(React.Fragment, null,
+          React.createElement('span', { style: { color: '#f87171', fontWeight: 'bold' } }, 'STAGE EX: PANIC CONTROL'),
+          React.createElement('span', null, `SEED: 0x${(telemetry.chaos_seed || 0).toString(16).toUpperCase()}`),
+          React.createElement('span', null, `INC: ${dStr}/${vStr} (${azDeg.toFixed(0)}°)`),
+          React.createElement('span', {
+            style: { color: '#ef4444', fontWeight: 'bold' }
+          }, `DMG: T${telemetry.damaged_thruster_1 !== undefined ? telemetry.damaged_thruster_1 : '?'}, T${telemetry.damaged_thruster_2 !== undefined ? telemetry.damaged_thruster_2 : '?'}`),
+          React.createElement('span', {
+            style: { color: Math.abs(telemetry.omega || 0) < 0.05 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }
+          }, `SPIN: ${(Math.abs(telemetry.omega || 0) * 180.0 / Math.PI).toFixed(1)}°/s ${Math.abs(telemetry.omega || 0) < 0.05 ? '[DETUMBLED]' : '[TUMBLING]'}`),
+          React.createElement('span', {
+            style: { color: (telemetry.fuel || 100) < 30 ? '#ef4444' : '#f59e0b', fontWeight: 'bold' }
+          }, `LEAK FUEL: ${(telemetry.fuel || 100).toFixed(1)}%`),
+          React.createElement('span', null, `HITS: ${telemetry.debris_hits || 0}`)
+        );
+      })() : (
         React.createElement(React.Fragment, null,
           React.createElement('span', null, `POS: (${telemetry.pos_x.toFixed(2)}m, ${telemetry.pos_y.toFixed(2)}m)`),
           React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(2)} m/s`),

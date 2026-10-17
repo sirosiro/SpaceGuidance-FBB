@@ -4,6 +4,7 @@ import struct
 import time
 import os
 import sys
+import json
 
 class UartTee:
     """
@@ -89,14 +90,16 @@ class SpaceGuidanceHardware:
         self.mm.seek(0)
         data = self.mm.read(self.SIZE)
         unpacked = struct.unpack(self.SHM_LAYOUT, data)
-        return {
+        res = {
             "cr_ctrl": unpacked[0],
             "sr_status": unpacked[1],
             "sensor_raw": unpacked[2],
             "sensor_edge": unpacked[3],
             "thrust_cmd_x": unpacked[4],
             "thrust_cmd_y": unpacked[5],
+            "thrust_cmd_z": unpacked[6],
             "torque_cmd": unpacked[7],
+            "chaos_fault_inj": unpacked[10],
             "wheel_torque_cmd": unpacked[11],
             "pos_x": unpacked[12],
             "pos_y": unpacked[13],
@@ -114,17 +117,34 @@ class SpaceGuidanceHardware:
             "mission_status": unpacked[25],
             "total_gates": unpacked[26]
         }
+        if os.path.exists("/tmp/space_guidance_telemetry.json"):
+            for _ in range(3):
+                try:
+                    with open("/tmp/space_guidance_telemetry.json", "r") as jf:
+                        jdata = json.load(jf)
+                    for k in ["pos_z", "vel_z", "roll", "pitch", "yaw", "omega_x", "omega_y", "omega_z",
+                              "wheel_rpm_x", "wheel_rpm_y", "wheel_rpm_z", "thruster_health",
+                              "chaos_seed", "debris_azimuth", "debris_elevation",
+                              "damaged_thruster_1", "damaged_thruster_2"]:
+                        if k in jdata:
+                            res[k] = jdata[k]
+                    break
+                except Exception:
+                    time.sleep(0.001)
+        return res
 
-    def write_commands(self, thrust_x, thrust_y, torque=0.0, wheel_torque=0.0, fdir_mode=0):
+    def write_commands(self, thrust_x, thrust_y, torque=0.0, wheel_torque=0.0, fdir_mode=0, thrust_z=0.0,
+                       torque_x=0.0, torque_y=0.0, wheel_torque_x=0.0, wheel_torque_y=0.0, thrust_vertical=0.0):
         # Convert floats to Q16.16 integers
         tx_int = int(thrust_x * 65536.0) & 0xFFFFFFFF
         ty_int = int(thrust_y * 65536.0) & 0xFFFFFFFF
+        tz_int = int(thrust_z) if isinstance(thrust_z, int) else (int(thrust_z * 65536.0) & 0xFFFFFFFF)
         tq_int = int(torque * 65536.0) & 0xFFFFFFFF
         tw_int = int(wheel_torque * 65536.0) & 0xFFFFFFFF
 
         # Offset for thrust_cmd_x is 0x10 (16 bytes = 4 uint32s)
         self.mm.seek(16)
-        self.mm.write(struct.pack("=3I", tx_int, ty_int, 0)) # x, y, z
+        self.mm.write(struct.pack("=3I", tx_int, ty_int, tz_int)) # x, y, z
         self.mm.seek(28)
         self.mm.write(struct.pack("=I", tq_int))              # RCS torque
 
@@ -136,11 +156,28 @@ class SpaceGuidanceHardware:
         self.mm.seek(120)
         self.mm.write(struct.pack("=I", fdir_mode))
 
-    def write_reaction_wheel(self, wheel_torque):
-        """Dedicated Reaction Wheel torque control (consumes 0 propellant)"""
+        # Extended 6-DoF multi-axis commands (offset 0x90 = 144 bytes)
+        ext_bytes = struct.pack("=5i",
+                                int(torque_x * 65536.0),
+                                int(torque_y * 65536.0),
+                                int(wheel_torque_x * 65536.0),
+                                int(wheel_torque_y * 65536.0),
+                                int(thrust_vertical * 65536.0))
+        self.mm.seek(144)
+        self.mm.write(ext_bytes)
+
+    def write_thruster_pulse(self, nozzle_mask):
+        """Direct actuation for Stage 5 / Panic Control SysID & Control Allocation (12 nozzles)"""
+        self.mm.seek(24) # 0x18 THRUST_CMD_Z
+        self.mm.write(struct.pack("=I", int(nozzle_mask) & 0x0FFF))
+
+    def write_reaction_wheel(self, wheel_torque, wheel_torque_x=0.0, wheel_torque_y=0.0):
+        """Dedicated 3-Axis Reaction Wheel torque control (consumes 0 propellant)"""
         tw_int = int(wheel_torque * 65536.0) & 0xFFFFFFFF
         self.mm.seek(44)
         self.mm.write(struct.pack("=I", tw_int))
+        self.mm.seek(144 + 8) # offset 0x98: wheel_torque_x_cmd, wheel_torque_y_cmd
+        self.mm.write(struct.pack("=2i", int(wheel_torque_x * 65536.0), int(wheel_torque_y * 65536.0)))
 
     def kick_watchdog(self):
         self.mm.seek(36) # 0x24 WATCHDOG_KICK
