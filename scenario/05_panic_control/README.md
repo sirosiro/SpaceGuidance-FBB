@@ -266,3 +266,204 @@ bash scenario/05_panic_control/run.sh --seed 0xCAFE
 # 4. ヘッドレス・高速ミッション実行スクリプト
 bash scenario/05_panic_control/run_mission.sh --seed 0x1337
 ```
+
+---
+
+## 8. 発展課題：他言語 (C++ / Rust) による自律操縦チャレンジ (Multi-Language Flight Software Challenge)
+
+本プラグインでは標準の自律制御スクリプトとして Python（`pilot.py`）を提供していますが、**SG-FBB の本体エンジン（物理デーモン、公式審判 SSOT、Three.js 3D ダッシュボード）側には一切変更を加えることなく、C++ や Rust などのコンパイル言語で自作 pilot を開発して挑むことが可能**です。
+
+これは、宇宙航空分野で実際に求められる **「GC（ガベージコレクション）によるジッターのない、マイクロ秒精度の高信頼性フライトソフトウェア（FSW）」** の開発体験をそのまま実践できる設計となっています。
+
+### (1) なぜ本体無変更で他言語対応できるのか？（疎結合 ABI アーキテクチャ）
+
+SG-FBB の通信基盤は、特定言語の RPC やフレームワークに依存せず、**OS の POSIX 共有メモリ（`/dev/shm/fbb_space_guidance_shm`）上に配置された 496 バイトの C 構造体（`ShmSpaceGuidance`）** のみを共通規格（ABI）としています。
+
+```mermaid
+flowchart LR
+    subgraph SG_ENGINE["SG-FBB 共通コア (変更一切不要)"]
+        DAEMON["C++17 物理・審判デーモン<br/>(100Hz 剛体力学 & 公式スコアリング)"]
+        DASHBOARD["Web 3D ダッシュボード<br/>(Three.js Orbit Viewer / Scorecard)"]
+    end
+
+    SHM[("POSIX 共有メモリ (496 B)<br/>/dev/shm/fbb_space_guidance_shm<br/>(struct ShmSpaceGuidance)")]
+
+    DAEMON <-->|Seqlock 100Hz| SHM
+    DASHBOARD <---|WebSocket 30Hz| SHM
+
+    subgraph PILOT_OPTIONS["自律操縦 Pilot (自由な言語を選択可能)"]
+        PY["標準: Python (pilot.py)<br/>・初心者向けプロトタイピング<br/>・SpaceGuidanceHardware クラス"]
+        CPP["C++20 (pilot.cpp)<br/>・STL / Eigen 行列演算<br/>・ポインタ直読による超低遅延"]
+        RUST["Rust (src/main.rs)<br/>・型安全 & ゼロコスト抽象化<br/>・GCジッター完全排除 (航空宇宙標準)"]
+    end
+
+    SHM <-->|MMIO Direct Map| PY
+    SHM <-->|MMIO Direct Map| CPP
+    SHM <-->|MMIO Direct Map| RUST
+
+    classDef core fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#fff;
+    classDef shm fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#fff;
+    classDef pilot fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#fff;
+    class SG_ENGINE core;
+    class SHM shm;
+    class PILOT_OPTIONS pilot;
+```
+
+---
+
+### (2) 共有メモリ仕様 (C 構造体インターフェース)
+
+パイロット側は、プロジェクト共通ヘッダー [include/space_guidance_shm.h](include/space_guidance_shm.h) の `struct ShmSpaceGuidance` をメモリマップするだけで、全テレメトリの取得と推力指令の書き込みが完了します。
+
+* **初動トリガー (ADR #002)**: `cr_ctrl |= 0x08` を書き込んだ瞬間、公式タイマーが自動始動します。
+* **テレメトリ直読 (8バイト浮動小数点)**: `ext.omega_x`, `ext.omega_y`, `ext.omega_z`, `pos_x`, `vel_x`, `fuel` など
+* **制御コマンド直書 (Q16.16 固定小数点 / 整数)**: `torque_x_cmd`, `torque_y_cmd`, `torque_cmd`, `wheel_torque_x_cmd`, `thrust_cmd_x` など
+
+---
+
+### (3) C++ による Pilot 実装案
+
+C++ では、標準の POSIX `mmap` を用いてポインタを取得するだけで、最小限のオーバーヘッドで 100Hz 制御ループを構築できます。
+
+```cpp
+// pilot.cpp
+#include "../../include/space_guidance_shm.h"
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <iostream>
+#include <cmath>
+
+int main() {
+    int fd = open(SPACE_GUIDANCE_SHM_PATH, O_RDWR);
+    if (fd < 0) {
+        std::cerr << "Failed to open shared memory: " << SPACE_GUIDANCE_SHM_PATH << std::endl;
+        return 1;
+    }
+    auto* regs = static_cast<volatile ShmSpaceGuidance*>(
+        mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+
+    // 1. 初動トリガー送信 (公式審判タイマー始動)
+    regs->cr_ctrl |= 0x08;
+    std::cout << "[C++ Pilot] Mission Engaged! Starting Rate Damping..." << std::endl;
+
+    // 2. 100Hz 制御ループ
+    while (regs->pos_x < 35.0 && regs->fuel > 0.0) {
+        regs->watchdog_kick = 1; // WDT クリア
+
+        // 3軸角速度の直読
+        double wx = regs->ext.omega_x;
+        double wy = regs->ext.omega_y;
+        double wz = regs->ext.omega_z;
+
+        // レートダンピング指令 (PD逆トルク / Q16.16)
+        regs->torque_x_cmd = static_cast<int32_t>(-wx * 0.85 * 65536.0);
+        regs->torque_y_cmd = static_cast<int32_t>(-wy * 0.85 * 65536.0);
+        regs->torque_cmd   = static_cast<int32_t>(-wz * 0.85 * 65536.0);
+
+        usleep(10000); // 10ms (100Hz)
+    }
+
+    std::cout << "[C++ Pilot] Safe orbit reached or mission ended." << std::endl;
+    munmap(const_cast<ShmSpaceGuidance*>(regs), 4096);
+    close(fd);
+    return 0;
+}
+```
+
+> **ビルド方法 (Makefile / CMake)**:
+> ```bash
+> g++ -O3 -std=c++17 pilot.cpp -lpthread -o pilot_cpp
+> ```
+
+---
+
+### (4) Rust による Pilot 実装案
+
+Rust では、`memmap2` クレートを用いて共有メモリを安全にラップすることで、宇宙機フライトソフトウェアに不可欠な **メモリ安全性** と **GCレスの決定論的リアルタイム性能** を両立できます。
+
+```toml
+# Cargo.toml
+[package]
+name = "panic_pilot_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+memmap2 = "0.9"
+```
+
+```rust
+// src/main.rs
+use std::fs::OpenOptions;
+use std::thread::sleep;
+use std::time::Duration;
+use memmap2::MmapMut;
+
+// C言語構造体のアライメント整合
+#[repr(C, packed(4))]
+struct PilotBridge {
+    cr_ctrl: u32,
+    _pad1: [u8; 12],
+    thrust_cmd_x: u32,
+    _pad2: [u8; 8],
+    torque_cmd: u32,
+    _pad3: [u8; 4],
+    watchdog_kick: u32,
+    _pad4: [u8; 8],
+    pos_x: f64,
+    // (必要に応じて include/space_guidance_shm.h と一致させる)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/shm/fbb_space_guidance_shm")?;
+
+    let mut mmap = unsafe { MmapMut::map_mut(&file)? };
+    let bridge = unsafe { &mut *(mmap.as_mut_ptr() as *mut PilotBridge) };
+
+    // 公式タイマー始動
+    bridge.cr_ctrl |= 0x08;
+    println!("[Rust Pilot] Autonomous Mission Started (Zero-GC Realtime).");
+
+    loop {
+        bridge.watchdog_kick = 1;
+        if bridge.pos_x >= 35.0 {
+            println!("[Rust Pilot] Safe corridor escaped successfully!");
+            break;
+        }
+        sleep(Duration::from_millis(10));
+    }
+    Ok(())
+}
+```
+
+> **ビルド方法**:
+> ```bash
+> cargo build --release
+> ```
+
+---
+
+### (5) 起動スクリプト（`run.sh`）のハイブリッド自動認識化
+
+[run.sh](scenario/05_panic_control/run.sh) のパイロット起動部を以下のように拡張することで、**「コンパイル済みバイナリ（C++ / Rust）が存在すれば優先起動し、無ければ標準の Python スクリプトを実行する」** という完全透過な運用が可能です：
+
+```bash
+# バイナリ優先起動ロジックの例
+if [ -x "$SCRIPT_DIR/pilot_cpp" ]; then
+    echo "[SpaceGuidance] Executing High-Performance C++ Pilot..."
+    "$SCRIPT_DIR/pilot_cpp" "$@"
+elif [ -x "$SCRIPT_DIR/target/release/panic_pilot_rust" ]; then
+    echo "[SpaceGuidance] Executing High-Assurance Rust Pilot..."
+    "$SCRIPT_DIR/target/release/panic_pilot_rust" "$@"
+else
+    echo "[SpaceGuidance] Executing Baseline Python Autopilot..."
+    python3 "$PILOT_SCRIPT" "$@"
+fi
+```
+
+このように、受講生やチャレンジャーは **「アルゴリズム先行で素早く試す Python」** から、**「実機宇宙機FSWを見据えた C++ / Rust による極限の制御周期・低遅延化」** へと、同一ステージ・同一レギュレーションのままシームレスにステップアップできます。
+
