@@ -49,7 +49,7 @@ def run_pilot():
             altitude = tlm["pos_x"]          # テザー登坂高度 (m)
             velocity = tlm["vel_x"]          # 登坂速度 (m/s)
             vibration = tlm["cross_track_err"]# ケーブル横振動変位 (m)
-            tension = 10000.0 + (100.0 * max(0.0, velocity)) + (1200.0 * abs(vibration))
+            tension = tlm.get("cable_tension", 10000.0 + (100.0 * max(0.0, velocity)) + (50000.0 * abs(vibration)))
             fuel = tlm["fuel"]
 
             # 3. ケーブル断裂チェック

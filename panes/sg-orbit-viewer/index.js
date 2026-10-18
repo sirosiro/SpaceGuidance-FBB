@@ -524,14 +524,18 @@ export default function SpaceOrbitViewer3D() {
     // ------------------------------------------------------------------------
     const stage5Group = new THREE.Group();
 
-    // 6 Rotating Debris Shards
+    // 10 Rotating Debris Shards (Synchronized with physics engine)
     const debrisConfigs = [
-      { x:  7.0, y:  3.8, z:  2.5, r: 0.45 },
-      { x: 13.0, y: -4.2, z: -2.8, r: 0.48 },
-      { x: 18.5, y:  4.5, z: -2.0, r: 0.40 },
-      { x: 23.0, y: -3.2, z:  3.2, r: 0.46 },
-      { x: 27.5, y:  3.6, z: -3.0, r: 0.50 },
-      { x: 32.0, y: -2.2, z:  1.8, r: 0.42 }
+      { x:  6.5, y:  2.2, z:  1.5, r: 0.45 },
+      { x: 10.0, y: -1.8, z: -1.2, r: 0.48 },
+      { x: 14.0, y:  1.5, z: -1.6, r: 0.42 },
+      { x: 17.5, y: -2.5, z:  1.8, r: 0.50 },
+      { x: 21.0, y:  1.2, z:  1.4, r: 0.44 },
+      { x: 24.5, y: -1.4, z: -1.5, r: 0.46 },
+      { x: 27.0, y:  2.8, z: -2.0, r: 0.48 },
+      { x: 29.5, y: -2.2, z:  1.6, r: 0.42 },
+      { x: 31.5, y:  1.6, z: -1.2, r: 0.45 },
+      { x: 33.5, y: -1.5, z:  1.4, r: 0.46 }
     ];
     const debrisMeshes = [];
     for (let i = 0; i < debrisConfigs.length; i++) {

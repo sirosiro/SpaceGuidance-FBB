@@ -29,14 +29,18 @@ void SpacePhysicsEngine::init_stage5_panic_control() {
         track_.push_back({x, 0.0});
     }
 
-    // Scatter secondary floating debris (6 obstacles scattered in 3D)
+    // Scatter secondary floating debris (10 obstacles scattered in 3D)
     floating_debris_.clear();
-    floating_debris_.push_back({7.0, 3.8, 2.5});
-    floating_debris_.push_back({13.0, -4.2, -2.8});
-    floating_debris_.push_back({18.5, 4.5, -2.0});
-    floating_debris_.push_back({23.0, -3.2, 3.2});
-    floating_debris_.push_back({27.5, 3.6, -3.0});
-    floating_debris_.push_back({32.0, -2.2, 1.8});
+    floating_debris_.push_back({ 6.5,  2.2,  1.5});
+    floating_debris_.push_back({10.0, -1.8, -1.2});
+    floating_debris_.push_back({14.0,  1.5, -1.6});
+    floating_debris_.push_back({17.5, -2.5,  1.8});
+    floating_debris_.push_back({21.0,  1.2,  1.4});
+    floating_debris_.push_back({24.5, -1.4, -1.5});
+    floating_debris_.push_back({27.0,  2.8, -2.0});
+    floating_debris_.push_back({29.5, -2.2,  1.6});
+    floating_debris_.push_back({31.5,  1.6, -1.2});
+    floating_debris_.push_back({33.5, -1.5,  1.4});
 
     // Initial state before collision (T < 0.6s):
     // Nominal stable 6-DoF flight approaching debris field
@@ -296,7 +300,7 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         prev_thrust_x_ = thrust_forward;
 
         // Transverse cable vibration excited by motor jerk
-        double jerk_excitation = 0.00015 * jerk;
+        double jerk_excitation = 0.0050 * jerk;
         double vib_acc = -2.0 * cable_damping_ * cable_omega_0_ * cable_vib_vel_ 
                          - (cable_omega_0_ * cable_omega_0_) * state_.cable_vibration 
                          + jerk_excitation;
@@ -306,7 +310,7 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         state_.pos.y = state_.cable_vibration;
 
         // Cable tension: Nominal + Inertial acceleration + Vibration stress
-        state_.cable_tension = 10000.0 + (mass_ * std::max(0.0, ax)) + (1200.0 * std::abs(state_.cable_vibration));
+        state_.cable_tension = 10000.0 + (mass_ * std::max(0.0, ax)) + (50000.0 * std::abs(state_.cable_vibration));
         if (state_.cable_tension > cable_max_tension_) {
             state_.is_cable_snapped = true;
             std::cerr << "\033[1;31m[TETHER RUPTURE] Cable tension exceeded limit (" 

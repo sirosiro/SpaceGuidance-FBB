@@ -151,7 +151,7 @@ public:
             if (state.pos.x >= 99.8) {
                 is_completed = true;
                 int time_bonus = std::max(0, static_cast<int>((55.0 - elapsed_time) * 50.0));
-                int stab_bonus = std::max(0, static_cast<int>((15000.0 - peak_metric) * 0.1));
+                int stab_bonus = std::max(0, static_cast<int>((14500.0 - peak_metric) * 0.35));
                 int batt_bonus = static_cast<int>(state.fuel * 10.0);
                 bonus_score = time_bonus + stab_bonus + batt_bonus;
                 total_score = checkpoint_score + bonus_score;
@@ -275,11 +275,25 @@ public:
             if (state.pos.x >= 35.0 && !is_completed) {
                 is_completed = true;
                 passed_checkpoints = 3;
-                bool in_gate = (std::abs(state.pos.y) <= 6.0);
-                int base_escape = 1500;
-                int gate_bonus = in_gate ? 1500 : 0;
+                double r_center = std::sqrt(state.pos.y * state.pos.y + state.pos_z * state.pos_z);
+                int base_escape = 1000;
+                int gate_bonus = 0;
+                std::string gate_rating = "OFF-GATE";
+                if (r_center <= 1.0) {
+                    gate_bonus = 2500;
+                    gate_rating = "BULLSEYE";
+                } else if (r_center <= 2.5) {
+                    gate_bonus = 1800;
+                    gate_rating = "EXCELLENT";
+                } else if (r_center <= 4.5) {
+                    gate_bonus = 1200;
+                    gate_rating = "GOOD";
+                } else if (r_center <= 7.0) {
+                    gate_bonus = 500;
+                    gate_rating = "MARGINAL";
+                }
                 int fuel_bonus = static_cast<int>(state.fuel * 25.0);
-                int debris_bonus = (state.debris_hits == 0) ? 1500 : 0;
+                int debris_bonus = (state.debris_hits == 0) ? 1500 : (state.debris_hits <= 2 ? 500 : 0);
                 bonus_score = base_escape + gate_bonus + fuel_bonus + debris_bonus;
                 total_score = checkpoint_score + bonus_score;
 
@@ -289,8 +303,8 @@ public:
                 else official_grade = "GRADE C (Pass)";
 
                 char buf[256];
-                snprintf(buf, sizeof(buf), "[REFEREE COMPLETE] Safe Orbit Escaped! Hits=%d | Fuel=%4.1f%% | Total: %5d pts (%s)",
-                         state.debris_hits, state.fuel, total_score, official_grade.c_str());
+                snprintf(buf, sizeof(buf), "[REFEREE COMPLETE] Safe Orbit Escaped! Gate=[%s, r=%4.2fm] | Hits=%d | Fuel=%4.1f%% | Total: %5d pts (%s)",
+                         gate_rating.c_str(), r_center, state.debris_hits, state.fuel, total_score, official_grade.c_str());
                 last_event = buf;
                 std::cout << "\n============================================================" << std::endl;
                 std::cout << "[Referee] " << last_event << std::endl;
