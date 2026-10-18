@@ -1,7 +1,11 @@
 # SpaceGuidance-FBB: 自律宇宙探査・軌道ガイダンス プラグイン
 (Autonomous Space Guidance & Docking Challenge Plugin for FPGA-BoardlessBench)
 
-![Dashboard](assets/dashboard.gif)
+![Stage 1: 小惑星パイプライン巡回](assets/dashboard.gif)
+*▲ Stage 1: 小惑星パイプライン巡回 (2D微小重力ライン追従 & 光センサ重心検出回路)*
+
+![Stage EX: パニックコントロール (自律復旧)](assets/stage05_panic_control.gif)
+*▲ Stage EX (最新リリース): パニックコントロール (デブリ直撃による3軸高速タンブリング・スラスタ破損からの完全自律復旧)*
 
 ---
 
@@ -13,15 +17,16 @@
 
 ---
 
-## 2. 全4ステージ プログレッシブ・ロードマップ (Progressive Missions)
+## 2. 全5ステージ プログレッシブ・ロードマップ (Progressive Missions)
 
-本プラグインは、基本となる「ハードウェア防護＋自律スラスタ制御」の共通アーキテクチャを土台としながら、物理次元と制御要素を段階的にステップアップできる **4つのミッションステージ** で構成されています。全4ステージとも物理エンジン・自律操縦スクリプト・公式審判システムが実装済みであり、即座にプレイ可能です。
+本プラグインは、基本となる「ハードウェア防護＋自律スラスタ制御」の共通アーキテクチャを土台としながら、物理次元と制御要素を段階的にステップアップできる **全5つのミッションステージ（基本4ステージ ＋ 最難関 Stage EX）** で構成されています。全5ステージとも物理エンジン・自律操縦スクリプト・公式審判システムが実装済みであり、即座にプレイ可能です。
 
 ```mermaid
 graph LR
     Stage1["Stage 1: 小惑星パイプライン巡回<br/>(2D 平面 + 微小重力ダウンフォース)"] --> Stage2["Stage 2: 宇宙テザークライマー<br/>(1D 超高速昇降 + ケーブル振動抑制)"]
     Stage2 --> Stage3["Stage 3: ISSトラスレール点検機<br/>(3D 軌道レール + 電磁ラッチ把持)"]
     Stage3 --> Stage4["Stage 4: 深宇宙光レーザードッキング<br/>(6-DoF 完全摩擦ゼロ + 十字光軸整定)"]
+    Stage4 --> Stage5["Stage EX: パニックコントロール<br/>(3軸激突タンブル + 12基スラスタ欠損・自律復旧)"]
 ```
 
 | ステージ | ミッション名 | 難易度 | 物理環境と主要課題 | ハードウェア (RTL) | ソフトウェア (Python) | 専用ドキュメント |
@@ -30,6 +35,26 @@ graph LR
 | **Stage 2** | **宇宙テザークライマー**<br>(Orbital Tether Climber) | Level 2<br>(初中級) | **1D直線運動＋弾性弦振動**<br>軌道エレベータ超長大テザー | 高速光学マークカウンタ、<br>共振周波数遮断ノッチフィルタ | ケーブル断裂防止 S字加減速、<br>共振抑制フィードフォワード | [詳細ガイド](scenario/02_tether_climber/README.md) |
 | **Stage 3** | **ISSトラスレール点検機**<br>(ISS Truss Inspector) | Level 3<br>(中上級) | **3D立体曲面レール軌道**<br>急カーブ遠心力と反作用連成 | 3軸 IMU 慣性積分器、<br>電磁グリッパー把持力FBラッチ | 3次元レール曲率適応速度計画、<br>4箇所点検把持シーケンス | [詳細ガイド](scenario/03_iss_truss/README.md) |
 | **Stage 4** | **深宇宙光レーザードッキング**<br>(Optical Laser Docking) | Level 4<br>(エキスパート) | **6-DoF 完全摩擦ゼロ**<br>オイラー運動方程式、デルタV制限 | 4分割フォトダイオード(QPD)光軸、<br>最小インパルス PWM RCS | 6自由度 Line-of-Sight 誘導、<br>7段階レンジ接近整定 | [詳細ガイド](scenario/04_laser_docking/README.md) |
+| **Stage EX**<br>*(最新)* | **パニックコントロール**<br>(Panic Control: Debris Recovery) | Level 5<br>(最難関 / Extra) | **3軸高速タンブリング＋12基スラスタ欠損**<br>スペースデブリ直撃、角速度140°/s、燃料自然漏洩 | 12ch RCS パルス変調、<br>3軸リアクションホイール、<br>カオスインジェクション | 3軸レートダンピング(デタンブル)、<br>12基オンラインSysID(損傷同定)、<br>非対称推力配分 & 3D脱出 | [詳細ガイド](scenario/05_panic_control/README.md) |
+
+### 2.1 最新リリース：Stage EX「パニックコントロール」自律復旧シーケンス
+
+最新追加された **Stage EX (Panic Control)** では、漂流スペースデブリの激しい直撃を受け、探査機が毎秒140度超（$|\vec{\omega}_0| \approx 2.5\text{ rad/s}$）の激しい3軸高速カオスタンブリングに陥り、さらに搭載された12基のRCSスラスタのうち1〜2基が物理破損、燃料配管が損傷して微小リークが発生する極限状況からスタートします。
+
+プレイヤーは手動介入なしに、自律スクリプト（`pilot.py`）のみで以下の **4大フェーズ** を完全自律で成し遂げなければなりません：
+
+```mermaid
+flowchart TD
+    P0["<b>Phase 0: 衝突緊急事態検知 & プロローグ (T = 0 〜 4.5s)</b><br/>・デブリ直撃による衝撃力積で 3軸高速タンブリング (|ω| ≈ 2.5 rad/s) 発生<br/>・衝突点近傍のスラスタ (1〜2基) が物理破損、推進剤微小リーク開始<br/>・最初の4.5秒間はセンササンプリングと初期回転レート同定を実施"]
+    --> P1["<b>Phase 1: 3軸緊急デタンブル (Rate Damping)</b><br/>・3軸リアクションホイール最大逆トルク制動 (燃料消費ゼロ)<br/>・健全 RCS スラスタによるレートダンピング逆噴射<br/>・全軸角速度ノルム |ω| < 0.05 rad/s を 0.5 秒保持し制動完了 (+3,000 pts)"]
+    --> P2["<b>Phase 2: 12チャンネル・オンライン同定 (Online SysID)</b><br/>・全12基のスラスタを順次 30ms 微小パルス噴射<br/>・IMU 角加速度応答 Δω の有無から破損ノズルを自動特定・隔離"]
+    --> P3["<b>Phase 3: 制御配分 & 6自由度安全圏脱出 (Control Allocation & Escape)</b><br/>・生存ノズルのみで不要トルクを相殺しつつ +X 前進推進力を合成<br/>・10個の浮遊デブリ群を回避しながら、目標グリーン安全ゲート (X ≥ 35m) へ突入<br/>・脱出時の中心軸距離 r = √(y²+z²) による高精度誘導ボーナス獲得 (最大 +2,500 pts)"]
+
+    style P0 fill:#450a0a,stroke:#f87171,stroke-width:2px,color:#fff
+    style P1 fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#fff
+    style P2 fill:#713f12,stroke:#facc15,stroke-width:2px,color:#fff
+    style P3 fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#fff
+```
 
 ---
 
@@ -134,6 +159,44 @@ flowchart TB
 ### 3.1 Sim-to-Real 二層検証設計 (Dual-Track Validation Philosophy)
 本プロジェクトは、航空宇宙・組込み制御分野で標準的な **MIL/SIL（ソフトウェア検証）と HIL/実機（ハードウェア論理合成）の階層分離** に基づき、目的の異なる 2 つの具象化トラック（Dual-Track）を並行して維持しています：
 
+```mermaid
+flowchart TB
+    subgraph SW_LAYER["自律誘導ソフトウェア層 (Python / ROS 2 共通コード)"]
+        PILOT["自律誘導アルゴリズム (pilot.py)<br/>- 軌道追従・6-DoF 誘導・S字加減速・FDIR<br/>- SpaceGuidanceHardware 共通クラス"]
+    end
+
+    subgraph DUAL_TRACK["Sim-to-Real 二層透過アーキテクチャ (100% 透明性)"]
+        subgraph TRACK_A["【Track A】高速 SIL 開発環境 (ホスト PC / Boardless)"]
+            direction TB
+            SHM["POSIX 共有メモリ (/dev/shm)<br/>32-bit MMIO レジスタエミュレーション"]
+            CPP_DAEMON["C++17 物理・審判デーモン (space_guidance_daemon.cpp)<br/>- 100Hz 6-DoF 剛体力学・弾性テザー・カオス衝突<br/>- Official Referee 公式審判エンジン"]
+            COCKPIT["Web 3D Cockpit (:8080)<br/>Three.js Orbit Viewer / Scorecard"]
+            SHM <--> CPP_DAEMON
+            CPP_DAEMON <--> COCKPIT
+        end
+
+        subgraph TRACK_B["【Track B】論理合成 RTL / 実機 HIL (AMD Zynq / Kria)"]
+            direction TB
+            UIO["Linux UIO ドライバ (/dev/uio0)<br/>32-bit AXI4-Lite 物理 MMIO バス"]
+            VERILOG["ピュア Verilog HDL IP (space_guidance_top.v)<br/>- 光センサ重心検出 (line_sensor_filter.v)<br/>- 100% 連続 PWM パルス変調 (rcs_thruster_pwm.v)<br/>- WDT & インターロック安全遮断 (safety_interlock.v)"]
+            FPGA_HARD["実機 FPGA シリコン (PL) / Verilator Co-Sim"]
+            UIO <--> VERILOG
+            VERILOG <--> FPGA_HARD
+        end
+    end
+
+    PILOT -->|"環境自動検出"| SEL{"実行プラットフォーム"}
+    SEL -->|"PC 開発時 (Boardless)"| SHM
+    SEL -->|"Zynq 実機時 (Hardware)"| UIO
+
+    classDef sw fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#fff;
+    classDef trackA fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#fff;
+    classDef trackB fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#fff;
+    class SW_LAYER sw;
+    class TRACK_A trackA;
+    class TRACK_B trackB;
+```
+
 1. **Track A: 高速 SIL（Software-in-the-Loop）リアルタイム開発環境**
    * **実装**: C++ 物理シミュレーションデーモン（`space_guidance_daemon.cpp` / `space_physics.cpp`）
    * **役割**: ホスト PC 上で 100Hz の 6 自由度剛体力学演算、外乱・カオス障害、および Web3D ダッシュボードへのリアルタイム配信を、実機 FPGA なし（Boardless）で軽快に成立させます。
@@ -151,14 +214,61 @@ flowchart TB
 3. **100% Sim-to-Real 透過性の保証 (Single Source of Truth)**
    * Track A（PC 上の SIL）で開発した自律操縦スクリプト（`pilot.py`）は、実機 FPGA（Track B）に移植した際も、`/dev/uio0` の 32-bit MMIO レジスタマップ仕様が完全に一致しているため、**1 行のコード変更もなしにそのまま実機で動作**します。
 
-### 公式審判システム (Official Referee: Single Source of Truth)
+### 3.2 公式審判システム (Official Referee: Single Source of Truth)
 本システムでは公平な競技性・シミュレーションの信頼性を担保するため、スコア計算・ゲート通過判定・ペナルティ判定・合否判定（Grade S/A/B/C）を各プレイヤーのスクリプトから完全に分離し、中央シミュレーションデーモン（`space_guidance_daemon.cpp`）内の **`OfficialReferee` エンジン** が 100Hz 周期でオーソリテーティブに判定します。
+
+```mermaid
+flowchart LR
+    subgraph CHAOS["カオス障害注入 (Chaos Injection)"]
+        SEED["決定論的カオスシード (例: 0x1337)<br/>- デブリ飛来角・方位角・衝突力積<br/>- スラスタ物理破損マスク (T1, T6等)<br/>- 推進剤微小リーク発生"]
+    end
+
+    subgraph SIM_ENGINE["宇宙物理シミュレーション (100Hz 剛体力学)"]
+        PHYSICS["Space Physics Engine (space_physics.cpp)<br/>- 6-DoF 剛体回転・並進運動方程式<br/>- 12基 RCS スラスタ推力合成<br/>- 3軸リアクションホイール角運動量力学<br/>- 10個の浮遊デブリ群動態計算"]
+    end
+
+    subgraph OFFICIAL_REFEREE["公式審判エンジン (Official Referee: SSOT)"]
+        REFEREE["オーソリテーティブ合否・スコアリング判定<br/>- デタンブル達成判定 (|ω| < 0.05 rad/s)<br/>- 脱出ゲート中心軸距離 r = √(y²+z²) 計測<br/>- ケーブル破断限界張力 (15,000N) 監視<br/>- デブリ再接触ペナルティ判定<br/>- 推進剤残量ボーナス計算<br/>- 確定フライトランク認定 (Grade S/A/B/C)"]
+    end
+
+    subgraph TELEMETRY_BUS["ゼロコピー高速配信バス"]
+        BUS["POSIX 共有メモリ (/dev/shm)<br/>& WebSocket テレメトリバス"]
+    end
+
+    subgraph UI_LAYER["Web 3D コックピット"]
+        WEB["リアルタイム観戦 UI<br/>- 3D Cyber Orbit Viewer<br/>- Official Referee Scorecard<br/>- Telemetry & C&W Gauges"]
+    end
+
+    subgraph PILOT_LAYER["プレイヤー自律誘導領域 (改ざん不可)"]
+        AUTOPILOT["自律誘導コード (pilot.py)<br/>- 読取専用テレメトリ取得<br/>- スラスタ / ホイール指令書き込み<br/>※スコア・物理の改ざんは原理的排除"]
+    end
+
+    SEED -->|"障害・衝突イベント"| SIM_ENGINE
+    AUTOPILOT -->|"推力・姿勢指令 (MMIO)"| SIM_ENGINE
+    SIM_ENGINE -->|"物理状態ベクトル (100Hz)"| OFFICIAL_REFEREE
+    OFFICIAL_REFEREE -->|"確定スコア・ステータス"| TELEMETRY_BUS
+    SIM_ENGINE -->|"機体座標・姿勢テレメトリ"| TELEMETRY_BUS
+    TELEMETRY_BUS --> UI_LAYER
+    TELEMETRY_BUS -->|"読取専用テレメトリ"| AUTOPILOT
+
+    classDef chaos fill:#450a0a,stroke:#f87171,stroke-width:2px,color:#fff;
+    classDef sim fill:#172554,stroke:#60a5fa,stroke-width:2px,color:#fff;
+    classDef ref fill:#2e1065,stroke:#c084fc,stroke-width:2px,color:#fff;
+    classDef bus fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#fff;
+    classDef pilot fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#fff;
+    class CHAOS chaos;
+    class SIM_ENGINE sim;
+    class OFFICIAL_REFEREE ref;
+    class TELEMETRY_BUS bus;
+    class UI_LAYER bus;
+    class PILOT_LAYER pilot;
+```
 
 * **改ざん防止**: パイロットコード側の書き換えによるスコア偽装を原理的に排除。
 * **高精度判定**: 100Hz の剛体力学ループ内でチェックポイント通過時の偏差や接触速度をミリ秒単位で正確に計測。
-* **全方位配信**: 共有メモリ（SHM: 144バイト）および `/tmp/space_guidance_telemetry.json` を通じて Web ダッシュボードとパイロットへリアルタイム配信。
+* **全方位配信**: 共有メモリ（SHM: 496バイト）および `/tmp/space_guidance_telemetry.json` を通じて Web ダッシュボードとパイロットへリアルタイム配信。
 
-### MMIO レジスタマップ仕様 (UIO 0x43C0_0000 / 共有メモリ 144バイト)
+### 3.3 MMIO レジスタマップ仕様 (UIO 0x43C0_0000 / 共有メモリ 144バイト)
 | オフセット | レジスタ名 | 属性 | 説明 |
 | :--- | :--- | :---: | :--- |
 | `0x00` | `CR_CTRL` | R/W | システム制御（Bit 0: Enable, Bit 1: E-STOP, Bit 2: FDIR Reset） |
@@ -167,19 +277,24 @@ flowchart TB
 | `0x0C` | `SENSOR_EDGE`| R | ハードウェア幾何重心偏差（符号付き Q16.16: -3.5〜+3.5 素子ピッチ単位、0.0が中心） |
 | `0x10` | `THRUST_CMD_X` | R/W | X軸（メイン推進 / 登坂）推力指令値（Q16.16: -50N〜+50N） |
 | `0x14` | `THRUST_CMD_Y` | R/W | Y軸（ラテラル横移動）推力指令値（Q16.16: -50N〜+50N） |
-| `0x18` | `THRUST_CMD_Z` | R/W | Z軸推力指令値（Q16.16） |
+| `0x18` | `THRUST_CMD_Z` | R/W | Z軸推力指令値 / Stage EX: 12ch スラスタパルス噴射マスク（Q16.16 / Bitmask） |
 | `0x1C` | `TORQUE_CMD` | R/W | RCS 姿勢回転トルク指令値（Q16.16: -20Nm〜+20Nm） |
 | `0x20` | `SAFETY_LIMIT` | R/W | ハードウェア最大推力・加速度リミッター設定値 |
 | `0x24` | `WATCHDOG_KICK` | W | ハードウェア監視タイマークリア（100ms 未更新で自動安全遮断） |
-| `0x28` | `CHAOS_FAULT_INJ` | R/W | F-BB カオス障害注入レジスタ（SEU, LOS, スラスタ固着） |
+| `0x28` | `CHAOS_FAULT_INJ` | R/W | F-BB カオス障害注入レジスタ（SEU, LOS, スラスタ固着, 衝突シード） |
 | `0x2C` | `WHEEL_TORQUE_CMD` | R/W | リアクションホイール電気駆動トルク指令値（Q16.16: -20Nm〜+20Nm） |
 | `0x30`〜`0x74` | `TELEMETRY_EXPORT` | R | 8バイト整列倍精度浮動小数点（`pos_x`, `pos_y`, `vel_x`, `vel_y`, `angle`, `omega`, `fuel`, `cross_track_err`, `wheel_rpm`） |
-| `0x78` | `FDIR_MODE` | R/W | 現在のアクティブ FDIR 制御モード（0: NOMINAL, 1: DEGRADED, 2: SAFE） |
-| `0x7C` | `STAGE_ID` | R | アクティブミッションステージ番号（1, 2, 3, 4） |
+| `0x78` | `FDIR_MODE` | R/W | 現在のアクティブ FDIR 制御モード（0: NOMINAL, 1: DEGRADED, 2: SAFE, 3: ESCAPE） |
+| `0x7C` | `STAGE_ID` | R | アクティブミッションステージ番号（1, 2, 3, 4, 5） |
 | `0x80` | `OFFICIAL_SCORE` | R | 公式審判確定スコア（符号付き 32-bit int: 点数 pts） |
 | `0x84` | `PASSED_GATES` | R | 通過済チェックポイント累積カウント |
 | `0x88` | `MISSION_STATUS`| R | ミッション状態（0: ACTIVE, 1: COMPLETE, 2: FAILED） |
 | `0x8C` | `TOTAL_GATES` | R | 当該ステージの総チェックポイント数 |
+| `0x90` | `TORQUE_X` | R/W | 拡張 6-DoF: RCS ロールトルク指令（Q16.16: -20Nm〜+20Nm） |
+| `0x94` | `TORQUE_Y` | R/W | 拡張 6-DoF: RCS ピッチトルク指令（Q16.16: -20Nm〜+20Nm） |
+| `0x98` | `WHEEL_TORQUE_X` | R/W | 拡張 6-DoF: リアクションホイール X軸（ロール制動）トルク指令 |
+| `0x9C` | `WHEEL_TORQUE_Y` | R/W | 拡張 6-DoF: リアクションホイール Y軸（ピッチ制動）トルク指令 |
+| `0xA0` | `THRUST_VERTICAL`| R/W | 拡張 6-DoF: 垂直推力 Z コマンド（Q16.16: -50N〜+50N） |
 
 ---
 
@@ -219,16 +334,19 @@ fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/03_iss_truss
 
 # Stage 4: 深宇宙光レーザードッキングの起動
 fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/04_laser_docking
+
+# Stage EX: パニックコントロール（最新最難関・デブリ衝突自律復旧）の起動
+fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/05_panic_control
 ```
 
 > **ローカル開発環境（`/workspaces` 等で直接作業している場合）**:
 > 相対パスまたは直接パスを指定して起動することも可能です：
 > ```bash
-> ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
+> ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/05_panic_control
 > ```
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の分割画面が自動ロードされます：
-  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の自転ドッキングポートを完全3D描画。
+  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の自転ドッキングポート、Stage EX のデブリ直撃ショックウェーブ＆12基スラスタ配置（破損ノズル赤色ブラケット）＆燃料蒸気リーク軌跡＆10個の浮遊デブリ群＆グリーン安全ゲートリングを完全3D描画。
   * **Official Referee Scorecard & Chaos FDIR**: リアルタイム公式スコア、確定フライトランク（Grade S/A/B/C）、チェックポイント通過進捗、審判イベントログを表示。カオス障害注入および `[Restart Scenario]` による即時再フライトが可能。
   * **SG Telemetry & C&W**: 推進剤残量バー、Master C&W 警報灯、姿勢角・速度計器。
   * **Registers & Tracer**: 全レジスタのリアルタイム16進数監視および時系列波形プロット。
@@ -245,6 +363,7 @@ bash scenario/01_asteroid_pipeline/run_mission.sh
 bash scenario/02_tether_climber/run_mission.sh
 bash scenario/03_iss_truss/run_mission.sh
 bash scenario/04_laser_docking/run_mission.sh
+bash scenario/05_panic_control/run_mission.sh --seed 0x1337
 ```
 
 ---
@@ -270,12 +389,14 @@ SpaceGuidance-FBB/
 │   ├── 01_asteroid_pipeline/     # 【Stage 1】小惑星回廊シナリオ (稼働中)
 │   ├── 02_tether_climber/        # 【Stage 2】宇宙テザークライマー (稼働中)
 │   ├── 03_iss_truss/             # 【Stage 3】ISS トラス点検機 (稼働中)
-│   └── 04_laser_docking/         # 【Stage 4】深宇宙レーザードッキング (稼働中)
+│   ├── 04_laser_docking/         # 【Stage 4】深宇宙レーザードッキング (稼働中)
+│   └── 05_panic_control/         # 【Stage EX】パニックコントロール・自律復旧 (最新稼働中)
 ├── examples/                     # 原本・リセット用お手本テンプレート
 │   ├── mission01_baseline_pilot.py   # Stage 1 原本
 │   ├── mission02_baseline_climber.py # Stage 2 原本
 │   ├── mission03_baseline_truss.py   # Stage 3 原本
-│   └── mission04_baseline_docker.py  # Stage 4 原本
+│   ├── mission04_baseline_docker.py  # Stage 4 原本
+│   └── mission05_baseline_panic.py   # Stage EX 原本
 └── panes/                        # DPPA Web ダッシュボード動的ペイン
     ├── sg-orbit-viewer/          # 3D サイバー・ワイヤーフレーム描画
     ├── sg-telemetry-gauge/       # テレメトリ＆C&W レッドアラート
