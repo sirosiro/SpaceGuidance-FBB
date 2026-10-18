@@ -83,7 +83,8 @@ public:
               double dt = 0.01, uint32_t direct_thruster_mask = 0,
               double torque_x = 0.0, double torque_y = 0.0,
               double wheel_torque_x = 0.0, double wheel_torque_y = 0.0,
-              double thrust_vertical = 0.0);
+              double thrust_vertical = 0.0,
+              double mission_elapsed_time = -1.0);
 
     // Compute sensor ADC values (packed into 32-bit uint)
     uint32_t compute_sensor_adc() const;

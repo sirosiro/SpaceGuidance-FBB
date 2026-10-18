@@ -91,6 +91,17 @@ class SpaceGuidanceHardware:
         self.mm = mmap.mmap(self.f.fileno(), file_size)
         self.uart_tee = UartTee(telemetry_uart) if telemetry_uart else None
 
+    def engage(self):
+        """
+        Explicit Engagement Trigger (CR_CTRL |= 0x08).
+        Signals official referee to start mission timer if not already triggered by commands.
+        """
+        self.mm.seek(0)
+        cr = struct.unpack("=I", self.mm.read(4))[0]
+        cr |= 0x08
+        self.mm.seek(0)
+        self.mm.write(struct.pack("=I", cr))
+
     def read_registers(self):
         self.mm.seek(0)
         data = self.mm.read(self.SIZE)
@@ -238,6 +249,37 @@ class SpaceGuidanceHardware:
     def kick_watchdog(self):
         self.mm.seek(36) # 0x24 WATCHDOG_KICK
         self.mm.write(struct.pack("=I", 1))
+
+    def print_summary(self, stage_title=None):
+        """
+        Official Flight Evaluation Summary (SSOT from OfficialReferee in SHM).
+        Learner-centric purity: pilot.py does not need redundant ASCII formatting or timing logic.
+        """
+        regs = self.read_registers()
+        title = stage_title if stage_title else f"STAGE {regs.get('stage_id', 1)} MISSION SUMMARY"
+        elapsed = regs.get("elapsed_time", 0.0)
+        score = regs.get("official_score", regs.get("score", 0))
+        grade = regs.get("official_grade", "IN_FLIGHT")
+        fuel = regs.get("fuel", 0.0)
+        passed = regs.get("passed_checkpoints", regs.get("passed_gates", 0))
+        total = regs.get("total_checkpoints", regs.get("total_gates", 0))
+        chk_pts = regs.get("checkpoint_score", 0)
+        bonus_pts = regs.get("bonus_score", 0)
+        last_evt = regs.get("last_event", "")
+
+        print("\n" + "=" * 70)
+        print(f"      OFFICIAL REFEREE EVALUATION (DAEMON SSOT) - {title}")
+        print("=" * 70)
+        print(f"  Official Flight Time : {elapsed:6.2f} s")
+        print(f"  Checkpoints Cleared  : {passed} / {total}")
+        print(f"  Checkpoint Score     : {chk_pts:,} pts")
+        print(f"  Bonus Score          : {bonus_pts:,} pts")
+        print(f"  Official Final Score : {score:,} pts")
+        print(f"  Remaining Propellant : {fuel:5.1f} %")
+        print(f"  Official Grade       : {grade}")
+        if last_evt:
+            print(f"  Referee Event        : {last_evt}")
+        print("=" * 70 + "\n")
 
     def close(self):
         if hasattr(self, 'uart_tee') and self.uart_tee:

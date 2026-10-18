@@ -27,8 +27,9 @@ public:
     bool checked[16] = {false};
     bool is_completed = false;
     bool is_failed = false;
+    bool is_started = false;
     std::string failure_reason = "";
-    std::string official_grade = "IN_FLIGHT";
+    std::string official_grade = "STANDBY";
     std::string last_event = "";
     double start_time = 0.0;
     double elapsed_time = 0.0;
@@ -43,10 +44,11 @@ public:
         for (int i = 0; i < 16; ++i) checked[i] = false;
         is_completed = false;
         is_failed = false;
+        is_started = false;
         failure_reason = "";
-        official_grade = "IN_FLIGHT";
-        last_event = "[REFEREE] Mission Started (Stage " + std::to_string(stage) + ")";
-        start_time = t_now;
+        official_grade = "STANDBY";
+        last_event = "[REFEREE] Standby (Stage " + std::to_string(stage) + ") - Waiting for pilot engage / first command";
+        start_time = 0.0;
         elapsed_time = 0.0;
         peak_metric = 0.0;
         if (stage == 1) total_checkpoints = 9;
@@ -56,8 +58,22 @@ public:
         else if (stage == 5) total_checkpoints = 3;
     }
 
+    void start(double t_now) {
+        if (!is_started) {
+            is_started = true;
+            start_time = t_now;
+            official_grade = "IN_FLIGHT";
+            last_event = "[REFEREE] Official Timing Started at t=" + std::to_string(t_now) + "s";
+            std::cout << "[Referee] " << last_event << std::endl;
+        }
+    }
+
     void update(const SpacecraftState& state, double cross_track_err, uint32_t fdir_mode, double dt, double t_now) {
         if (is_completed || is_failed) return;
+        if (!is_started) {
+            elapsed_time = 0.0;
+            return;
+        }
         elapsed_time = t_now - start_time;
 
         if (stage_id == 1) {
@@ -422,6 +438,15 @@ int main(int argc, char** argv) {
         auto now_tp = std::chrono::steady_clock::now();
         double t_now_sec = std::chrono::duration<double>(now_tp - start_tp).count();
 
+        // Check for pilot action / explicit engagement trigger (ADR #002)
+        bool has_first_action = (shm->cr_ctrl & 0x08) != 0 ||
+                                (shm->thrust_cmd_x != 0) ||
+                                (shm->thrust_cmd_y != 0) ||
+                                (shm->thrust_cmd_z != 0) ||
+                                (shm->torque_cmd != 0) ||
+                                (shm->wheel_torque_cmd != 0) ||
+                                (shm->fdir_mode != 0);
+
         double fx = static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0 * 50.0;
         double fy = static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0 * 50.0;
         double tau_rcs = static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0;
@@ -447,9 +472,19 @@ int main(int argc, char** argv) {
             tau_w_x = ext_cmd[2] / 65536.0 * 20.0; // wheel_torque_x_cmd
             tau_w_y = ext_cmd[3] / 65536.0 * 20.0; // wheel_torque_y_cmd
             fz      = ext_cmd[4] / 65536.0 * 50.0; // thrust_vertical_cmd
+
+            if (ext_cmd[0] != 0 || ext_cmd[1] != 0 || ext_cmd[2] != 0 || ext_cmd[3] != 0 || ext_cmd[4] != 0) {
+                has_first_action = true;
+            }
         }
 
-        physics.step(fx, fy, tau_rcs, tau_wheel, 0.01, direct_thruster_mask, tau_x, tau_y, tau_w_x, tau_w_y, fz);
+        // Trigger official referee timing upon first action (ADR #002)
+        if (!referee.is_started && has_first_action) {
+            referee.start(t_now_sec);
+        }
+
+        double mission_t = referee.is_started ? referee.elapsed_time : 0.0;
+        physics.step(fx, fy, tau_rcs, tau_wheel, 0.01, direct_thruster_mask, tau_x, tau_y, tau_w_x, tau_w_y, fz, mission_t);
 
         uint32_t adc = physics.compute_sensor_adc();
         shm->sensor_raw = adc;

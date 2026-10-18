@@ -268,7 +268,8 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
                               double dt, uint32_t direct_thruster_mask,
                               double torque_x, double torque_y,
                               double wheel_torque_x, double wheel_torque_y,
-                              double thrust_vertical) {
+                              double thrust_vertical,
+                              double mission_elapsed_time) {
     if (stage_id_ == 2) {
         // -------------------------------------------------------------
         // Stage 2: 1D Tether Climber Dynamics with Coupled String Resonance
@@ -391,16 +392,37 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         // -------------------------------------------------------------
         // Stage 5: Full 6-DoF Panic Control (Multi-Axis Collision & Recovery)
         // -------------------------------------------------------------
-        stage5_elapsed_time_ += dt;
+        if (mission_elapsed_time >= 0.0) {
+            stage5_elapsed_time_ = mission_elapsed_time;
+        } else {
+            stage5_elapsed_time_ += dt;
+        }
+
+        // Before impact at T < 0.6s: strictly nominal straight cruise, zero tumbling!
+        if (stage5_elapsed_time_ < 0.6) {
+            has_impacted_ = false;
+            state_.omega_x = 0.0;
+            state_.omega_y = 0.0;
+            state_.omega_z = 0.0;
+            state_.omega   = 0.0;
+            state_.roll    = 0.0;
+            state_.pitch   = 0.0;
+            state_.yaw     = 0.0;
+            state_.angle   = 0.0;
+            state_.vel.y   = 0.0;
+            state_.vel_z   = 0.0;
+            state_.thruster_health_mask = 0x0FFF; // All 12 thrusters intact prior to collision
+            return;
+        }
 
         // Collision Event at T = 0.6s (Debris hits spacecraft body with off-axis 3D impulse)
-        if (stage5_elapsed_time_ >= 0.6 && !has_impacted_) {
+        if (!has_impacted_) {
             has_impacted_ = true;
             // 3D chaotic tumbling rates from seed-correlated impact dynamics
             state_.omega_x = impact_scenario_.angular_rate.x;
             state_.omega_y = impact_scenario_.angular_rate.y;
             state_.omega_z = impact_scenario_.angular_rate.z;
-            state_.omega = state_.omega_z;// Legacy sync
+            state_.omega = state_.omega_z; // Legacy sync
             // 3D linear impulse momentum drift
             state_.vel.x = impact_scenario_.linear_drift.x;
             state_.vel.y = impact_scenario_.linear_drift.y;

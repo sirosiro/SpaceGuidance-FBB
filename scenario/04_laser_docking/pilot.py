@@ -27,7 +27,6 @@ def run_pilot():
     kd_att = 1.20              # 角速度ダンピング
     v_contact_target = 0.018   # 目標接触速度 (0.005 ~ 0.035 m/s)
 
-    start_time = time.time()
     checkpoint_dist = [40.0, 30.0, 20.0, 10.0, 5.0, 2.0, 1.0]
     checked = [False] * len(checkpoint_dist)
 
@@ -51,32 +50,8 @@ def run_pilot():
 
             # ドッキング接触判定
             if dist <= 0.05:
-                elapsed = time.time() - start_time
-                print(f"\n============================================================")
-                print(f"🏁 [DOCKING CONTACT] Port Latch Engaged!")
-                print(f"⏱️ Contact Speed: {approach_vel:.4f} m/s (Target: 0.005-0.035 m/s)")
-                print(f"🎯 Final Alignment Offset: {abs(qpd_err)*100.0:.2f} cm")
-                print(f"🔋 Delta-V / Fuel Left: {fuel:.1f}% | Elapsed Time: {elapsed:.2f}s")
-
-                speed_ok = (0.005 <= approach_vel <= 0.035)
-                align_ok = (abs(qpd_err) <= 0.02)
                 time.sleep(0.15)
-                print("\n======================================================================")
-                print("      STAGE 4 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
-                print("======================================================================")
-                print(f"  Docking Time         : {time.time() - start_time:.2f} s")
-                print(f"  Remaining RCS Prop   : {fuel:.1f}%")
-                print(f"  Contact Velocity     : {approach_vel:.3f} m/s")
-                # Official evaluation from hardware telemetry (Zero Disk I/O)
-                t = hw.read_registers()
-                print(f"  Official Score       : {t.get('score', t.get('official_score', 0)):,} pts")
-                print(f"  Approach Score       : {t.get('checkpoint_score', 0):,} pts")
-                print(f"  Contact Bonus        : {t.get('bonus_score', 0):,} pts")
-                print(f"  Ranges Cleared       : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 7)}")
-                print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
-                print(f"  Referee Event        : {t.get('last_event', '')}")
-                print("======================================================================\n")
-                break
+                hw.print_summary("STAGE 4: DEEP SPACE LASER DOCKING")
                 break
 
             # 誘導制御

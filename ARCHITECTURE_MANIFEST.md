@@ -12,6 +12,11 @@
    - すべての観測情報・6-DoF テレメトリは POSIX 共有メモリ（`/dev/shm/fbb_space_guidance_shm`）に Seqlock 方式で直接書き込み、Web ダッシュボードやコントローラがメモリ直読でゼロ遅延観測を行う。
 3. **Single Source of Truth (公式審判 SSOT)**:
    - スコアリング、チェックポイント通過判定、ミッション合否、公式グレード判定は、C++ 物理デーモン内部の `OfficialReferee` が唯一の真実（SSOT）として決定し、共有メモリ経由で全ペイン・スクリプトへ配信する。
+4. **Fair Engagement Timing & Zero Preparation Penalty (初動トリガーによる準備時間と競技時間の完全分離)**:
+   - AI モデル（PyTorch / ONNX）のロード、重み展開、事前軌道生成等の「準備時間」は飛行時間およびタイムボーナス減点から完全に除外する。
+   - 公式審判（`OfficialReferee`）のタイマースタートは、プレイヤーがハードウェアへ最初の有効な制御コマンド（推力またはホイールトルク）を発行した瞬間（First Control Engagement）に自動発火させる。
+5. **Learner-Centric Purity in Autopilot (自律操縦スクリプトの完全ピュア化)**:
+   - `pilot.py` は純粋な誘導・航法・制御（GNC: Guidance, Navigation, Control）ロジックおよびゴール時の安全停止（スラストゼロ & `break`）のみに専念する。自前のタイマー計測（`time.time()`）や 20行超のプレゼンテーション用 ASCII バナー整形コードの配置を禁止し、公式審判リザルトの表示は `SpaceGuidanceHardware` の 1 行ヘルパー（`hw.print_summary()`）へ完全にカプセル化する。
 
 ---
 
@@ -62,3 +67,12 @@
 - **2026-10-17: ADR #001 共有メモリ直結型テレメトリ（Zero Disk I/O）の導入**
   - **Decision**: 毎秒 100 回のディスク一時ファイル書き込み（`/tmp/space_guidance_telemetry.json`）を完全撤廃し、`include/space_guidance_shm.h` で定義される 496 バイトの POSIX 共有メモリ構造体（Seqlock 制御）へと完全移行した。
   - **Rationale**: 外部 PC（MacBook M4 等）からの接続時におけるマイクロスタッターやファイル I/O 詰まりを根絶し、シミュレーション全体の CPU 使用率・ディスク負荷を劇的に低減するため。
+
+- **2026-10-18: ADR #002 初動トリガー方式（First Action Timing Protocol）とパイロットコードの完全ピュア化**
+  - **Decision**:
+    1. C++ 物理デーモン内の `OfficialReferee` において、デーモン起動時からの無条件タイマースタートを廃止し、最初の推力/トルク制御コマンド受信（またはスタートライン通過）を検知して公式タイマーを始動する「初動トリガー方式」を導入。ゴール到達時に公式タイマーを自動停止・確定する。
+    2. 全ステージ（01〜05）の `pilot.py` 内に散乱していた自前の `start_time` / `elapsed` 計測および 20行超のスコア print バナーを一掃。`SpaceGuidanceHardware` 側に公式審判 SSOT から確定値を整形出力する `hw.print_summary(stage_name)` を新設し、`pilot.py` 側は 1 行の呼び出しへ集約。
+  - **Rationale**:
+    - AI や事前最適化アルゴリズムを導入したプレイヤーが、モデル読込やデータ準備時間を理由に理不尽なタイムペナルティを受ける構造的欠陥を排除し、公平な競技環境を確立するため。
+    - プレイヤーの自己申告計測によるチート（`elapsed` 改ざん）を物理的に排除し、100% 公式審判 SSOT による決定論的公正性を担保するため。
+    - 学習者・開発者が余計なインフラや表示整形コードに惑わされず、制御工学の本質に 100% 集中できる Learner-Centric Purity を確立するため。

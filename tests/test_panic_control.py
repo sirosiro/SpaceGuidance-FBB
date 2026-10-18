@@ -36,6 +36,10 @@ def test_stage_ex_panic_control():
         initial_tlm = hw.read_registers()
         hw.kick_watchdog()
         assert initial_tlm["stage_id"] == 5, f"Expected stage_id 5, got {initial_tlm['stage_id']}"
+        assert abs(initial_tlm["omega"]) < 1e-4, f"Expected zero spin before engage, got {initial_tlm['omega']}"
+
+        # Explicitly engage mission timer (ADR #002)
+        hw.engage()
 
         # Wait for collision impact event at T = 0.6s
         impact_detected = False

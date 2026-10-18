@@ -28,7 +28,6 @@ def run_pilot():
 
     inspection_joints = [15.0, 30.0, 45.0, 60.0]
     joint_scanned = [False] * len(inspection_joints)
-    start_time = time.time()
     last_print_dist = 0.0
 
     try:
@@ -66,27 +65,8 @@ def run_pilot():
 
             # ゴール完了判定 (全ジョイントスキャン完了かつ60m到達)
             if pos_x >= 59.8 and all(joint_scanned):
-                elapsed = time.time() - start_time
-                print(f"\n============================================================")
-                print(f"🏁 [MISSION COMPLETE] ISS Truss Survey Complete! (Distance: {pos_x:.2f}m)")
-                print(f"⏱️ Clear Time: {elapsed:.2f}s | 🔋 Battery Left: {fuel:.1f}%")
-
                 time.sleep(0.15)
-                print("\n======================================================================")
-                print("      STAGE 3 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
-                print("======================================================================")
-                print(f"  Inspection Time      : {elapsed:.2f} s")
-                print(f"  Remaining Battery    : {fuel:.1f}%")
-                # Official evaluation from hardware telemetry (Zero Disk I/O)
-                t = hw.read_registers()
-                print(f"  Official Score       : {t.get('score', t.get('official_score', 0)):,} pts")
-                print(f"  Joints Score         : {t.get('checkpoint_score', 0):,} pts")
-                print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
-                print(f"  Joints Inspected     : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 4)}")
-                print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
-                print(f"  Referee Event        : {t.get('last_event', '')}")
-                print("======================================================================\n")
-                break
+                hw.print_summary("STAGE 3: ISS TRUSS INSPECTION")
                 break
 
             # 進捗ログ表示 (5m毎)

@@ -25,6 +25,7 @@ from guidance_controller import SpaceGuidanceHardware, UartTee
 def run_pilot():
     tee = UartTee("/dev/ttyPS1")
     hw = SpaceGuidanceHardware()
+    hw.engage() # 公式タイマースタート (ADR #002)
 
     print("\n======================================================================")
     print("  🚨 STAGE EX: EMERGENCY DEBRIS IMPACT - PANIC CONTROL AUTOPILOT 🚨   ")
@@ -34,7 +35,7 @@ def run_pilot():
     print("======================================================================\n")
 
     dt = 0.02
-    start_time = time.time()
+    panic_start_time = time.time()
 
     # === TUNE ZONE 1: デタンブル制動ゲイン ===
     kd_detumble = 0.85       # レートダンピングゲイン
@@ -91,25 +92,8 @@ def run_pilot():
             # ゴール判定 (X >= 35.0m で安全圏脱出)
             # -------------------------------------------------------------
             if pos_x >= 35.0 or tlm.get("mission_status", 0) == 1:
-                elapsed = time.time() - start_time
                 time.sleep(0.15)
-                print("\n======================================================================")
-                print("      STAGE EX CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)      ")
-                print("======================================================================")
-                print(f"  Autopilot Flight Time: {elapsed:.2f} s")
-                print(f"  Remaining Propellant : {fuel:.1f}%")
-                print(f"  Flywheel RPM (Z)     : {wheel_rpm:.0f} RPM")
-                print(f"  Final Y Position     : {pos_y:+.2f} m (Green Safe Gate: |Y| <= 6.0m)")
-                print(f"  Final Z Position     : {pos_z:+.2f} m")
-                # Official evaluation from hardware telemetry (Zero Disk I/O)
-                t = hw.read_registers()
-                print(f"  Official Score       : {t.get('score', t.get('official_score', 0)):,} pts")
-                print(f"  Checkpoint Score     : {t.get('checkpoint_score', 0):,} pts")
-                print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
-                print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
-                print(f"  Debris Collisions    : {t.get('debris_hits', 0)} hits")
-                print(f"  Referee Event        : {t.get('last_event', '')}")
-                print("======================================================================\n")
+                hw.print_summary("STAGE 5: PANIC CONTROL")
                 break
 
             if fuel <= 0.0:
@@ -120,7 +104,7 @@ def run_pilot():
             # PHASE 0: 衝突緊急事態検知 & 3Dカオスタンブリング観察 (4.5秒間)
             # -------------------------------------------------------------
             if phase == 0:
-                elapsed_panic = time.time() - start_time
+                elapsed_panic = time.time() - panic_start_time
                 hw.write_commands(0.0, 0.0, 0.0, 0.0, fdir_mode=0)
                 spin_deg = omega_mag * 180.0 / math.pi
                 if int(elapsed_panic * 10) % 5 == 0:

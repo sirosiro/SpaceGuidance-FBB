@@ -9,7 +9,6 @@ import math
 import json
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.abspath(os.path.join(script_dir, "..", "..", "ros2", "nodes")))
 sys.path.append(os.path.abspath(os.path.join(script_dir, "..", "ros2", "nodes")))
 from guidance_controller import SpaceGuidanceHardware, UartTee
 
@@ -37,7 +36,6 @@ def run_pilot():
     beacon_spacing = 10.0
     total_beacons = 9
     checked_beacons = [False] * total_beacons
-    start_time = time.time()
     current_drive_cmd = 0.0
 
     try:
@@ -60,28 +58,8 @@ def run_pilot():
 
             # 4. ゴール到達判定 (100m GEO Dock)
             if altitude >= 100.0:
-                elapsed = time.time() - start_time
-                print(f"\n============================================================")
-                print(f"🏁 [MISSION COMPLETE] Docked at GEO Orbital Platform! (Alt: {altitude:.2f}m)")
-                print(f"⏱️ Clear Time: {elapsed:.2f}s | 🔋 Battery/Fuel Left: {fuel:.1f}%")
-
                 time.sleep(0.15)
-                print("\n======================================================================")
-                print("      STAGE 2 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
-                print("======================================================================")
-                print(f"  Climb Flight Time    : {elapsed:.2f} s")
-                print(f"  Remaining Battery    : {fuel:.1f}%")
-                print(f"  Cable Tension        : {tension:.0f} N (Limit: 15,000 N)")
-                # Official evaluation from hardware telemetry (Zero Disk I/O)
-                t = hw.read_registers()
-                print(f"  Official Score       : {t.get('score', t.get('official_score', 0)):,} pts")
-                print(f"  Beacon Score         : {t.get('checkpoint_score', 0):,} pts")
-                print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
-                print(f"  Beacons Reached      : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 9)}")
-                print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
-                print(f"  Referee Event        : {t.get('last_event', '')}")
-                print("======================================================================\n")
-                break
+                hw.print_summary("STAGE 2: TETHER CLIMBER")
                 break
 
             # 5. 10mおきのビーコン通過スコアリング

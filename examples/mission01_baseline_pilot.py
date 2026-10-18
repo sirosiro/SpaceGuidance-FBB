@@ -35,7 +35,6 @@ def run_pilot():
     # 制御周期: 50Hz (20ms)
     dt = 0.02
     prev_error = 0.0
-    start_time = time.time()
 
     # === TUNE ZONE 1: 制御ゲインのチューニング ===
     kp = 0.90    # 旋回比例ゲイン
@@ -96,25 +95,11 @@ def run_pilot():
                     gate_idx = int(gate_x / 5.0)
                     dev_m = abs(cross_track_err)
                     print(f"[NAV GATE {gate_idx:02d}] Reached X={gate_x:4.1f}m | Dev: {dev_m*100:4.1f}cm | RW: {wheel_rpm:5.0f} RPM")
+
             # 4. ゴール到達判定 (Stage 1 は 50m パイプライン)
             if pos_x >= 49.0:
-                elapsed = time.time() - start_time
                 time.sleep(0.15)
-                print("\n======================================================================")
-                print("      STAGE 1 CLEAR - OFFICIAL REFEREE EVALUATION (DAEMON SSOT)       ")
-                print("======================================================================")
-                print(f"  Autopilot Flight Time: {elapsed:.2f} s")
-                print(f"  Remaining Fuel       : {fuel:.1f}%")
-                print(f"  Flywheel RPM         : {wheel_rpm:.0f} RPM (Limit: 6,000 RPM)")
-                # Official evaluation from hardware telemetry (Zero Disk I/O)
-                t = hw.read_registers()
-                print(f"  Official Score       : {t.get('score', t.get('official_score', 0)):,} pts")
-                print(f"  Gate Score           : {t.get('checkpoint_score', 0):,} pts")
-                print(f"  Bonus Score          : {t.get('bonus_score', 0):,} pts")
-                print(f"  Gate Clearance       : {t.get('passed_checkpoints', 0)} / {t.get('total_checkpoints', 9)} Gates")
-                print(f"  Official Grade       : {t.get('official_grade', 'N/A')}")
-                print(f"  Referee Event        : {t.get('last_event', '')}")
-                print("======================================================================\n")
+                hw.print_summary("STAGE 1: ASTEROID PIPELINE")
                 break
 
             # 5. カオス障害（通信途絶）のハンドリング
@@ -131,8 +116,6 @@ def run_pilot():
             # 7. PD 姿勢制御指令値
             target_torque = +(kp * error + kd * d_error) - (kw * omega)
 
-            # 8. ハイブリッド姿勢制御 (リアクションホイール優先 + RCS脱飽和アンローディング)
-            # リアクションホイールは電気駆動で推進剤消費ゼロ！
             # 8. ハイブリッド姿勢制御 (リアクションホイール優先 + RCS脱飽和アンローディング)
             # リアクションホイールは電気駆動で推進剤消費ゼロ！
             # 作用・反作用: 機体に+トルクを加えるには、ホイールに-トルクを印加 (tau_body = -tau_wheel)
