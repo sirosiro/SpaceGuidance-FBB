@@ -38,11 +38,11 @@ def run_pilot():
     panic_start_time = time.time()
 
     # === TUNE ZONE 1: デタンブル制動ゲイン ===
-    kd_detumble = 0.85       # レートダンピングゲイン
+    kd_detumble = 2.5        # レートダンピングゲイン (RCS)
     rw_gain = 1.0            # リアクションホイール最大トルク比率
 
     # === TUNE ZONE 2: 脱出巡航パラメータ ===
-    escape_speed_target = 2.2 # 目標脱出速度 (m/s)
+    escape_speed_target = 1.8 # 目標脱出速度 (m/s)
 
     # 12基 6-DoF RCS スラスタ公称特性マトリクス
     THRUSTER_PROPERTIES = [
@@ -61,8 +61,9 @@ def run_pilot():
     ]
 
     healthy_thrusters = set()
-    phase = 0 # 0: Panic Prologue Assessment (4.5s), 1: 3D Detumble, 2: 12-ch SysID, 3: 6-DoF Escape
+    phase = 0 # 0: Panic Prologue Assessment, 1: 3D Detumble, 2: 12-ch SysID, 3: 6-DoF Escape
     detumble_stable_ticks = 0
+    last_logged_x = -1
 
     try:
         while True:
@@ -101,7 +102,7 @@ def run_pilot():
                 break
 
             # -------------------------------------------------------------
-            # PHASE 0: 衝突緊急事態検知 & 3Dカオスタンブリング観察 (4.5秒間)
+            # PHASE 0: 衝突緊急事態検知 & 3Dカオスタンブリング観察 (4.5秒間プロローグ)
             # -------------------------------------------------------------
             if phase == 0:
                 elapsed_panic = time.time() - panic_start_time
@@ -127,7 +128,7 @@ def run_pilot():
                 rw_torque_x = -rw_gain * math.copysign(1.0, omega_x) if abs(omega_x) > 0.02 else 0.0
                 rw_torque_y = -rw_gain * math.copysign(1.0, omega_y) if abs(omega_y) > 0.02 else 0.0
 
-                # RCS レートダンピング逆噴射
+                # RCS レートダンピング逆噴射 (ピッチ・ヨー軸)
                 rcs_torque_z = -kd_detumble * omega_z
                 rcs_torque_y = -kd_detumble * omega_y
 
@@ -141,7 +142,8 @@ def run_pilot():
 
                 if omega_mag < 0.05:
                     detumble_stable_ticks += 1
-                    if detumble_stable_ticks > 15: # 0.3秒安定
+                    # 公式審判の制動判定 (0.5秒保持) を確実にラッチ
+                    if detumble_stable_ticks >= 26 or tlm.get("is_detumbled", 0) == 1:
                         print(f"\n[PHASE 1 COMPLETE] Spacecraft 3D Detumbled! (|omega|={omega_mag:.4f} rad/s)")
                         print("[PHASE 2 ENGAGED] Starting Online System Identification (12-ch SysID)...")
                         phase = 2
@@ -162,9 +164,9 @@ def run_pilot():
                     wb_y = tlm_b.get("omega_y", 0.0)
                     wb_z = tlm_b.get("omega_z", tlm_b["omega"])
 
-                    # 30ms パルス噴射
+                    # 25ms 微小パルス噴射
                     hw.write_thruster_pulse(1 << idx)
-                    time.sleep(0.04)
+                    time.sleep(0.025)
                     tlm_a = hw.read_registers()
                     wa_x = tlm_a.get("omega_x", 0.0)
                     wa_y = tlm_a.get("omega_y", 0.0)
@@ -172,7 +174,7 @@ def run_pilot():
                     hw.write_thruster_pulse(0)
 
                     delta_w = math.sqrt((wa_x - wb_x)**2 + (wa_y - wb_y)**2 + (wa_z - wb_z)**2)
-                    is_ok = delta_w > 0.012
+                    is_ok = delta_w > 0.010
                     name = THRUSTER_PROPERTIES[idx]["name"]
                     if is_ok:
                         healthy_thrusters.add(idx)
@@ -180,15 +182,14 @@ def run_pilot():
                     else:
                         print(f"  ✗ Thruster {name}: DAMAGED / DEAD (Zero response)")
 
-                    # ホイールで角速度残余を相殺
+                    # リアクションホイールで角速度残余を即時相殺（燃料消費ゼロ）
                     hw.write_reaction_wheel(
-                        -math.copysign(0.5, wa_z),
-                        wheel_torque_x=-math.copysign(0.5, wa_x),
-                        wheel_torque_y=-math.copysign(0.5, wa_y)
+                        -max(-0.6, min(0.6, 2.0 * wa_z)),
+                        wheel_torque_x=-max(-0.6, min(0.6, 2.0 * wa_x)),
+                        wheel_torque_y=-max(-0.6, min(0.6, 2.0 * wa_y))
                     )
-                    time.sleep(0.02)
+                    time.sleep(0.015)
                     hw.write_reaction_wheel(0.0, 0.0, 0.0)
-                    time.sleep(0.01)
 
                 print(f"\n[PHASE 2 COMPLETE] Healthy Thrusters Identified: {sorted(list(healthy_thrusters))}")
                 print("[PHASE 3 ENGAGED] Initiating Control Allocation & 6-DoF Escape Burn...")
@@ -198,62 +199,90 @@ def run_pilot():
             # PHASE 3: 制御配分 & 6-DoF脱出バーン (Control Allocation & Escape)
             # -------------------------------------------------------------
             elif phase == 3:
-                # 健全スラスタ群から最適なゼロトルク推力ペアを選択
+                # 健全スラスタ群からトルクゼロ (tau_z = 0) の最適前進推力ペアを選択
                 burn_mask = 0
                 target_att = 0.0
 
                 if 0 in healthy_thrusters and 1 in healthy_thrusters:
+                    # T0 (Fwd, tau=-20) + T1 (Fwd, tau=+20) -> Fx=+40, Fy=0, tau=0
                     burn_mask = (1 << 0) | (1 << 1)
                     target_att = 0.0
                 elif 0 in healthy_thrusters and 5 in healthy_thrusters:
+                    # T0 (Fwd, tau=-20) + T5 (Port, tau=+20) -> Fx=+20, Fy=+20, tau=0
                     burn_mask = (1 << 0) | (1 << 5)
                     target_att = -math.pi / 4.0
-                elif 1 in healthy_thrusters and 4 in healthy_thrusters:
-                    burn_mask = (1 << 1) | (1 << 4)
+                elif 0 in healthy_thrusters and 6 in healthy_thrusters:
+                    # T0 (Fwd, tau=-20) + T6 (Stbd, tau=+20) -> Fx=+20, Fy=-20, tau=0
+                    burn_mask = (1 << 0) | (1 << 6)
                     target_att = math.pi / 4.0
-                elif 0 in healthy_thrusters:
-                    burn_mask = (1 << 0)
-                    target_att = -0.2
+                elif 1 in healthy_thrusters and 4 in healthy_thrusters:
+                    # T1 (Fwd, tau=+20) + T4 (Port, tau=-20) -> Fx=+20, Fy=+20, tau=0
+                    burn_mask = (1 << 1) | (1 << 4)
+                    target_att = -math.pi / 4.0
+                elif 1 in healthy_thrusters and 7 in healthy_thrusters:
+                    # T1 (Fwd, tau=+20) + T7 (Stbd, tau=-20) -> Fx=+20, Fy=-20, tau=0
+                    burn_mask = (1 << 1) | (1 << 7)
+                    target_att = math.pi / 4.0
+                elif 4 in healthy_thrusters and 5 in healthy_thrusters:
+                    # T4 (Port, tau=-20) + T5 (Port, tau=+20) -> Fy=+40, tau=0
+                    burn_mask = (1 << 4) | (1 << 5)
+                    target_att = -math.pi / 2.0
+                elif 6 in healthy_thrusters and 7 in healthy_thrusters:
+                    # T6 (Stbd, tau=+20) + T7 (Stbd, tau=-20) -> Fy=-40, tau=0
+                    burn_mask = (1 << 6) | (1 << 7)
+                    target_att = math.pi / 2.0
                 else:
-                    burn_mask = (1 << 0)
+                    burn_mask = (1 << 0) if 0 in healthy_thrusters else (1 << 1)
                     target_att = 0.0
 
-                # 視線誘導 (Line-of-Sight Guidance) による緑サークル中心 (X=35, Y=0, Z=0) への確実な誘導
-                vy_desired = max(-1.2, min(1.2, -0.6 * pos_y))
+                # 視線誘導 (Line-of-Sight Guidance) による中央コリドー (Y=0, Z=0) への誘導
+                vy_desired = max(-0.35, min(0.35, -0.30 * pos_y))
                 vy_err = vy_desired - vel_y
 
-                vz_desired = max(-0.8, min(0.8, -0.6 * pos_z))
+                vz_desired = max(-0.35, min(0.35, -0.6 * pos_z))
                 vz_err = vz_desired - vel_z
 
-                los_bias = 0.40 * vy_err - 0.25 * pos_y
-                steer_target = max(target_att - 0.55, min(target_att + 0.55, target_att + los_bias))
+                los_bias = 0.50 * vy_err - 0.25 * pos_y
+                steer_target = max(target_att - 0.40, min(target_att + 0.40, target_att + los_bias))
 
                 att_err = steer_target - angle
                 while att_err > math.pi: att_err -= 2.0 * math.pi
                 while att_err < -math.pi: att_err += 2.0 * math.pi
 
-                tau_rw_z = 1.2 * att_err - 0.9 * omega_z
+                tau_rw_z = 1.5 * att_err - 0.8 * omega_z
                 wheel_cmd_z = max(-0.8, min(0.8, tau_rw_z))
 
                 # 3軸ホイールによるピッチ・ロールの常時ゼロ位ロック
-                wheel_cmd_x = max(-0.8, min(0.8, -1.2 * roll - 0.9 * omega_x))
-                wheel_cmd_y = max(-0.8, min(0.8, -1.2 * pitch - 0.9 * omega_y))
+                wheel_cmd_x = max(-0.8, min(0.8, -1.5 * roll - 0.8 * omega_x))
+                wheel_cmd_y = max(-0.8, min(0.8, -1.5 * pitch - 0.8 * omega_y))
 
-                is_aligned = abs(att_err) < 0.25
-                needs_cross_corr = abs(pos_y) > 1.0 and abs(vy_err) > 0.15
-                active_burn = burn_mask if (is_aligned and (vel_x < escape_speed_target or (needs_cross_corr and vel_x < 2.5))) else 0
-                rcs_cmd = max(-0.8, min(0.8, tau_rw_z * 0.7)) if active_burn == 0 else 0.0
+                # 垂直Z軸アクティブ制御 (BULLSEYE 確約: Z -> 0, Vz -> 0)
+                vert_mask = 0
+                if vz_err > 0.08 and 8 in healthy_thrusters and 10 in healthy_thrusters:
+                    vert_mask = (1 << 8) | (1 << 10)
+                elif vz_err < -0.08 and 9 in healthy_thrusters and 11 in healthy_thrusters:
+                    vert_mask = (1 << 9) | (1 << 11)
+
+                is_aligned = abs(att_err) < 0.16
+                needs_cross_corr = abs(pos_y) > 0.25 and vel_x < 2.0
+                fwd_burn = burn_mask if (is_aligned and (vel_x < escape_speed_target or needs_cross_corr)) else 0
+                active_burn = fwd_burn | vert_mask
 
                 hw.write_commands(
                     thrust_x=0.0,
                     thrust_y=0.0,
-                    torque=rcs_cmd,
+                    torque=0.0, # ブラインドミキサー干渉を防ぎホイール単独で高精度姿勢維持
                     wheel_torque=wheel_cmd_z,
                     fdir_mode=3,
                     thrust_z=active_burn,
                     wheel_torque_x=wheel_cmd_x,
                     wheel_torque_y=wheel_cmd_y
                 )
+
+                if int(pos_x) % 5 == 0 and int(pos_x) != last_logged_x:
+                    last_logged_x = int(pos_x)
+                    r_c = math.sqrt(pos_y**2 + pos_z**2)
+                    print(f"  [CRUISE] X={pos_x:4.1f}m | Y={pos_y:+5.2f}m Z={pos_z:+5.2f}m (r={r_c:4.2f}m) | Vx={vel_x:4.2f} Vy={vel_y:+4.2f} Vz={vel_z:+4.2f} m/s | Yaw={angle*57.3:+5.1f}° | Burn=0x{active_burn:03X}")
 
             time.sleep(dt)
 

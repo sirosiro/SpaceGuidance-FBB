@@ -144,6 +144,9 @@ export default function SpaceOrbitViewer3D() {
     const container = containerRef.current;
     if (!THREE || !glCanvas || !hudCanvas || !container) return;
 
+    // Resolve owner window (works seamlessly in both main Dockview and PopoutWindow child windows)
+    const targetWin = container.ownerDocument?.defaultView || window;
+
     let animId;
     let renderer;
     try {
@@ -153,7 +156,7 @@ export default function SpaceOrbitViewer3D() {
         alpha: false,
         powerPreference: 'high-performance'
       });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setPixelRatio(Math.min(targetWin.devicePixelRatio || 1, 2));
       renderer.setClearColor(0x030712, 1.0);
     } catch (e) {
       console.error('[sg-orbit-viewer] Failed to create Three.js WebGLRenderer:', e);
@@ -911,16 +914,21 @@ export default function SpaceOrbitViewer3D() {
     // Main Animation & Render Loop (120 FPS Native GPU Pipeline)
     // ------------------------------------------------------------------------
     const render = () => {
-      const clientW = container.clientWidth || 300;
-      const clientH = container.clientHeight || 150;
+      try {
+        const clientW = Math.max(container.clientWidth || 300, 10);
+        const clientH = Math.max(container.clientHeight || 150, 10);
 
-      if (glCanvas.width !== clientW || glCanvas.height !== clientH) {
-        renderer.setSize(clientW, clientH, false);
-        camera.aspect = clientW / clientH;
-        camera.updateProjectionMatrix();
-        hudCanvas.width = clientW;
-        hudCanvas.height = clientH;
-      }
+        const dpr = targetWin.devicePixelRatio || 1;
+        const expectedGlW = Math.floor(clientW * Math.min(dpr, 2));
+        const expectedGlH = Math.floor(clientH * Math.min(dpr, 2));
+
+        if (glCanvas.width !== expectedGlW || glCanvas.height !== expectedGlH) {
+          renderer.setSize(clientW, clientH, false);
+          camera.aspect = clientW / clientH;
+          camera.updateProjectionMatrix();
+          hudCanvas.width = clientW;
+          hudCanvas.height = clientH;
+        }
 
       const now = Date.now();
       const nowSec = now * 0.001;
@@ -1468,13 +1476,17 @@ export default function SpaceOrbitViewer3D() {
         }
       }
 
-      animId = requestAnimationFrame(render);
+      } catch (err) {
+        console.error('[sg-orbit-viewer] Render error:', err);
+      } finally {
+        animId = targetWin.requestAnimationFrame(render);
+      }
     };
 
-    animId = requestAnimationFrame(render);
+    animId = targetWin.requestAnimationFrame(render);
 
     return () => {
-      cancelAnimationFrame(animId);
+      targetWin.cancelAnimationFrame(animId);
       if (renderer) renderer.dispose();
       scene.clear();
     };
