@@ -52,17 +52,24 @@ graph LR
 プレイヤーは手動介入なしに、自律スクリプト（`pilot.py`）のみで以下の **4大フェーズ** を完全自律で成し遂げなければなりません：
 
 ```mermaid
-flowchart TD
-    P0["<b>Phase 0: 衝突緊急事態検知 & プロローグ (T = 0 〜 4.5s)</b><br/>・デブリ直撃による衝撃力積で 3軸高速タンブリング (|ω| ≈ 2.5 rad/s) 発生<br/>・衝突点近傍のスラスタ (1〜2基) が物理破損、推進剤微小リーク開始<br/>・最初の4.5秒間はセンササンプリングと初期回転レート同定を実施"]
-    --> P1["<b>Phase 1: 3軸緊急デタンブル (Rate Damping)</b><br/>・3軸リアクションホイール最大逆トルク制動 (燃料消費ゼロ)<br/>・健全 RCS スラスタによるレートダンピング逆噴射<br/>・全軸角速度ノルム |ω| < 0.05 rad/s を 0.5 秒保持し制動完了 (+3,000 pts)"]
-    --> P2["<b>Phase 2: 12チャンネル・オンライン同定 (Online SysID)</b><br/>・全12基のスラスタを順次 30ms 微小パルス噴射<br/>・IMU 角加速度応答 Δω の有無から破損ノズルを自動特定・隔離"]
-    --> P3["<b>Phase 3: 制御配分 & 6自由度安全圏脱出 (Control Allocation & Escape)</b><br/>・生存ノズルのみで不要トルクを相殺しつつ +X 前進推進力を合成<br/>・10個の浮遊デブリ群を回避しながら、目標グリーン安全ゲート (X ≥ 35m) へ突入<br/>・脱出時の中心軸距離 r = √(y²+z²) による高精度誘導ボーナス獲得 (最大 +2,500 pts)"]
+graph LR
+    P0["<b>Phase 0: 衝突・検知</b><br/>(T = 0〜4.5s)<br/>デブリ直撃 / 高速スピン<br/>初期回転レート同定"]
+    --> P1["<b>Phase 1: 3軸デタンブル</b><br/>(Rate Damping)<br/>ホイール最大逆トルク<br/>角速度ノルム整定 (+3,000pt)"]
+    --> P2["<b>Phase 2: SysID同定</b><br/>(Online SysID)<br/>12基パルス噴射<br/>破損ノズル特定・隔離"]
+    --> P3["<b>Phase 3: 6-DoF脱出</b><br/>(Control Allocation)<br/>非対称推力最適配分<br/>安全ゲート突入 (+2,500pt)"]
 
     style P0 fill:#450a0a,stroke:#f87171,stroke-width:2px,color:#fff
     style P1 fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#fff
     style P2 fill:#713f12,stroke:#facc15,stroke-width:2px,color:#fff
     style P3 fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#fff
 ```
+
+| フェーズ | 主要ミッション内容 | 制御アクチュエータ | 達成判定 / スコアボーナス |
+| :--- | :--- | :--- | :--- |
+| **Phase 0**<br>(0 〜 4.5s) | **衝突事態検知 & プロローグ**<br>・デブリ直撃による 3軸激突タンブル ($|\vec{\omega}| \approx 2.5\text{ rad/s}$)<br>・ノズル物理破損（1〜2基）＆燃料微小リーク発生 | なし（センサ同定期間） | センササンプリング & 初期姿勢同定 |
+| **Phase 1** | **3軸緊急デタンブル (Rate Damping)**<br>・3軸リアクションホイール最大逆トルク制動（燃料消費ゼロ）<br>・健全 RCS スラスタによるレートダンピング逆噴射 | 3軸リアクションホイール<br>＋ 生存 RCS スラスタ | 全軸角速度ノルム $|\vec{\omega}| < 0.05\text{ rad/s}$ を 0.5s 保持<br>制動完了ボーナス (**+3,000 pts**) |
+| **Phase 2** | **12ch オンライン同定 (Online SysID)**<br>・全12基のスラスタを順次 30ms 微小パルス噴射<br>・IMU 角加速度応答 $\Delta\omega$ の有無から破損ノズル特定 | 12基 RCS パルス噴射 | 破損ノズル自動隔離<br>健全スラスタ配列の確定 |
+| **Phase 3** | **制御配分 & 6-DoF 安全圏脱出 (Control Allocation)**<br>・生存ノズルのみで不要トルク相殺しつつ $+X$ 前進推力を合成<br>・10個の浮遊デブリ群を回避しながら目標グリーンゲート突入 | 生存 RCS スラスタ統合配分<br>＋ リアクションホイール | 目標安全ゲート ($X \ge 35\text{m}$) 到達<br>脱出時中心軸精度ボーナス (最大 **+2,500 pts**) |
 
 ---
 
@@ -146,22 +153,18 @@ flowchart TB
 
 本プラグインのハードウェア（PL論理）およびソフトウェア（PS CPU）のフットプリントは、AMD Xilinx Zynq-7000 (Z-7010 / Zybo, Cora) や Kria KV260 実機において、**1行のコード変更もなしにそのまま動作する設計（100% Sim-to-Real 透明性）** を保証しています。
 
-```
-+-----------------------------------------------------------------------+
-|  PS (Processing System): Linux + ROS 2 (Python rclpy)                 |
-|  - 軌道追従・誘導制御アルゴリズム (PD / S字加減速 / 6-DoF LOS 誘導)    |
-|  - 状態遷移管理 (Behavior Tree / 巡回ステートマシン)                  |
-|  - FDIR (障害検知・隔離・回復・推測航法フォールバック)                |
-+-----------------------------------------------------------------------+
-                                   ||  UIO / mmap (/dev/uio0 or /tmp/vfpga_reg)
-                                   \/  AXI4-Lite バス (32-bit MMIO)
-+-----------------------------------------------------------------------+
-|  PL (Programmable Logic): Verilog HDL / FPGA IP Core                  |
-|  - 光学センサ / IMU / QPD フィルタ・エッジ検出回路 (ナノ秒応答)       |
-|  - ハードウェア・インターロック & ウォッチドッグ (異常時即時スラスタ遮断)|
-|  - RCS スラスタ PWM パルスジェネレータ (符号付き Q16.16 デューティ変換)|
-|  - SEU パリティ監視 (ハードウェアレジスタ保護 & E-STOP 連動)           |
-+-----------------------------------------------------------------------+
+```mermaid
+flowchart TB
+    PS["<b>PS (Processing System): Linux + ROS 2 (Python rclpy)</b><br/>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━<br/>・軌道追従・誘導制御アルゴリズム (PD / S字加減速 / 6-DoF LOS 誘導)<br/>・状態遷移管理 (Behavior Tree / 巡回ステートマシン)<br/>・FDIR (障害検知・隔離・回復・推測航法フォールバック)"]
+
+    PL["<b>PL (Programmable Logic): Verilog HDL / FPGA IP Core</b><br/>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━<br/>・光学センサ / IMU / QPD フィルタ・エッジ検出回路 (ナノ秒応答)<br/>・ハードウェア・インターロック & ウォッチドッグ (異常時即時スラスタ遮断)<br/>・RCS スラスタ PWM パルスジェネレータ (符号付き Q16.16 デューティ変換)<br/>・SEU パリティ監視 (ハードウェアレジスタ保護 & E-STOP 連動)"]
+
+    PS <==>|"<b>AXI4-Lite バス (32-bit MMIO)</b><br/>UIO / mmap (/dev/uio0 または /dev/shm 仮想レジスタ)"| PL
+
+    classDef ps fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#fff;
+    classDef pl fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#fff;
+    class PS ps;
+    class PL pl;
 ```
 
 ### 3.1 Sim-to-Real 二層検証設計 (Dual-Track Validation Philosophy)
@@ -171,29 +174,26 @@ flowchart TB
 flowchart TB
     subgraph SW_LAYER["自律誘導ソフトウェア層 (Python / ROS 2 共通コード)"]
         PILOT["自律誘導アルゴリズム (pilot.py)<br/>- 軌道追従・6-DoF 誘導・S字加減速・FDIR<br/>- SpaceGuidanceHardware 共通クラス"]
+        SEL{"実行プラットフォーム判定<br/>(/dev/uio0 の有無を自動検出)"}
+        PILOT --> SEL
     end
 
-    subgraph DUAL_TRACK["Sim-to-Real 二層透過アーキテクチャ (100% 透明性)"]
-        subgraph TRACK_A["【Track A】高速 SIL 開発環境 (ホスト PC / Boardless)"]
-            direction TB
-            SHM["POSIX 共有メモリ (/dev/shm)<br/>32-bit MMIO レジスタエミュレーション"]
-            CPP_DAEMON["C++17 物理・審判デーモン (space_guidance_daemon.cpp)<br/>- 100Hz 6-DoF 剛体力学・弾性テザー・カオス衝突<br/>- Official Referee 公式審判エンジン"]
-            COCKPIT["Web 3D Cockpit (:8080)<br/>Three.js Orbit Viewer / Scorecard"]
-            SHM <--> CPP_DAEMON
-            CPP_DAEMON <--> COCKPIT
-        end
-
-        subgraph TRACK_B["【Track B】論理合成 RTL / 実機 HIL (AMD Zynq / Kria)"]
-            direction TB
-            UIO["Linux UIO ドライバ (/dev/uio0)<br/>32-bit AXI4-Lite 物理 MMIO バス"]
-            VERILOG["ピュア Verilog HDL IP (space_guidance_top.v)<br/>- 光センサ重心検出 (line_sensor_filter.v)<br/>- 100% 連続 PWM パルス変調 (rcs_thruster_pwm.v)<br/>- WDT & インターロック安全遮断 (safety_interlock.v)"]
-            FPGA_HARD["実機 FPGA シリコン (PL) / Verilator Co-Sim"]
-            UIO <--> VERILOG
-            VERILOG <--> FPGA_HARD
-        end
+    subgraph TRACK_A["【Track A】高速 SIL 開発環境 (ホスト PC / Boardless)"]
+        SHM["POSIX 共有メモリ (/dev/shm)<br/>32-bit MMIO レジスタエミュレーション"]
+        CPP_DAEMON["C++17 物理・審判デーモン (space_guidance_daemon.cpp)<br/>- 100Hz 6-DoF 剛体力学・弾性テザー・カオス衝突<br/>- Official Referee 公式審判エンジン"]
+        COCKPIT["Web 3D Cockpit (:8080)<br/>Three.js Orbit Viewer / Scorecard"]
+        SHM <--> CPP_DAEMON
+        CPP_DAEMON <--> COCKPIT
     end
 
-    PILOT -->|"環境自動検出"| SEL{"実行プラットフォーム"}
+    subgraph TRACK_B["【Track B】論理合成 RTL / 実機 HIL (AMD Zynq / Kria)"]
+        UIO["Linux UIO ドライバ (/dev/uio0)<br/>32-bit AXI4-Lite 物理 MMIO バス"]
+        VERILOG["ピュア Verilog HDL IP (space_guidance_top.v)<br/>- 光センサ重心検出 (line_sensor_filter.v)<br/>- 100% 連続 PWM パルス変調 (rcs_thruster_pwm.v)<br/>- WDT & インターロック安全遮断 (safety_interlock.v)"]
+        FPGA_HARD["実機 FPGA シリコン (PL) / Verilator Co-Sim"]
+        UIO <--> VERILOG
+        VERILOG <--> FPGA_HARD
+    end
+
     SEL -->|"PC 開発時 (Boardless)"| SHM
     SEL -->|"Zynq 実機時 (Hardware)"| UIO
 
