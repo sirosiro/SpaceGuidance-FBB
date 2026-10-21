@@ -14,7 +14,7 @@ export default function SpaceOrbitViewer3D() {
   const glCanvasRef = useRef(null);
   const hudCanvasRef = useRef(null);
 
-  // Camera presets: 'chase', 'nose', 'hero', 'orbit', 'cinema'
+  // Camera presets: 'chase', 'nose', 'hero', 'orbit', 'track', 'cinema'
   const [cameraPreset, setCameraPreset] = useState('chase');
   const [zoom, setZoom] = useState(1.0);
   const [userOffset, setUserOffset] = useState({ yaw: 0.0, pitch: 0.0 });
@@ -48,7 +48,13 @@ export default function SpaceOrbitViewer3D() {
     smoothRoll: 0.0,
     lastAzimuth: 0.0,
     lastElevation: 0.0,
-    rotSpeed: 0.0
+    rotSpeed: 0.0,
+    lastEffectiveMode: 'chase',
+    trackAnchor: null,
+    trackQuadIndex: -1,
+    trackCinemaDuration: 6.0,
+    lastShipX: 0.0,
+    lastStageId: 1
   });
 
   stateRef.current.cameraPreset = cameraPreset;
@@ -114,15 +120,27 @@ export default function SpaceOrbitViewer3D() {
     }
   }, []);
 
-  // Cinema Mode: Auto-cycle camera angles every 6 seconds
+  // Cinema Mode: Auto-cycle camera angles with speed-adapted TRACK duration
   useEffect(() => {
     if (cameraPreset !== 'cinema') return;
-    const modes = ['chase', 'nose', 'hero', 'orbit'];
-    const interval = setInterval(() => {
+    const modes = ['chase', 'nose', 'hero', 'orbit', 'track'];
+    const currentMode = modes[cinemaIndex % modes.length];
+
+    let duration = 6000;
+    if (currentMode === 'track') {
+      const vx = Math.abs(telemetryRef.current?.vel_x || 1.6);
+      const speed = Math.max(0.6, vx);
+      // Duration needed for approach, passage, and departure:
+      // Distance needed is ~8.5m (approach ~4m + recede ~4.5m)
+      duration = Math.max(5000, Math.min(8000, Math.round((8.5 / speed) * 1000)));
+      stateRef.current.trackCinemaDuration = duration / 1000.0;
+    }
+
+    const timer = setTimeout(() => {
       setCinemaIndex(prev => (prev + 1) % modes.length);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [cameraPreset]);
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [cameraPreset, cinemaIndex]);
 
   // Compute Stage 1 Asteroid Pipeline S-Curve Y coordinate for given X
   const getPipelineY = (x) => {
@@ -1262,34 +1280,8 @@ export default function SpaceOrbitViewer3D() {
       }
 
       // Camera Presets & Dynamic Motion
-      const cinemaModes = ['chase', 'nose', 'hero', 'orbit'];
+      const cinemaModes = ['chase', 'nose', 'hero', 'orbit', 'track'];
       const effectiveMode = (st.cameraPreset === 'cinema') ? cinemaModes[st.cinemaIndex] : st.cameraPreset;
-
-      let baseAzimuth = 0.0;
-      let baseElevation = 0.26;
-      let baseDist = 9.0;
-
-      if (effectiveMode === 'chase') {
-        baseAzimuth = 0.0;
-        baseElevation = 0.26;
-        baseDist = 9.0;
-      } else if (effectiveMode === 'nose') {
-        baseAzimuth = Math.PI;
-        baseElevation = 0.20;
-        baseDist = 7.5;
-      } else if (effectiveMode === 'hero') {
-        baseAzimuth = -0.75;
-        baseElevation = -0.28;
-        baseDist = 6.2;
-      } else if (effectiveMode === 'orbit') {
-        baseAzimuth = (now * 0.00045) % (Math.PI * 2);
-        baseElevation = 0.24 + 0.12 * Math.sin(now * 0.0003);
-        baseDist = 8.8;
-      }
-
-      const finalAzimuth = baseAzimuth + st.userOffset.yaw;
-      const finalElevation = Math.max(-1.3, Math.min(1.3, baseElevation + st.userOffset.pitch));
-      const finalDist = baseDist / Math.max(0.4, Math.min(2.5, st.zoom));
 
       // Stage 5 Initial Debris Impact Camera Shake
       let shakeX = 0, shakeY = 0, shakeZ = 0;
@@ -1301,33 +1293,141 @@ export default function SpaceOrbitViewer3D() {
         shakeZ = Math.sin(now * 0.082) * shakeMag * 0.7;
       }
 
-      // Compute camera eye coordinates in world frame
-      const cosA = Math.cos(finalAzimuth);
-      const sinA = Math.sin(finalAzimuth);
-      const cosE = Math.cos(finalElevation);
-      const sinE = Math.sin(finalElevation);
+      let camX, camY, camZ;
 
-      const camX = shipX - finalDist * cosE * cosA + shakeX;
-      const camY = shipY - finalDist * cosE * sinA + shakeY;
-      const camZ = shipZ + finalDist * sinE + shakeZ;
+      if (effectiveMode === 'track') {
+        // Dynamic Stationary Tracking Camera:
+        // Positioned so that approach, closest flyby, and departure complete symmetrically.
+        const isModeSwitch = (st.lastEffectiveMode !== 'track');
+        const isRewind = (shipX < (st.lastShipX || 0) - 4.0);
+        const isStageChanged = (st.lastStageId !== undefined && st.lastStageId !== stageId);
+        // Continuous Relay: When spacecraft has flown past the camera by the same distance it approached from,
+        // reposition the camera ahead to repeat the approach -> pass-by sequence seamlessly.
+        const isFlownPast = !!(st.trackAnchor && st.trackAnchor.leadDist &&
+                               (shipX - st.trackAnchor.stationX) >= (st.trackAnchor.leadDist * 0.98));
 
-      camera.position.set(camX, camY, camZ);
+        if (!st.trackAnchor || isModeSwitch || isRewind || isStageChanged || isFlownPast) {
+          const vx = Math.abs(tlm.vel_x !== undefined ? tlm.vel_x : 1.6);
+          const forwardSpeed = Math.max(0.6, Math.min(3.5, vx));
+          const slotDuration = st.trackCinemaDuration || 6.0;
 
-      // Smooth camera roll damping
-      const targetCamRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (tlm.omega || 0) * 0.15)) : 0.0);
-      st.smoothRoll += (targetCamRoll - st.smoothRoll) * 0.08;
+          // Closest approach occurs right at 50% of the allocated slot duration:
+          // The craft approaches during the first half, passes the camera, and recedes during the second half.
+          const leadDist = Math.max(3.2, forwardSpeed * (slotDuration * 0.50));
+          const targetStationX = shipX + leadDist;
 
-      // Camera Up vector with subtle roll around line of sight
-      const r_raw = new THREE.Vector3(sinA, -cosA, 0.0);
-      const u_raw = new THREE.Vector3(sinE * cosA, sinE * sinA, cosE);
-      const cosR = Math.cos(st.smoothRoll);
-      const sinR = Math.sin(st.smoothRoll);
-      const camUp = new THREE.Vector3()
-        .addScaledVector(r_raw, -sinR)
-        .addScaledVector(u_raw, cosR);
+          // Corridor centerline at targetStationX
+          let corridorY = 0.0;
+          if (stageId === 1) {
+            corridorY = getPipelineY(targetStationX);
+          } else if (stageId === 5) {
+            corridorY = Math.max(-1.5, Math.min(1.5, shipY * 0.4));
+          }
 
-      camera.up.copy(camUp);
-      camera.lookAt(shipX, shipY, shipZ);
+          let corridorZ = (stageId === 5 ? Math.max(0.0, shipZ * 0.5) : 0.0);
+
+          // Four observation quadrants relative to flight corridor:
+          // Top-Right (右上: -Y, +Z), Top-Left (左上: +Y, +Z),
+          // Bottom-Right (右下: -Y, -Z), Bottom-Left (左下: +Y, -Z)
+          const quadrants = [
+            { y: -2.8, z: 1.2 },  // 右上 (Starboard Elevated)
+            { y: 2.8, z: 1.2 },   // 左上 (Port Elevated)
+            { y: -2.8, z: -1.2 }, // 右下 (Starboard Ventral)
+            { y: 2.8, z: -1.2 }   // 左下 (Port Ventral)
+          ];
+
+          const prevQuad = (st.trackQuadIndex !== undefined) ? st.trackQuadIndex : -1;
+          let nextQuad;
+          do {
+            nextQuad = Math.floor(Math.random() * quadrants.length);
+          } while (nextQuad === prevQuad && quadrants.length > 1);
+          st.trackQuadIndex = nextQuad;
+
+          const chosenQuad = quadrants[nextQuad];
+
+          // Close-up vantage point in selected quadrant:
+          // With 3.6m spacecraft wingspan (1.0m wingtip clearance), this provides a roaring, high-speed flyby!
+          st.trackAnchor = {
+            stationX: targetStationX,
+            initShipX: shipX,
+            leadDist: leadDist,
+            corridorY: corridorY,
+            corridorZ: corridorZ,
+            relY: chosenQuad.y,
+            relZ: chosenQuad.z
+          };
+        }
+
+        const anchor = st.trackAnchor;
+        const zoomScale = 1.0 / Math.max(0.4, Math.min(2.5, st.zoom));
+
+        camX = anchor.stationX + st.userOffset.yaw * 6.0 + shakeX;
+        camY = anchor.corridorY + (anchor.relY * zoomScale) + shakeY;
+        camZ = anchor.corridorZ + (anchor.relZ * zoomScale) + st.userOffset.pitch * 4.0 + shakeZ;
+
+        camera.position.set(camX, camY, camZ);
+        camera.up.set(0, 0, 1);
+        camera.lookAt(shipX, shipY, shipZ);
+      } else {
+        // Spacecraft-relative camera views: chase, nose, hero, orbit
+        let baseAzimuth = 0.0;
+        let baseElevation = 0.26;
+        let baseDist = 9.0;
+
+        if (effectiveMode === 'chase') {
+          baseAzimuth = 0.0;
+          baseElevation = 0.26;
+          baseDist = 9.0;
+        } else if (effectiveMode === 'nose') {
+          baseAzimuth = Math.PI;
+          baseElevation = 0.20;
+          baseDist = 7.5;
+        } else if (effectiveMode === 'hero') {
+          baseAzimuth = -0.75;
+          baseElevation = -0.28;
+          baseDist = 6.2;
+        } else if (effectiveMode === 'orbit') {
+          baseAzimuth = (now * 0.00045) % (Math.PI * 2);
+          baseElevation = 0.24 + 0.12 * Math.sin(now * 0.0003);
+          baseDist = 8.8;
+        }
+
+        const finalAzimuth = baseAzimuth + st.userOffset.yaw;
+        const finalElevation = Math.max(-1.3, Math.min(1.3, baseElevation + st.userOffset.pitch));
+        const finalDist = baseDist / Math.max(0.4, Math.min(2.5, st.zoom));
+
+        const cosA = Math.cos(finalAzimuth);
+        const sinA = Math.sin(finalAzimuth);
+        const cosE = Math.cos(finalElevation);
+        const sinE = Math.sin(finalElevation);
+
+        camX = shipX - finalDist * cosE * cosA + shakeX;
+        camY = shipY - finalDist * cosE * sinA + shakeY;
+        camZ = shipZ + finalDist * sinE + shakeZ;
+
+        camera.position.set(camX, camY, camZ);
+
+        // Smooth camera roll damping
+        const targetCamRoll = (st.cameraPreset === 'chase' ? -Math.max(-0.12, Math.min(0.12, (tlm.omega || 0) * 0.15)) : 0.0);
+        st.smoothRoll += (targetCamRoll - st.smoothRoll) * 0.08;
+
+        // Camera Up vector with subtle roll around line of sight
+        const r_raw = new THREE.Vector3(sinA, -cosA, 0.0);
+        const u_raw = new THREE.Vector3(sinE * cosA, sinE * sinA, cosE);
+        const cosR = Math.cos(st.smoothRoll);
+        const sinR = Math.sin(st.smoothRoll);
+        const camUp = new THREE.Vector3()
+          .addScaledVector(r_raw, -sinR)
+          .addScaledVector(u_raw, cosR);
+
+        camera.up.copy(camUp);
+        camera.lookAt(shipX, shipY, shipZ);
+      }
+
+      // Record state history for mode transitions and restarts
+      st.lastEffectiveMode = effectiveMode;
+      st.lastShipX = shipX;
+      st.lastStageId = stageId;
 
       // Keep celestial starfield centered around camera (Infinite Distance zero parallax)
       starField.position.set(camX, camY, camZ);
@@ -1555,11 +1655,15 @@ export default function SpaceOrbitViewer3D() {
         { id: 'nose', label: 'FRONT' },
         { id: 'hero', label: 'HERO' },
         { id: 'orbit', label: 'PATROL' },
-        { id: 'cinema', label: cameraPreset === 'cinema' ? `CINEMA [CAM ${cinemaIndex + 1}/4]` : 'CINEMA (AUTO)' }
+        { id: 'track', label: 'TRACK' },
+        { id: 'cinema', label: cameraPreset === 'cinema' ? `CINEMA [CAM ${cinemaIndex + 1}/5]` : 'CINEMA (AUTO)' }
       ].map(preset =>
         React.createElement('button', {
           key: preset.id,
           onClick: () => {
+            if (preset.id === 'track') {
+              stateRef.current.trackAnchor = null;
+            }
             setCameraPreset(preset.id);
             setUserOffset({ yaw: 0.0, pitch: 0.0 });
           },

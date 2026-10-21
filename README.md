@@ -354,7 +354,7 @@ fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/05_panic_control
 > ```
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の分割画面が自動ロードされます：
-  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の自転ドッキングポート、Stage EX のデブリ直撃ショックウェーブ＆12基スラスタ配置（破損ノズル赤色ブラケット）＆燃料蒸気リーク軌跡＆10個の浮遊デブリ群＆グリーン安全ゲートリングを完全3D描画。
+  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/TRACK/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の自転ドッキングポート、Stage EX のデブリ直撃ショックウェーブ＆12基スラスタ配置（破損ノズル赤色ブラケット）＆燃料蒸気リーク軌跡＆10個の浮遊デブリ群＆グリーン安全ゲートリングを完全3D描画。
   * **Official Referee Scorecard & Chaos FDIR**: リアルタイム公式スコア、確定フライトランク（Grade S/A/B/C）、チェックポイント通過進捗、審判イベントログを表示。カオス障害注入および `[Restart Scenario]` による即時再フライトが可能。
   * **SG Telemetry & C&W**: 推進剤残量バー、Master C&W 警報灯、姿勢角・速度計器。
   * **Registers & Tracer**: 全レジスタのリアルタイム16進数監視および時系列波形プロット。
