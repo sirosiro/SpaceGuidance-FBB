@@ -93,12 +93,12 @@ class SpaceGuidanceHardware:
 
     def engage(self):
         """
-        Explicit Engagement Trigger (CR_CTRL |= 0x08).
+        Explicit Engagement Trigger (CR_CTRL |= 0x09).
         Signals official referee to start mission timer if not already triggered by commands.
         """
         self.mm.seek(0)
         cr = struct.unpack("=I", self.mm.read(4))[0]
-        cr |= 0x08
+        cr |= 0x09 # Ensure Bit 0 (Run/Enable) and Bit 3 (Engage)
         self.mm.seek(0)
         self.mm.write(struct.pack("=I", cr))
 
@@ -245,6 +245,17 @@ class SpaceGuidanceHardware:
         self.mm.write(struct.pack("=I", tw_int))
         self.mm.seek(144 + 8) # offset 0x98: wheel_torque_x_cmd, wheel_torque_y_cmd
         self.mm.write(struct.pack("=2i", int(wheel_torque_x * 65536.0), int(wheel_torque_y * 65536.0)))
+
+    def set_inspection_scan(self, angle_deg, beam_width_deg=15.0, drive_thrust=0.0, fdir_mode=1):
+        """
+        Stage 3 360-degree Ultrasonic / Laser Flaw Inspection Scanner API.
+        Controls the turret scan angle and aperture beam width.
+        - angle_deg: Turret scan angle around the truss joint (0 to 360 deg)
+        - beam_width_deg: Aperture width in degrees (narrow = high SNR sensitivity, wide = fast coarse sweep)
+        - drive_thrust: Forward/reverse drive thrust
+        - fdir_mode: 1 = Clamped / Latched on rail collar, 0 = Travelling
+        """
+        self.write_commands(thrust_x=drive_thrust, thrust_y=float(angle_deg), torque=float(beam_width_deg), fdir_mode=fdir_mode)
 
     def kick_watchdog(self):
         self.mm.seek(36) # 0x24 WATCHDOG_KICK

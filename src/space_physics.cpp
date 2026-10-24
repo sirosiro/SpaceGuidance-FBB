@@ -78,6 +78,8 @@ void SpacePhysicsEngine::init_stage5_panic_control() {
 void SpacePhysicsEngine::set_chaos_seed(uint32_t seed) {
     if (stage_id_ == 5 && !has_impacted_) {
         calculate_impact_scenario(seed);
+    } else if (stage_id_ == 3) {
+        calculate_truss_defects(seed);
     }
 }
 
@@ -238,18 +240,60 @@ void SpacePhysicsEngine::init_stage2_tether() {
 
 void SpacePhysicsEngine::init_stage3_iss_truss() {
     track_.clear();
-    // Stage 3: 60m 3D Truss Rail Corridor
-    for (double x = 0.0; x <= 60.0; x += 0.5) {
-        track_.push_back({x, 0.0});
+    // Stage 3: 60m 3D Truss Rail Corridor with geometric curves at 20-25m and 40-45m
+    for (double x = 0.0; x <= 60.0; x += 0.2) {
+        double y = 0.0;
+        if (x >= 20.0 && x <= 25.0) {
+            y = 1.0 * std::sin((x - 20.0) / 5.0 * M_PI);
+        } else if (x >= 40.0 && x <= 45.0) {
+            y = -1.0 * std::sin((x - 40.0) / 5.0 * M_PI);
+        }
+        track_.push_back({x, y});
     }
     state_.pos = {0.0, 0.0};
     state_.vel = {0.0, 0.0};
     state_.angle = 0.0;
+    state_.yaw = 0.0;
     state_.omega = 0.0;
     state_.fuel = 100.0;
     state_.rail_load = 0.0;
     state_.is_docked = false;
     rail_load_ = 0.0;
+    scan_angle_deg_ = 0.0;
+    beam_width_deg_ = 15.0;
+    sensor_snr_ = 0.0;
+    defects_detected_count_ = 0;
+    calculate_truss_defects(0x2026);
+}
+
+void SpacePhysicsEngine::calculate_truss_defects(uint32_t seed) {
+    truss_defects_.clear();
+    const double joint_coords[] = {15.0, 30.0, 45.0, 60.0};
+    int clean_joint = seed % 4; // one joint out of four is clean
+
+    uint32_t rng = seed ^ 0xA5A5A5A5;
+    auto next_u32 = [&rng]() {
+        rng = rng * 1664525u + 1013904223u;
+        return rng;
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        if (i == clean_joint) continue;
+        TrussDefect def;
+        def.joint_id = i + 1;
+        def.joint_x = joint_coords[i];
+        uint32_t r_val = next_u32() % 3000;
+        def.angle_deg = 30.0 + (r_val / 10.0); // 30.0 deg ~ 330.0 deg
+        def.angle_rad = def.angle_deg * M_PI / 180.0;
+        def.detected = false;
+        def.dwell_timer = 0.0;
+        truss_defects_.push_back(def);
+    }
+    defects_detected_count_ = 0;
+    std::cout << "[Physics] Stage 3: 3 Hidden Structural Defects Generated:" << std::endl;
+    for (const auto& d : truss_defects_) {
+        std::cout << "  - Joint " << d.joint_id << " (" << d.joint_x << "m) at angle " << d.angle_deg << " deg" << std::endl;
+    }
 }
 
 void SpacePhysicsEngine::init_stage4_laser_docking() {
@@ -326,10 +370,39 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         // -------------------------------------------------------------
         // Stage 3: ISS Truss Crawler Dynamics along Structural Rails
         // -------------------------------------------------------------
-        double drive_force = thrust_forward;
-        double rolling_resistance = 2.0 * ((state_.vel.x > 0.0) ? 1.0 : ((state_.vel.x < 0.0) ? -1.0 : 0.0));
+        double drive_force = thrust_forward; // Positive: forward thrust, Negative: counter-thrust braking
+        // In space vacuum, natural rolling friction is tiny (0.5N); stopping requires counter-thrusters!
+        double rolling_resistance = 0.5 * ((state_.vel.x > 0.0) ? 1.0 : ((state_.vel.x < 0.0) ? -1.0 : 0.0));
         double net_force = drive_force - rolling_resistance;
         if (state_.pos.x <= 0.0 && net_force < 0.0) net_force = 0.0;
+
+        // Electromagnetic gripper clamp dynamics (fdir_mode == 1) near joints
+        const double joints[] = {15.0, 30.0, 45.0, 60.0};
+        bool is_near_joint = false;
+        int active_joint_id = -1;
+        for (int i = 0; i < 4; ++i) {
+            if (std::abs(state_.pos.x - joints[i]) <= 0.40) {
+                is_near_joint = true;
+                active_joint_id = i + 1;
+                break;
+            }
+        }
+
+        if (fdir_mode_ == 1 && is_near_joint) {
+            // High-speed latching shock check: must decelerate to <= 0.40 m/s with counter-thrusters before clamping!
+            if (std::abs(state_.vel.x) > 0.40) {
+                state_.rail_load = 999.0; // clamp pin shear failure flag
+            } else {
+                // Firm mechanical lock onto joint docking collar
+                state_.vel.x = 0.0;
+                net_force = 0.0;
+            }
+        }
+
+        // Straight-line over-speed limit check (> 3.50 m/s causes clamp chatter derailment)
+        if (std::abs(state_.vel.x) > 3.50) {
+            state_.rail_load = 888.0; // clamp chatter derailment flag
+        }
 
         double ax = net_force / mass_;
         state_.vel.x += ax * dt;
@@ -337,16 +410,79 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         state_.pos.x += state_.vel.x * dt;
         if (state_.pos.x < 0.0) state_.pos.x = 0.0;
 
+        // Prevent reversing backward when already stationary
+        if (state_.pos.x > 0.0 && state_.vel.x < 0.0 && drive_force < 0.0 && std::abs(state_.vel.x) < 0.05) {
+            state_.vel.x = 0.0;
+        }
+
+        // Terminal physical endstop at 60.0m dock
+        if (state_.pos.x >= 60.0) {
+            state_.pos.x = 60.0;
+            if (state_.vel.x > 0.0) state_.vel.x = 0.0;
+        }
+
         // Centrifugal rail load calculation in curved sections (20-25m and 40-45m)
         double px = state_.pos.x;
         double curvature = 0.0;
-        if ((px >= 20.0 && px <= 25.0) || (px >= 40.0 && px <= 45.0)) {
+        double py = 0.0;
+        double heading = 0.0;
+        if (px >= 20.0 && px <= 25.0) {
             curvature = 0.20; // 1/R where R = 5.0m
+            double u = (px - 20.0) / 5.0;
+            py = 1.0 * std::sin(u * M_PI);
+            double dy_dx = 1.0 * (M_PI / 5.0) * std::cos(u * M_PI);
+            heading = std::atan2(dy_dx, 1.0);
+        } else if (px >= 40.0 && px <= 45.0) {
+            curvature = 0.20; // 1/R where R = 5.0m
+            double u = (px - 40.0) / 5.0;
+            py = -1.0 * std::sin(u * M_PI);
+            double dy_dx = -1.0 * (M_PI / 5.0) * std::cos(u * M_PI);
+            heading = std::atan2(dy_dx, 1.0);
         }
+        state_.pos.y = py;
+        state_.angle = heading;
+        state_.yaw = heading;
+
         double v2 = state_.vel.x * state_.vel.x;
         double cent_force = mass_ * v2 * curvature; // F = m * v^2 / R
-        state_.rail_load = cent_force + std::abs(thrust_lateral);
+        if (state_.rail_load < 800.0) {
+            state_.rail_load = cent_force;
+        }
         rail_load_ = state_.rail_load;
+
+        // 360-deg Defect Inspection Sensor calculation
+        if (fdir_mode_ == 1 && is_near_joint && active_joint_id != -1 && std::abs(state_.vel.x) < 0.1) {
+            double max_snr = 0.0;
+            for (auto& def : truss_defects_) {
+                if (def.joint_id == active_joint_id) {
+                    double diff = std::abs(scan_angle_deg_ - def.angle_deg);
+                    while (diff > 180.0) diff = std::abs(diff - 360.0);
+                    double half_w = std::max(2.5, beam_width_deg_ * 0.5);
+                    if (diff <= half_w) {
+                        double gain = 15.0 / std::max(5.0, beam_width_deg_);
+                        double u = diff / half_w;
+                        double profile = std::cos(u * (M_PI * 0.5));
+                        double raw_s = 1000.0 * gain * (profile * profile);
+                        if (raw_s > max_snr) max_snr = raw_s;
+                        if (raw_s >= 600.0) {
+                            def.dwell_timer += dt;
+                            if (def.dwell_timer >= 0.15 && !def.detected) {
+                                def.detected = true;
+                                defects_detected_count_++;
+                                std::cout << "\n>>> [SENSOR VERIFIED] Defect located at Joint " 
+                                          << def.joint_id << " (" << def.joint_x << "m), angle "
+                                          << def.angle_deg << " deg! (SNR=" << static_cast<int>(raw_s) << ") <<<\n" << std::endl;
+                            }
+                        } else {
+                            def.dwell_timer = std::max(0.0, def.dwell_timer - dt * 0.5);
+                        }
+                    }
+                }
+            }
+            sensor_snr_ = max_snr;
+        } else {
+            sensor_snr_ = 0.0;
+        }
 
         state_.fuel -= (std::abs(drive_force) * 0.0004 + 0.005) * dt;
         if (state_.fuel < 0.0) state_.fuel = 0.0;
@@ -722,7 +858,14 @@ uint32_t SpacePhysicsEngine::compute_sensor_adc() const {
     }
 
     if (stage_id_ == 3) {
-        // Stage 3: Proximity sensor to inspection joints (15m, 30m, 45m, 60m)
+        // Stage 3: When clamped at joint, return real-time 360-deg flaw scan SNR (0 ~ 1023)
+        if (fdir_mode_ == 1) {
+            double noise = (rand() % 16);
+            double snr_val = sensor_snr_ > 0.0 ? sensor_snr_ : noise;
+            return static_cast<uint32_t>(std::clamp(snr_val, 0.0, 1023.0));
+        }
+
+        // When in transit, return proximity to next inspection joint
         const double joints[] = {15.0, 30.0, 45.0, 60.0};
         uint32_t adc = 0;
         for (int i = 0; i < 4; ++i) {

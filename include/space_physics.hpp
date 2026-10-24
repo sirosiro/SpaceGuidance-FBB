@@ -66,6 +66,15 @@ struct DebrisImpactScenario {
     int secondary_damaged_id = 6;
 };
 
+struct TrussDefect {
+    int joint_id = 1;        // 1..4 (1: 15m, 2: 30m, 3: 45m, 4: 60m)
+    double joint_x = 15.0;   // meters
+    double angle_deg = 0.0;  // 0.0 ~ 360.0 degrees around joint ring
+    double angle_rad = 0.0;
+    bool detected = false;
+    double dwell_timer = 0.0;
+};
+
 class SpacePhysicsEngine {
 public:
     SpacePhysicsEngine(double mass = 100.0, double inertia = 25.0, int stage_id = 1);
@@ -100,6 +109,7 @@ public:
     double get_cable_tension() const { return state_.cable_tension; }
     double get_cable_vibration() const { return state_.cable_vibration; }
     double get_rail_load() const { return state_.rail_load; }
+    void set_fdir_mode(uint32_t mode) { fdir_mode_ = mode; }
 
     // Stage 5 Getters & Setters
     uint32_t get_thruster_health() const { return state_.thruster_health_mask; }
@@ -109,9 +119,19 @@ public:
     bool is_detumbled() const { return state_.is_detumbled; }
     bool is_escaped() const { return state_.is_escaped; }
     const std::vector<Vec3>& get_floating_debris() const { return floating_debris_; }
+    const DebrisImpactScenario& get_impact_scenario() const { return impact_scenario_; }
     void set_chaos_seed(uint32_t seed);
     uint32_t get_chaos_seed() const { return impact_scenario_.seed; }
-    const DebrisImpactScenario& get_impact_scenario() const { return impact_scenario_; }
+    // Stage 3 ISS Truss 360-deg Defect Inspection
+    const std::vector<TrussDefect>& get_truss_defects() const { return truss_defects_; }
+    int get_defects_detected_count() const { return defects_detected_count_; }
+    double get_sensor_snr() const { return sensor_snr_; }
+    double get_scan_angle_deg() const { return scan_angle_deg_; }
+    double get_beam_width_deg() const { return beam_width_deg_; }
+    void set_scan_turret(double angle_deg, double beam_width_deg) {
+        scan_angle_deg_ = angle_deg;
+        beam_width_deg_ = beam_width_deg;
+    }
 
 private:
     int stage_id_ = 1;
@@ -127,8 +147,14 @@ private:
     const double cable_damping_ = 0.03;            // Light damping in vacuum space
     const double cable_max_tension_ = 15000.0;     // 15,000 N rupture threshold
 
-    // Stage 3 ISS Truss dynamics
+    // Stage 3 ISS Truss dynamics & 360-deg flaw search
     double rail_load_ = 0.0;
+    uint32_t fdir_mode_ = 0;
+    std::vector<TrussDefect> truss_defects_;
+    double scan_angle_deg_ = 0.0;
+    double beam_width_deg_ = 15.0;
+    double sensor_snr_ = 0.0;
+    int defects_detected_count_ = 0;
 
     // Stage 4 Laser Docking target
     double target_angle_ = 0.0;
@@ -141,5 +167,6 @@ private:
     DebrisImpactScenario impact_scenario_;
 
     void calculate_impact_scenario(uint32_t seed);
+    void calculate_truss_defects(uint32_t seed);
     double get_distance_to_track(double px, double py) const;
 };

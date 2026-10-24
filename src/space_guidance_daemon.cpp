@@ -13,8 +13,15 @@
 #include <algorithm>
 #include <random>
 #include <atomic>
+#include <csignal>
 #include "space_physics.hpp"
 #include "space_guidance_shm.h"
+
+static volatile sig_atomic_t g_daemon_running = 1;
+static void daemon_signal_handler(int sig) {
+    (void)sig;
+    g_daemon_running = 0;
+}
 
 class OfficialReferee {
 public:
@@ -34,6 +41,7 @@ public:
     double start_time = 0.0;
     double elapsed_time = 0.0;
     double peak_metric = 0.0;
+    int last_detected_count = 0;
 
     void init(int stage, double t_now) {
         stage_id = stage;
@@ -41,6 +49,7 @@ public:
         checkpoint_score = 0;
         bonus_score = 0;
         passed_checkpoints = 0;
+        last_detected_count = 0;
         for (int i = 0; i < 16; ++i) checked[i] = false;
         is_completed = false;
         is_failed = false;
@@ -68,7 +77,7 @@ public:
         }
     }
 
-    void update(const SpacecraftState& state, double cross_track_err, uint32_t fdir_mode, double dt, double t_now) {
+    void update(const SpacecraftState& state, double cross_track_err, uint32_t fdir_mode, double dt, double t_now, const SpacePhysicsEngine* physics = nullptr) {
         if (is_completed || is_failed) return;
         if (!is_started) {
             elapsed_time = 0.0;
@@ -166,11 +175,30 @@ public:
             }
         } else if (stage_id == 3) {
             // Stage 3: 4 Inspection Joints (15m, 30m, 45m, 60m)
+            // Clamp Pin Shear Failure: if clamped at speed > 0.40m/s
+            if (state.rail_load >= 999.0) {
+                is_failed = true;
+                total_score = 0;
+                official_grade = "DISQUALIFIED (CLAMP PIN SHEAR)";
+                last_event = "[REFEREE FAILURE] High-Speed Clamping Latch Pin Sheared (v > 0.40m/s)!";
+                std::cout << "[Referee] " << last_event << std::endl;
+                return;
+            }
+            // Straight Over-Speed Chatter Failure: if vx > 3.5m/s
+            if (state.rail_load >= 888.0) {
+                is_failed = true;
+                total_score = 0;
+                official_grade = "DISQUALIFIED (OVER-SPEED CHATTER)";
+                last_event = "[REFEREE FAILURE] Over-Speed Clamp Chatter Derailment (v > 3.50m/s)!";
+                std::cout << "[Referee] " << last_event << std::endl;
+                return;
+            }
+            // Curve Centrifugal Overload: if Fc > 300N
             if (std::abs(cross_track_err) > 300.0) {
                 is_failed = true;
                 total_score = 0;
-                official_grade = "DISQUALIFIED (RAIL DERAILMENT)";
-                last_event = "[REFEREE FAILURE] Rail Centrifugal Load Exceeded 300N Limit!";
+                official_grade = "DISQUALIFIED (CENTRIFUGAL OVERLOAD)";
+                last_event = "[REFEREE FAILURE] Rail Centrifugal Load Exceeded 300N Limit in Curve!";
                 std::cout << "[Referee] " << last_event << std::endl;
                 return;
             }
@@ -181,26 +209,51 @@ public:
                 if (!checked[i] && dj <= 0.35 && std::abs(state.vel.x) < 0.35 && fdir_mode == 1) {
                     checked[i] = true;
                     passed_checkpoints++;
-                    checkpoint_score += 1500;
+                    int pts = 1000;
+                    std::string rating = "GOOD   ";
+                    if (dj <= 0.15 && std::abs(state.vel.x) < 0.15) {
+                        pts = 1000;
+                        rating = "PERFECT";
+                    }
+                    checkpoint_score += pts;
                     total_score = checkpoint_score;
                     char buf[128];
-                    snprintf(buf, sizeof(buf), "[JOINT %02d] Pos=%4.1fm | Latch Verified | +1500 pts | Score: %5d pts",
-                             i + 1, jx, total_score);
+                    snprintf(buf, sizeof(buf), "[JOINT %02d] Pos=%4.1fm | Latch Verified (%s) | +%d pts | Score: %5d pts",
+                             i + 1, jx, rating.c_str(), pts, total_score);
                     last_event = buf;
                     std::cout << "[Referee] " << last_event << std::endl;
                 }
             }
-            if (state.pos.x >= 59.8 && passed_checkpoints >= 4) {
+
+            // Defect detection scoring
+            if (physics) {
+                int det_cnt = physics->get_defects_detected_count();
+                if (det_cnt > last_detected_count) {
+                    int newly_found = det_cnt - last_detected_count;
+                    last_detected_count = det_cnt;
+                    int defect_pts = newly_found * 1500;
+                    checkpoint_score += defect_pts;
+                    total_score = checkpoint_score;
+                    char buf[128];
+                    snprintf(buf, sizeof(buf), "[DEFECT DETECTED] Hidden Structural Flaw Confirmed! (%d/3) | +%d pts | Score: %5d pts",
+                             det_cnt, defect_pts, total_score);
+                    last_event = buf;
+                    std::cout << "[Referee] " << last_event << std::endl;
+                }
+            }
+
+            if (checked[3] && fdir_mode == 0) {
                 is_completed = true;
-                int time_bonus = std::max(0, static_cast<int>((45.0 - elapsed_time) * 50.0));
+                int time_bonus = std::max(0, static_cast<int>((75.0 - elapsed_time) * 50.0));
                 int batt_bonus = static_cast<int>(state.fuel * 10.0);
                 bonus_score = time_bonus + batt_bonus;
                 total_score = checkpoint_score + bonus_score;
-                if (total_score >= 8000) official_grade = "GRADE S (Master Inspector)";
-                else if (total_score >= 6500) official_grade = "GRADE A (Certified)";
-                else if (total_score >= 5000) official_grade = "GRADE B (Standard)";
+                int det_cnt = physics ? physics->get_defects_detected_count() : 0;
+                if (total_score >= 8000 && det_cnt >= 3) official_grade = "GRADE S (Master Inspector)";
+                else if (total_score >= 6500 && det_cnt >= 2) official_grade = "GRADE A (Certified)";
+                else if (total_score >= 4500) official_grade = "GRADE B (Standard)";
                 else official_grade = "GRADE C (Pass)";
-                last_event = "[REFEREE COMPLETE] Truss Survey Complete! Clear: " + std::to_string(static_cast<int>(elapsed_time)) + "s | Total: " + std::to_string(total_score) + " pts (" + official_grade + ")";
+                last_event = "[REFEREE COMPLETE] Truss Survey Complete! Clear: " + std::to_string(static_cast<int>(elapsed_time)) + "s | Flaws: " + std::to_string(det_cnt) + "/3 | Total: " + std::to_string(total_score) + " pts (" + official_grade + ")";
                 std::cout << "\n============================================================" << std::endl;
                 std::cout << "[Referee] " << last_event << std::endl;
                 std::cout << "============================================================\n" << std::endl;
@@ -425,6 +478,9 @@ int main(int argc, char** argv) {
     std::cout << "[SpaceGuidance Daemon] Ready. Running physics for Stage " << stage_id 
               << " (Chaos Seed: 0x" << std::hex << chaos_seed << std::dec << ") at 100Hz." << std::endl;
 
+    signal(SIGINT, daemon_signal_handler);
+    signal(SIGTERM, daemon_signal_handler);
+
     shm->cr_ctrl = 1;
     shm->safety_limit = 0x00010000;
     shm->fuel = 100.0;
@@ -448,7 +504,8 @@ int main(int argc, char** argv) {
 
     int tick_cnt = 0;
     uint32_t current_seed = chaos_seed;
-    while (shm->cr_ctrl & 0x01) {
+    while (g_daemon_running) {
+        shm->cr_ctrl |= 0x01; // Maintain active peripheral status in MMIO
         auto now_tp = std::chrono::steady_clock::now();
         double t_now_sec = std::chrono::duration<double>(now_tp - start_tp).count();
 
@@ -462,9 +519,9 @@ int main(int argc, char** argv) {
                                 (shm->fdir_mode != 0);
 
         double fx = static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0 * 50.0;
-        double fy = static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0 * 50.0;
-        double tau_rcs = static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0;
-        double tau_wheel = static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0;
+        double fy = (stage_id == 3) ? 0.0 : (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0 * 50.0);
+        double tau_rcs = (stage_id == 3) ? 0.0 : (static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0);
+        double tau_wheel = (stage_id == 3) ? 0.0 : (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0);
         uint32_t direct_thruster_mask = shm->thrust_cmd_z;
 
         if (stage_id == 5 && shm->chaos_fault_inj != 0 && shm->chaos_fault_inj != current_seed) {
@@ -497,7 +554,15 @@ int main(int argc, char** argv) {
             referee.start(t_now_sec);
         }
 
+        if (stage_id == 3) {
+            double scan_deg = static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0;
+            double beam_w = static_cast<int32_t>(shm->torque_cmd) / 65536.0;
+            if (beam_w <= 0.0) beam_w = 15.0;
+            physics.set_scan_turret(scan_deg, beam_w);
+        }
+
         double mission_t = referee.is_started ? referee.elapsed_time : 0.0;
+        physics.set_fdir_mode(shm->fdir_mode);
         physics.step(fx, fy, tau_rcs, tau_wheel, 0.01, direct_thruster_mask, tau_x, tau_y, tau_w_x, tau_w_y, fz, mission_t);
 
         uint32_t adc = physics.compute_sensor_adc();
@@ -513,7 +578,13 @@ int main(int argc, char** argv) {
             if (px >= 29.5 && px <= 30.5) joint_mask |= 2;
             if (px >= 44.5 && px <= 45.5) joint_mask |= 4;
             if (px >= 59.5 && px <= 60.5) joint_mask |= 8;
-            shm->sensor_edge = (joint_mask << 16) | static_cast<uint16_t>(px * 100.0);
+            uint32_t det_mask = 0;
+            const auto& defs = physics.get_truss_defects();
+            for (size_t d = 0; d < defs.size() && d < 3; ++d) {
+                if (defs[d].detected) det_mask |= (1 << d);
+            }
+            uint32_t det_cnt = physics.get_defects_detected_count();
+            shm->sensor_edge = (det_cnt << 24) | (det_mask << 20) | (joint_mask << 16) | static_cast<uint16_t>(px * 100.0);
         } else if (stage_id == 4) {
             int32_t offset_q16 = static_cast<int32_t>(physics.get_state().pos.y * 65536.0);
             shm->sensor_edge = static_cast<uint32_t>(offset_q16);
@@ -548,7 +619,7 @@ int main(int argc, char** argv) {
         shm->stage_id = stage_id;
 
         // Update Official Referee
-        referee.update(state, shm->cross_track_err, shm->fdir_mode, 0.01, t_now_sec);
+        referee.update(state, shm->cross_track_err, shm->fdir_mode, 0.01, t_now_sec, &physics);
 
         shm->official_score = referee.total_score;
         shm->passed_gates = referee.passed_checkpoints;
@@ -575,25 +646,41 @@ int main(int argc, char** argv) {
         shm->ext.detumble_time = physics.get_detumble_time();
         shm->ext.elapsed_time = referee.elapsed_time;
 
-        const auto& impact = physics.get_impact_scenario();
-        shm->ext.debris_azimuth = impact.approach_azimuth;
-        shm->ext.debris_elevation = impact.approach_elevation;
-        shm->ext.debris_spawn_x = impact.spawn_point.x;
-        shm->ext.debris_spawn_y = impact.spawn_point.y;
-        shm->ext.debris_spawn_z = impact.spawn_point.z;
-        shm->ext.debris_impact_x = impact.impact_point.x;
-        shm->ext.debris_impact_y = impact.impact_point.y;
-        shm->ext.debris_impact_z = impact.impact_point.z;
+        if (stage_id == 3) {
+            const auto& defs = physics.get_truss_defects();
+            shm->ext.debris_spawn_x = (defs.size() > 0) ? defs[0].angle_deg : 0.0;
+            shm->ext.debris_spawn_y = (defs.size() > 1) ? defs[1].angle_deg : 0.0;
+            shm->ext.debris_spawn_z = (defs.size() > 2) ? defs[2].angle_deg : 0.0;
+            shm->ext.debris_impact_x = (defs.size() > 0) ? static_cast<double>(defs[0].joint_id) : 0.0;
+            shm->ext.debris_impact_y = (defs.size() > 1) ? static_cast<double>(defs[1].joint_id) : 0.0;
+            shm->ext.debris_impact_z = (defs.size() > 2) ? static_cast<double>(defs[2].joint_id) : 0.0;
+            shm->ext.debris_hits = physics.get_defects_detected_count();
+            shm->ext.cable_vibration = physics.get_sensor_snr();
+            shm->ext.damaged_thruster_1 = 0;
+            shm->ext.damaged_thruster_2 = 0;
+        } else {
+            const auto& impact = physics.get_impact_scenario();
+            shm->ext.debris_azimuth = impact.approach_azimuth;
+            shm->ext.debris_elevation = impact.approach_elevation;
+            shm->ext.debris_spawn_x = impact.spawn_point.x;
+            shm->ext.debris_spawn_y = impact.spawn_point.y;
+            shm->ext.debris_spawn_z = impact.spawn_point.z;
+            shm->ext.debris_impact_x = impact.impact_point.x;
+            shm->ext.debris_impact_y = impact.impact_point.y;
+            shm->ext.debris_impact_z = impact.impact_point.z;
+            shm->ext.damaged_thruster_1 = impact.primary_damaged_id;
+            shm->ext.damaged_thruster_2 = impact.secondary_damaged_id;
+        }
 
         shm->ext.checkpoint_score = referee.checkpoint_score;
         shm->ext.bonus_score = referee.bonus_score;
         shm->ext.cable_snapped = state.is_cable_snapped ? 1 : 0;
         shm->ext.thruster_health = physics.get_thruster_health();
         shm->ext.is_detumbled = physics.is_detumbled() ? 1 : 0;
-        shm->ext.debris_hits = physics.get_debris_hits();
+        if (stage_id != 3) {
+            shm->ext.debris_hits = physics.get_debris_hits();
+        }
         shm->ext.chaos_seed = physics.get_chaos_seed();
-        shm->ext.damaged_thruster_1 = impact.primary_damaged_id;
-        shm->ext.damaged_thruster_2 = impact.secondary_damaged_id;
         shm->ext.mission_status_code = referee.is_failed ? 2 : (referee.is_completed ? 1 : 0);
 
         strncpy(shm->ext.official_grade, referee.official_grade.c_str(), sizeof(shm->ext.official_grade) - 1);

@@ -33,7 +33,7 @@ if [ "$FBB_ACTIVE" = "1" ]; then
     fi
     echo "[SpaceGuidance] Launching physics daemon in background with Stage 3..."
     export SPACE_GUIDANCE_STAGE=3
-    ( unset LD_PRELOAD; "$PLUGIN_ROOT/bin/space_guidance_daemon" --stage 3 ) &
+    ( unset LD_PRELOAD; exec "$PLUGIN_ROOT/bin/space_guidance_daemon" --stage 3 ) &
     DAEMON_PID=$!
     sleep 0.5
 

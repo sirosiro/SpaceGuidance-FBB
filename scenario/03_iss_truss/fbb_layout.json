@@ -15,7 +15,7 @@
                                 "activeView": "registerMonitor",
                                 "id": "4"
                             },
-                            "size": 481
+                            "size": 585
                         },
                         {
                             "type": "leaf",
@@ -27,10 +27,10 @@
                                 "activeView": "registerTracer",
                                 "id": "2"
                             },
-                            "size": 472
+                            "size": 575
                         }
                     ],
-                    "size": 342
+                    "size": 359
                 },
                 {
                     "type": "branch",
@@ -44,7 +44,7 @@
                                 "activeView": "sg-orbit-viewer",
                                 "id": "7"
                             },
-                            "size": 580
+                            "size": 706
                         },
                         {
                             "type": "leaf",
@@ -55,10 +55,10 @@
                                 "activeView": "uartTerminal_vfpga_uart_1",
                                 "id": "3"
                             },
-                            "size": 373
+                            "size": 454
                         }
                     ],
-                    "size": 985
+                    "size": 1035
                 },
                 {
                     "type": "branch",
@@ -75,7 +75,7 @@
                                         "activeView": "sg-telemetry-gauge",
                                         "id": "6"
                                     },
-                                    "size": 343
+                                    "size": 360
                                 },
                                 {
                                     "type": "leaf",
@@ -86,10 +86,10 @@
                                         "activeView": "sg-chaos-fdir",
                                         "id": "8"
                                     },
-                                    "size": 346
+                                    "size": 364
                                 }
                             ],
-                            "size": 314
+                            "size": 433
                         },
                         {
                             "type": "leaf",
@@ -100,19 +100,27 @@
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 639
+                            "size": 727
                         }
                     ],
-                    "size": 689
+                    "size": 724
                 }
             ],
-            "size": 953
+            "size": 1160
         },
-        "width": 2016,
-        "height": 953,
+        "width": 2118,
+        "height": 1160,
         "orientation": "HORIZONTAL"
     },
     "panels": {
+        "registerMonitor": {
+            "id": "registerMonitor",
+            "contentComponent": "registerMonitor",
+            "params": {
+                "_componentName": "registerMonitor"
+            },
+            "title": "Registers"
+        },
         "dtsVisualizer": {
             "id": "dtsVisualizer",
             "contentComponent": "dtsVisualizer",
@@ -169,15 +177,7 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
-        },
-        "registerMonitor": {
-            "id": "registerMonitor",
-            "contentComponent": "registerMonitor",
-            "params": {
-                "_componentName": "registerMonitor"
-            },
-            "title": "Registers"
         }
     },
-    "activeGroup": "2"
+    "activeGroup": "1"
 }

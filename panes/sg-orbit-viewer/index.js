@@ -152,6 +152,16 @@ export default function SpaceOrbitViewer3D() {
     return 0.0;
   };
 
+  // Compute Stage 3 ISS Truss Rail 3D Curve Y coordinate for given X
+  const getTrussRailY = (x) => {
+    if (x >= 20.0 && x <= 25.0) {
+      return 1.0 * Math.sin(((x - 20.0) / 5.0) * Math.PI);
+    } else if (x >= 40.0 && x <= 45.0) {
+      return -1.0 * Math.sin(((x - 40.0) / 5.0) * Math.PI);
+    }
+    return 0.0;
+  };
+
   // ============================================================================
   // Three.js 3D WebGL Engine & Render Loop
   // ============================================================================
@@ -434,7 +444,7 @@ export default function SpaceOrbitViewer3D() {
     scene.add(stage2Group);
 
     // ------------------------------------------------------------------------
-    // 4. Stage 3: 60m ISS Modular Box Truss Structure
+    // 4. Stage 3: 60m ISS Modular Box Truss & Full ISS Station Complex
     // ------------------------------------------------------------------------
     const stage3Group = new THREE.Group();
     const trussPts = [];
@@ -445,23 +455,59 @@ export default function SpaceOrbitViewer3D() {
       [trussHalf, trussHalf],
       [-trussHalf, trussHalf]
     ];
-    // 4 Longitudinal Guide Chords
-    for (const c of corners) {
-      trussPts.push(0, c[0], c[1], 60, c[0], c[1]);
+
+    // (A) 3D Curved Longitudinal Chords & Top Guide Rails (Step 1.0m for clean lines)
+    const stepX = 1.0;
+    for (let x = 0.0; x < 60.0; x += stepX) {
+      const x1 = x;
+      const x2 = x + stepX;
+      const y1 = getTrussRailY(x1);
+      const y2 = getTrussRailY(x2);
+      // 4 Main Structural Outer Chords
+      for (const c of corners) {
+        trussPts.push(x1, y1 + c[0], c[1], x2, y2 + c[0], c[1]);
+      }
+      // Central Structural Guide Pipe for Inspector Crawler (running at Z=0.0 along the rail curve)
+      trussPts.push(x1, y1, -0.08, x2, y2, -0.08);
+      trussPts.push(x1, y1, 0.08, x2, y2, 0.08);
+      trussPts.push(x1, y1 - 0.08, 0, x2, y2 - 0.08, 0);
+      trussPts.push(x1, y1 + 0.08, 0, x2, y2 + 0.08, 0);
     }
-    // Bulkheads and Cross Diagonals every 5m
+
+    // Square Bulkhead Rings every 5.0m (clean perimeter frame, no dense cross-diagonals)
     for (let tx = 0.0; tx <= 60.0; tx += 5.0) {
+      const ty = getTrussRailY(tx);
       for (let i = 0; i < 4; i++) {
         const next = (i + 1) % 4;
-        trussPts.push(tx, corners[i][0], corners[i][1], tx, corners[next][0], corners[next][1]);
+        trussPts.push(tx, ty + corners[i][0], corners[i][1], tx, ty + corners[next][0], corners[next][1]);
       }
-      trussPts.push(tx, corners[0][0], corners[0][1], tx, corners[2][0], corners[2][1]);
     }
     const trussGeo = new THREE.BufferGeometry();
     trussGeo.setAttribute('position', new THREE.Float32BufferAttribute(trussPts, 3));
     stage3Group.add(new THREE.LineSegments(trussGeo, new THREE.LineBasicMaterial({ color: 0x475569 })));
 
-    // 4 Critical Inspection Joints (15m, 30m, 45m, 60m)
+    // (B) Curve Section Warning Arcs (Entry and Exit of 20-25m and 40-45m)
+    const curveWarningPts = [];
+    for (const cx of [20.0, 25.0, 40.0, 45.0]) {
+      const cy = getTrussRailY(cx);
+      for (let i = 0; i < 8; i++) {
+        const a1 = (i * Math.PI * 2) / 8;
+        const a2 = ((i + 1) * Math.PI * 2) / 8;
+        curveWarningPts.push(cx, cy + 2.3 * Math.sin(a1), 2.3 * Math.cos(a1),
+                            cx, cy + 2.3 * Math.sin(a2), 2.3 * Math.cos(a2));
+      }
+    }
+    const curveWarnGeo = new THREE.BufferGeometry();
+    curveWarnGeo.setAttribute('position', new THREE.Float32BufferAttribute(curveWarningPts, 3));
+    stage3Group.add(new THREE.LineSegments(curveWarnGeo, new THREE.LineBasicMaterial({
+      color: 0xf59e0b,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending
+    })));
+
+    // (C) 4 Critical Inspection Joints (15m, 30m, 45m, 60m)
     const joints = [
       { x: 15.0, name: 'JOINT 01: S1 TRUSS' },
       { x: 30.0, name: 'JOINT 02: SARJ ROTARY' },
@@ -470,10 +516,17 @@ export default function SpaceOrbitViewer3D() {
     ];
     const jointMeshes = [];
     for (const j of joints) {
+      const jy = getTrussRailY(j.x);
       const jPts = [];
-      for (let i = 0; i <= 16; i++) {
-        const a = (i * Math.PI * 2) / 16;
-        jPts.push(new THREE.Vector3(j.x, 2.8 * Math.sin(a), 2.8 * Math.cos(a)));
+      // Outer inspection ring
+      for (let i = 0; i <= 12; i++) {
+        const a = (i * Math.PI * 2) / 12;
+        jPts.push(new THREE.Vector3(j.x, jy + 2.7 * Math.sin(a), 2.7 * Math.cos(a)));
+      }
+      // Central Pipe Docking Collar Ring (where C-clamps lock)
+      for (let i = 0; i <= 8; i++) {
+        const a = (i * Math.PI * 2) / 8;
+        jPts.push(new THREE.Vector3(j.x, jy + 0.16 * Math.sin(a), 0.16 * Math.cos(a)));
       }
       const jGeo = new THREE.BufferGeometry().setFromPoints(jPts);
       const jMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
@@ -481,6 +534,263 @@ export default function SpaceOrbitViewer3D() {
       jointMeshes.push({ line: jLine, mat: jMat, x: j.x, name: j.name });
       stage3Group.add(jLine);
     }
+
+    // 3 Hidden Structural Defect Markers for Stage 3
+    const defectMarkers = [];
+    for (let d = 0; d < 3; d++) {
+      const dGeo = new THREE.BufferGeometry();
+      const dPts = [];
+      const dr = 0.28;
+      for (let i = 0; i < 8; i++) {
+        const a1 = (i * Math.PI * 2) / 8;
+        const a2 = ((i + 1) * Math.PI * 2) / 8;
+        dPts.push(0, dr * Math.sin(a1), dr * Math.cos(a1),
+                  0, dr * Math.sin(a2), dr * Math.cos(a2));
+      }
+      dPts.push(0, -dr * 1.5, 0, 0, dr * 1.5, 0);
+      dPts.push(0, 0, -dr * 1.5, 0, 0, dr * 1.5);
+      dGeo.setAttribute('position', new THREE.Float32BufferAttribute(dPts, 3));
+      const dMat = new THREE.LineBasicMaterial({
+        color: 0xf59e0b,
+        linewidth: 2,
+        transparent: true,
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending
+      });
+      const dMesh = new THREE.LineSegments(dGeo, dMat);
+      dMesh.visible = false;
+      stage3Group.add(dMesh);
+      defectMarkers.push({ mesh: dMesh, mat: dMat });
+    }
+
+    // (D) SARJ (Solar Alpha Rotary Joint) & 4 Solar Array Wings (SAW)
+    const sarjSolarGroup = new THREE.Group();
+    sarjSolarGroup.position.set(30.0, 0, 0);
+
+    // SARJ Rotating Central Ring
+    const sarjPts = [];
+    for (const sx of [-0.8, 0.8]) {
+      for (let i = 0; i < 8; i++) {
+        const a1 = (i * Math.PI * 2) / 8;
+        const a2 = ((i + 1) * Math.PI * 2) / 8;
+        sarjPts.push(sx, 2.2 * Math.sin(a1), 2.2 * Math.cos(a1),
+                     sx, 2.2 * Math.sin(a2), 2.2 * Math.cos(a2));
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI * 2) / 4;
+      sarjPts.push(-0.8, 2.2 * Math.sin(a), 2.2 * Math.cos(a),
+                    0.8, 2.2 * Math.sin(a), 2.2 * Math.cos(a));
+    }
+    const sarjGeo = new THREE.BufferGeometry();
+    sarjGeo.setAttribute('position', new THREE.Float32BufferAttribute(sarjPts, 3));
+    sarjSolarGroup.add(new THREE.LineSegments(sarjGeo, new THREE.LineBasicMaterial({ color: 0x64748b, linewidth: 2 })));
+
+    // Exactly 4 Solar Array Wings (2 assemblies at x = -18.0 and x = +18.0 relative to SARJ; +Z and -Z wings each)
+    const sawRelativeX = [-18.0, 18.0]; // Port (P4) and Starboard (S4)
+    const issSolarPts = [];
+    const solarGlowPts = [];
+    const sawHalfW = 2.4; // 4.8m wide blanket
+    const sawLen = 15.0;  // 15m long wing
+    const sawRootZ = 2.4; // 2.4m offset from truss
+
+    for (const rx of sawRelativeX) {
+      // Upper Wing (+Z) & Lower Wing (-Z) -> 2 * 2 = 4 Solar Panels Total
+      for (const sign of [1, -1]) {
+        const z0 = sign * sawRootZ;
+        const z1 = sign * (sawRootZ + sawLen);
+
+        // Central Lattice Mast Spine
+        issSolarPts.push(rx, 0, z0, rx, 0, z1);
+
+        // Left & Right Solar Blanket Outer Frame
+        issSolarPts.push(rx, -sawHalfW, z0, rx, -sawHalfW, z1);
+        issSolarPts.push(rx, sawHalfW, z0, rx, sawHalfW, z1);
+
+        // Border Caps
+        solarGlowPts.push(rx, -sawHalfW, z0, rx, sawHalfW, z0);
+        solarGlowPts.push(rx, -sawHalfW, z1, rx, sawHalfW, z1);
+
+        // Photovoltaic cell subdivision grid (Clean 4 divisions per wing)
+        for (let zz = sawRootZ + 3.75; zz < sawRootZ + sawLen; zz += 3.75) {
+          const zCur = sign * zz;
+          issSolarPts.push(rx, -sawHalfW, zCur, rx, sawHalfW, zCur);
+        }
+      }
+    }
+    const issSolarGeo = new THREE.BufferGeometry();
+    issSolarGeo.setAttribute('position', new THREE.Float32BufferAttribute(issSolarPts, 3));
+    sarjSolarGroup.add(new THREE.LineSegments(issSolarGeo, new THREE.LineBasicMaterial({
+      color: 0xf59e0b,
+      transparent: true,
+      opacity: 0.85
+    })));
+
+    const solarGlowGeo = new THREE.BufferGeometry();
+    solarGlowGeo.setAttribute('position', new THREE.Float32BufferAttribute(solarGlowPts, 3));
+    sarjSolarGroup.add(new THREE.LineSegments(solarGlowGeo, new THREE.LineBasicMaterial({
+      color: 0xfde047,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending
+    })));
+
+    stage3Group.add(sarjSolarGroup);
+
+    // (E) Pressurized Modules Cluster (ISS Core underneath truss at X=30m)
+    const modulePts = [];
+    const modR = 1.9;
+    const modZ = -3.4;
+
+    // Helper: Clean wireframe cylinder along Y axis (8 facets, 2 rings)
+    const addCylinderY = (cx, y1, y2, cz, r, numRings = 2) => {
+      for (let i = 0; i <= numRings; i++) {
+        const yCur = y1 + (y2 - y1) * (i / numRings);
+        for (let a = 0; a < 8; a++) {
+          const a1 = (a * Math.PI * 2) / 8;
+          const a2 = ((a + 1) * Math.PI * 2) / 8;
+          modulePts.push(cx + r * Math.cos(a1), yCur, cz + r * Math.sin(a1),
+                         cx + r * Math.cos(a2), yCur, cz + r * Math.sin(a2));
+        }
+      }
+      for (let a = 0; a < 4; a++) {
+        const ang = (a * Math.PI * 2) / 4;
+        modulePts.push(cx + r * Math.cos(ang), y1, cz + r * Math.sin(ang),
+                       cx + r * Math.cos(ang), y2, cz + r * Math.sin(ang));
+      }
+    };
+
+    // Helper: Clean wireframe cylinder along X axis (8 facets, 2 rings)
+    const addCylinderX = (x1, x2, cy, cz, r, numRings = 2) => {
+      for (let i = 0; i <= numRings; i++) {
+        const xCur = x1 + (x2 - x1) * (i / numRings);
+        for (let a = 0; a < 8; a++) {
+          const a1 = (a * Math.PI * 2) / 8;
+          const a2 = ((a + 1) * Math.PI * 2) / 8;
+          modulePts.push(xCur, cy + r * Math.cos(a1), cz + r * Math.sin(a1),
+                         xCur, cy + r * Math.cos(a2), cz + r * Math.sin(a2));
+        }
+      }
+      for (let a = 0; a < 4; a++) {
+        const ang = (a * Math.PI * 2) / 4;
+        modulePts.push(x1, cy + r * Math.cos(ang), cz + r * Math.sin(ang),
+                       x2, cy + r * Math.cos(ang), cz + r * Math.sin(ang));
+      }
+    };
+
+    // 1. Destiny (US Lab): y = 1.0 to 8.5
+    addCylinderY(30.0, 1.0, 8.5, modZ, modR, 2);
+
+    // 2. Harmony (Node 2): y = 8.5 to 12.0
+    addCylinderY(30.0, 8.5, 12.0, modZ, modR + 0.1, 2);
+
+    // 3. JAXA Kibo (JEM - Japanese Experiment Module): branching +X from Harmony
+    addCylinderX(30.0, 41.0, 10.5, modZ, modR + 0.1, 3);
+    // Exposed Facility (EF Porch Platform at x = 41.0 to 44.5)
+    const efPts = [
+      [41.0, 9.2, modZ - 0.8], [44.5, 9.2, modZ - 0.8],
+      [44.5, 11.8, modZ - 0.8], [41.0, 11.8, modZ - 0.8],
+      [41.0, 9.2, modZ + 0.5], [44.5, 9.2, modZ + 0.5],
+      [44.5, 11.8, modZ + 0.5], [41.0, 11.8, modZ + 0.5]
+    ];
+    for (let i = 0; i < 4; i++) {
+      const next = (i + 1) % 4;
+      modulePts.push(...efPts[i], ...efPts[next]);
+      modulePts.push(...efPts[i + 4], ...efPts[next + 4]);
+      modulePts.push(...efPts[i], ...efPts[i + 4]);
+    }
+    // JEM-RMS Robotic Arm
+    modulePts.push(40.5, 12.2, modZ + 0.5, 41.5, 13.2, modZ + 1.5);
+    modulePts.push(41.5, 13.2, modZ + 1.5, 43.5, 13.5, modZ + 1.0);
+
+    // 4. Columbus (ESA Lab): branching -X from Harmony (x = 24.5 to 30.0 at y=10.5)
+    addCylinderX(24.5, 30.0, 10.5, modZ, modR, 2);
+
+    // 5. Unity & Quest: y = -1.0 to -4.5
+    addCylinderY(30.0, -4.5, -1.0, modZ, modR, 2);
+
+    // 6. Russian Segment (Zvezda): y = -4.5 to -13.0
+    addCylinderY(30.0, -13.0, -4.5, modZ, modR - 0.2, 3);
+
+    // 7. Cupola (Earth Observation Dome)
+    for (let a = 0; a < 6; a++) {
+      const a1 = (a * Math.PI * 2) / 6;
+      const a2 = ((a + 1) * Math.PI * 2) / 6;
+      modulePts.push(30.0 + 1.1 * Math.cos(a1), -1.0 + 1.1 * Math.sin(a1), modZ - 1.8,
+                     30.0 + 1.1 * Math.cos(a2), -1.0 + 1.1 * Math.sin(a2), modZ - 1.8);
+      modulePts.push(30.0 + 1.1 * Math.cos(a1), -1.0 + 1.1 * Math.sin(a1), modZ - 1.8,
+                     30.0 + 0.5 * Math.cos(a1), -1.0 + 0.5 * Math.sin(a1), modZ - 2.4);
+    }
+
+    // Truss-to-Module Structural Stanchions
+    for (const my of [2.0, 9.0, -2.0, -6.0]) {
+      modulePts.push(30.0, 0, -1.6, 30.0, my, modZ + modR);
+    }
+
+    const modGeo = new THREE.BufferGeometry();
+    modGeo.setAttribute('position', new THREE.Float32BufferAttribute(modulePts, 3));
+    stage3Group.add(new THREE.LineSegments(modGeo, new THREE.LineBasicMaterial({
+      color: 0x06b6d4,
+      transparent: true,
+      opacity: 0.85
+    })));
+
+    // (F) Thermal Control Radiators (2 Clean Cooling Blades at X=22m and X=38m)
+    const radPts = [];
+    for (const rx of [22.0, 38.0]) {
+      // Single sleek rectangular radiator blade extending -Y
+      radPts.push(rx, -2.0, -0.5, rx, -9.0, -0.5);
+      radPts.push(rx, -9.0, -0.5, rx, -9.0, 2.2);
+      radPts.push(rx, -9.0, 2.2, rx, -2.0, 2.2);
+      radPts.push(rx, -2.0, 2.2, rx, -2.0, -0.5);
+      // Mid divider line
+      radPts.push(rx, -5.5, -0.5, rx, -5.5, 2.2);
+    }
+    const radGeo = new THREE.BufferGeometry();
+    radGeo.setAttribute('position', new THREE.Float32BufferAttribute(radPts, 3));
+    stage3Group.add(new THREE.LineSegments(radGeo, new THREE.LineBasicMaterial({
+      color: 0xe2e8f0,
+      transparent: true,
+      opacity: 0.70
+    })));
+
+    // (G) Low Earth Orbit Cyber Earth (Background at Z = -38m)
+    const earthGlobeGroup = new THREE.Group();
+    earthGlobeGroup.position.set(30.0, 0, -38.0);
+    const earthPts = [];
+    const earthR = 25.0;
+    // Latitudes (every 30 deg)
+    for (let lat = -60; lat <= 60; lat += 30) {
+      const phi = (lat * Math.PI) / 180;
+      const rRing = earthR * Math.cos(phi);
+      const zRing = earthR * Math.sin(phi);
+      for (let i = 0; i < 16; i++) {
+        const th1 = (i * Math.PI * 2) / 16;
+        const th2 = ((i + 1) * Math.PI * 2) / 16;
+        earthPts.push(rRing * Math.cos(th1), rRing * Math.sin(th1), zRing,
+                      rRing * Math.cos(th2), rRing * Math.sin(th2), zRing);
+      }
+    }
+    // Longitudes (6 lines)
+    for (let lon = 0; lon < 6; lon++) {
+      const th = (lon * Math.PI * 2) / 6;
+      for (let i = 0; i < 16; i++) {
+        const phi1 = ((i - 8) * Math.PI) / 16;
+        const phi2 = ((i + 1 - 8) * Math.PI) / 16;
+        earthPts.push(earthR * Math.cos(phi1) * Math.cos(th), earthR * Math.cos(phi1) * Math.sin(th), earthR * Math.sin(phi1),
+                      earthR * Math.cos(phi2) * Math.cos(th), earthR * Math.cos(phi2) * Math.sin(th), earthR * Math.sin(phi2));
+      }
+    }
+    const earthGeo = new THREE.BufferGeometry();
+    earthGeo.setAttribute('position', new THREE.Float32BufferAttribute(earthPts, 3));
+    earthGlobeGroup.add(new THREE.LineSegments(earthGeo, new THREE.LineBasicMaterial({
+      color: 0x0369a1,
+      transparent: true,
+      opacity: 0.20
+    })));
+    stage3Group.add(earthGlobeGroup);
+
     scene.add(stage3Group);
 
     // ------------------------------------------------------------------------
@@ -887,8 +1197,139 @@ export default function SpaceOrbitViewer3D() {
     climberGeo.setAttribute('position', new THREE.Float32BufferAttribute(climberPts, 3));
     climberGroup.add(new THREE.LineSegments(climberGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 })));
 
+    // C. Mobile Transporter / ISS Truss Pipe Crawler Robot (Stage 3)
+    const inspectorGroup = new THREE.Group();
+    const inspPts = [];
+    const chHalfX = 0.38, chHalfY = 0.18, chHalfZ = 0.10; // Compact 0.76m x 0.36m x 0.20m aerospace body
+
+    // 1. Sleek Beveled Aerospace Chassis Capsule
+    const chCorners = [
+      [-chHalfX + 0.08, -chHalfY, -chHalfZ],
+      [chHalfX - 0.08, -chHalfY, -chHalfZ],
+      [chHalfX - 0.08, chHalfY, -chHalfZ],
+      [-chHalfX + 0.08, chHalfY, -chHalfZ],
+      [-chHalfX + 0.08, -chHalfY, chHalfZ],
+      [chHalfX - 0.08, -chHalfY, chHalfZ],
+      [chHalfX - 0.08, chHalfY, chHalfZ],
+      [-chHalfX + 0.08, chHalfY, chHalfZ]
+    ];
+    for (let i = 0; i < 4; i++) {
+      const next = (i + 1) % 4;
+      inspPts.push(...chCorners[i], ...chCorners[next]);
+      inspPts.push(...chCorners[i + 4], ...chCorners[next + 4]);
+      inspPts.push(...chCorners[i], ...chCorners[i + 4]);
+    }
+
+    // Aerodynamic tapered nose cone (front: +X)
+    const noseTip = [chHalfX + 0.08, 0, 0];
+    const noseBase = [
+      [chHalfX - 0.08, -chHalfY * 0.7, -chHalfZ * 0.7],
+      [chHalfX - 0.08, chHalfY * 0.7, -chHalfZ * 0.7],
+      [chHalfX - 0.08, chHalfY * 0.7, chHalfZ * 0.7],
+      [chHalfX - 0.08, -chHalfY * 0.7, chHalfZ * 0.7]
+    ];
+    for (let i = 0; i < 4; i++) {
+      inspPts.push(...noseTip, ...noseBase[i]);
+      const next = (i + 1) % 4;
+      inspPts.push(...noseBase[i], ...noseBase[next]);
+    }
+
+    // Tapered tail cone (rear: -X)
+    const tailTip = [-chHalfX - 0.08, 0, 0];
+    const tailBase = [
+      [-chHalfX + 0.08, -chHalfY * 0.7, -chHalfZ * 0.7],
+      [-chHalfX + 0.08, chHalfY * 0.7, -chHalfZ * 0.7],
+      [-chHalfX + 0.08, chHalfY * 0.7, chHalfZ * 0.7],
+      [-chHalfX + 0.08, -chHalfY * 0.7, chHalfZ * 0.7]
+    ];
+    for (let i = 0; i < 4; i++) {
+      inspPts.push(...tailTip, ...tailBase[i]);
+      const next = (i + 1) % 4;
+      inspPts.push(...tailBase[i], ...tailBase[next]);
+    }
+
+    // 2. Conformal Phased-Array Flat Antenna (Flush mounted on top surface; NO protruding vertical antenna!)
+    const antX1 = -0.16, antX2 = 0.12;
+    const antY = 0.11, antZ = chHalfZ;
+    inspPts.push(antX1, -antY, antZ, antX2, -antY, antZ);
+    inspPts.push(antX2, -antY, antZ, antX2, antY, antZ);
+    inspPts.push(antX2, antY, antZ, antX1, antY, antZ);
+    inspPts.push(antX1, antY, antZ, antX1, -antY, antZ);
+    // Microstrip cross divisions
+    inspPts.push(0, -antY, antZ, 0, antY, antZ);
+    inspPts.push(antX1, 0, antZ, antX2, 0, antZ);
+
+    // 3. Pipe-Gripping C-Clamps & Pinch Rollers (Hugging structural guide pipe; NO wheels/tires!)
+    for (const gx of [-0.22, 0.22]) {
+      // Mechanical suspension arm connecting chassis to pipe gripper
+      inspPts.push(gx, -0.12, -chHalfZ, gx, -0.11, -0.06);
+      inspPts.push(gx, 0.12, -chHalfZ, gx, 0.11, -0.06);
+
+      // C-shaped curved robotic jaw encircling the cylindrical pipe (radius 0.11m around pipe)
+      for (let a = 1; a < 7; a++) {
+        const a1 = (a * Math.PI) / 4;
+        const a2 = ((a + 1) * Math.PI) / 4;
+        const r1 = 0.11;
+        inspPts.push(gx, r1 * Math.cos(a1), r1 * Math.sin(a1),
+                     gx, r1 * Math.cos(a2), r1 * Math.sin(a2));
+      }
+
+      // Opposed concave pinch drive rollers hugging pipe circumference
+      inspPts.push(gx - 0.04, 0, -0.09, gx + 0.04, 0, -0.09);
+      inspPts.push(gx - 0.04, 0, 0.09, gx + 0.04, 0, 0.09);
+      inspPts.push(gx - 0.04, -0.09, 0, gx + 0.04, -0.09, 0);
+      inspPts.push(gx - 0.04, 0.09, 0, gx + 0.04, 0.09, 0);
+    }
+
+    const inspGeo = new THREE.BufferGeometry();
+    inspGeo.setAttribute('position', new THREE.Float32BufferAttribute(inspPts, 3));
+    inspectorGroup.add(new THREE.LineSegments(inspGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 })));
+
+    // 4. Forward-Emitting Inspection Laser Scan Fan (From nose window directly along pipe corridor)
+    const laserBeamPts = [];
+    const lbApex = [chHalfX + 0.08, 0, 0];
+    const lbBase = [
+      [1.6, -0.5, -0.4],
+      [1.6, 0.5, -0.4],
+      [1.6, 0.5, 0.4],
+      [1.6, -0.5, 0.4]
+    ];
+    for (let i = 0; i < 4; i++) {
+      laserBeamPts.push(...lbApex, ...lbBase[i]);
+      const next = (i + 1) % 4;
+      laserBeamPts.push(...lbBase[i], ...lbBase[next]);
+    }
+    const laserBeamGeo = new THREE.BufferGeometry();
+    laserBeamGeo.setAttribute('position', new THREE.Float32BufferAttribute(laserBeamPts, 3));
+    const inspectorLaserMat = new THREE.LineBasicMaterial({
+      color: 0x22c55e,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending
+    });
+    const inspectorLaserLine = new THREE.LineSegments(laserBeamGeo, inspectorLaserMat);
+    inspectorGroup.add(inspectorLaserLine);
+
+    // 5. Front & Rear Magnetic Locking Clamp Pads (Locks firmly onto pipe collar during joint scan)
+    const inspectorClampMat = new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 3, transparent: true, opacity: 0.9 });
+    const clampPts = [];
+    for (const cx of [-0.22, 0.22]) {
+      for (let a = 0; a < 8; a++) {
+        const a1 = (a * Math.PI * 2) / 8;
+        const a2 = ((a + 1) * Math.PI * 2) / 8;
+        clampPts.push(cx, 0.12 * Math.cos(a1), 0.12 * Math.sin(a1),
+                      cx, 0.12 * Math.cos(a2), 0.12 * Math.sin(a2));
+      }
+    }
+    const clampGeo = new THREE.BufferGeometry();
+    clampGeo.setAttribute('position', new THREE.Float32BufferAttribute(clampPts, 3));
+    const inspectorClampLine = new THREE.LineSegments(clampGeo, inspectorClampMat);
+    inspectorGroup.add(inspectorClampLine);
+
     shipRoot.add(fighterGroup);
     shipRoot.add(climberGroup);
+    shipRoot.add(inspectorGroup);
     scene.add(shipRoot);
 
     // ------------------------------------------------------------------------
@@ -927,6 +1368,21 @@ export default function SpaceOrbitViewer3D() {
     thrusterGroup.add(rcsJetLines);
 
     shipRoot.add(thrusterGroup);
+
+    // Stage 3: 360-degree Laser Inspection Scanner Fan
+    const scanFanGeo = new THREE.BufferGeometry();
+    const scanFanPts = new Float32Array(48 * 3);
+    scanFanGeo.setAttribute('position', new THREE.BufferAttribute(scanFanPts, 3));
+    const scanFanMat = new THREE.LineBasicMaterial({
+      color: 0x22c55e,
+      linewidth: 2.5,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending
+    });
+    const scanFanLine = new THREE.LineSegments(scanFanGeo, scanFanMat);
+    scanFanLine.visible = false;
+    shipRoot.add(scanFanLine);
 
     // ------------------------------------------------------------------------
     // Main Animation & Render Loop (120 FPS Native GPU Pipeline)
@@ -1002,9 +1458,28 @@ export default function SpaceOrbitViewer3D() {
       stage4Group.visible = (stageId === 4);
       stage5Group.visible = (stageId === 5);
 
-      fighterGroup.visible = (stageId !== 2);
+      fighterGroup.visible = (stageId !== 2 && stageId !== 3);
       climberGroup.visible = (stageId === 2);
+      inspectorGroup.visible = (stageId === 3);
       sensorLine.visible = (stageId === 1);
+
+      // Dynamic animations for Stage 3 ISS & Inspector Crawler
+      if (sarjSolarGroup) {
+        sarjSolarGroup.rotation.x = (now * 0.00015) % (Math.PI * 2);
+      }
+      if (earthGlobeGroup) {
+        earthGlobeGroup.rotation.y = (now * 0.00008) % (Math.PI * 2);
+      }
+      if (inspectorLaserLine) {
+        const isScanning = (stageId === 3 && (tlm.fdir_mode === 1 || Math.abs(tlm.vel_x || 0) < 0.25));
+        inspectorLaserLine.visible = isScanning;
+        if (isScanning) {
+          inspectorLaserMat.opacity = 0.5 + 0.45 * Math.sin(now * 0.015);
+        }
+      }
+      if (inspectorClampMat) {
+        inspectorClampMat.color.setHex(tlm.fdir_mode === 1 ? 0xfacc15 : 0x0284c7);
+      }
 
       // Dead-Reckoning Blending
       const targetX = tlm.pos_x !== undefined ? tlm.pos_x : sm.x;
@@ -1135,30 +1610,68 @@ export default function SpaceOrbitViewer3D() {
       const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
 
       // Main thrusters T0, T1
-      const isT0Firing = hasFuel && (healthMask & 1) && ((thrustMask & 1) || (stageId !== 5 && actualFx > 0.005));
-      const isT1Firing = hasFuel && (healthMask & 2) && ((thrustMask & 2) || (stageId !== 5 && actualFx > 0.005));
+      const isReverse = (stageId === 3 || stageId !== 5) && (actualFx < -0.005);
+      const isForward = hasFuel && (healthMask & 1) && ((thrustMask & 1) || (stageId !== 5 && actualFx > 0.005));
+      const isCounterFiring = hasFuel && isReverse;
+      const isT0Firing = isForward || isCounterFiring;
+      const isT1Firing = isForward || isCounterFiring;
+
+      // Dynamic plume tint: white-blue on counter brake, cyan on standard drive
+      plumeMat.color.setHex(isCounterFiring ? 0xe0f2fe : 0x38bdf8);
 
       plumeT0.visible = !!isT0Firing;
       if (isT0Firing) {
-        const pLen = 1.0 + Math.random() * 0.5;
-        const jx = (Math.random() - 0.5) * 0.1;
+        const pLen = (stageId === 3) ? (0.35 + Math.random() * 0.25) : (1.0 + Math.random() * 0.5);
+        const jx = (Math.random() - 0.5) * 0.05;
         const posAttr = plumeT0.geometry.attributes.position;
-        posAttr.setXYZ(0, -1.6, -0.4, 0);
-        posAttr.setXYZ(1, -1.6 - pLen, -0.4 + jx, jx);
-        posAttr.setXYZ(2, -1.6, -0.4, 0);
-        posAttr.setXYZ(3, -1.6 - pLen * 0.45, -0.4, 0);
+        if (stageId === 3) {
+          if (isCounterFiring) {
+            // Forward counter-thruster nozzle firing FORWARD (+X) to brake
+            posAttr.setXYZ(0, 0.38, -0.10, 0);
+            posAttr.setXYZ(1, 0.38 + pLen, -0.10 + jx, jx);
+            posAttr.setXYZ(2, 0.38, -0.10, 0);
+            posAttr.setXYZ(3, 0.38 + pLen * 0.45, -0.10, 0);
+          } else {
+            // Rear drive thruster nozzle firing BACKWARD (-X) to accelerate
+            posAttr.setXYZ(0, -0.38, -0.10, 0);
+            posAttr.setXYZ(1, -0.38 - pLen, -0.10 + jx, jx);
+            posAttr.setXYZ(2, -0.38, -0.10, 0);
+            posAttr.setXYZ(3, -0.38 - pLen * 0.45, -0.10, 0);
+          }
+        } else {
+          posAttr.setXYZ(0, -1.6, -0.4, 0);
+          posAttr.setXYZ(1, -1.6 - pLen, -0.4 + jx, jx);
+          posAttr.setXYZ(2, -1.6, -0.4, 0);
+          posAttr.setXYZ(3, -1.6 - pLen * 0.45, -0.4, 0);
+        }
         posAttr.needsUpdate = true;
       }
 
       plumeT1.visible = !!isT1Firing;
       if (isT1Firing) {
-        const pLen = 1.0 + Math.random() * 0.5;
-        const jx = (Math.random() - 0.5) * 0.1;
+        const pLen = (stageId === 3) ? (0.35 + Math.random() * 0.25) : (1.0 + Math.random() * 0.5);
+        const jx = (Math.random() - 0.5) * 0.05;
         const posAttr = plumeT1.geometry.attributes.position;
-        posAttr.setXYZ(0, -1.6, 0.4, 0);
-        posAttr.setXYZ(1, -1.6 - pLen, 0.4 + jx, jx);
-        posAttr.setXYZ(2, -1.6, 0.4, 0);
-        posAttr.setXYZ(3, -1.6 - pLen * 0.45, 0.4, 0);
+        if (stageId === 3) {
+          if (isCounterFiring) {
+            // Forward counter-thruster nozzle firing FORWARD (+X) to brake
+            posAttr.setXYZ(0, 0.38, 0.10, 0);
+            posAttr.setXYZ(1, 0.38 + pLen, 0.10 + jx, jx);
+            posAttr.setXYZ(2, 0.38, 0.10, 0);
+            posAttr.setXYZ(3, 0.38 + pLen * 0.45, 0.10, 0);
+          } else {
+            // Rear drive thruster nozzle firing BACKWARD (-X) to accelerate
+            posAttr.setXYZ(0, -0.38, 0.10, 0);
+            posAttr.setXYZ(1, -0.38 - pLen, 0.10 + jx, jx);
+            posAttr.setXYZ(2, -0.38, 0.10, 0);
+            posAttr.setXYZ(3, -0.38 - pLen * 0.45, 0.10, 0);
+          }
+        } else {
+          posAttr.setXYZ(0, -1.6, 0.4, 0);
+          posAttr.setXYZ(1, -1.6 - pLen, 0.4 + jx, jx);
+          posAttr.setXYZ(2, -1.6, 0.4, 0);
+          posAttr.setXYZ(3, -1.6 - pLen * 0.45, 0.4, 0);
+        }
         posAttr.needsUpdate = true;
       }
 
@@ -1205,6 +1718,95 @@ export default function SpaceOrbitViewer3D() {
         }
         pos.needsUpdate = true;
         tetherMat.color.setHex(tlm.cable_snapped ? 0xef4444 : ((tlm.cable_tension || 10000) > 13000 ? 0xf97316 : 0x38bdf8));
+      }
+
+      // Update Stage 3 360-deg Laser Scanner Fan & Defect Detection Markers
+      if (stageId === 3) {
+        const isClamped = (tlm.fdir_mode === 1);
+        const scanDeg = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
+        const beamDeg = (tlm.torque !== undefined && tlm.torque > 0.0) ? tlm.torque : 15.0;
+        const snr = tlm.cable_vibration || 0.0;
+
+        scanFanLine.visible = isClamped;
+        if (isClamped) {
+          const radCenter = (scanDeg * Math.PI) / 180.0;
+          const halfBeam = ((beamDeg * 0.5) * Math.PI) / 180.0;
+          const R = 2.7;
+          const posAttr = scanFanGeo.attributes.position;
+          let pIdx = 0;
+          const setPt = (x, y, z) => { posAttr.setXYZ(pIdx++, x, y, z); };
+
+          // Laser fan from crawler center to outer ring
+          const aL = radCenter - halfBeam;
+          setPt(0, 0, 0);
+          setPt(0, R * Math.sin(aL), R * Math.cos(aL));
+          setPt(0, 0, 0);
+          setPt(0, R * Math.sin(radCenter), R * Math.cos(radCenter));
+          const aR = radCenter + halfBeam;
+          setPt(0, 0, 0);
+          setPt(0, R * Math.sin(aR), R * Math.cos(aR));
+
+          // Outer arc segments
+          const numArc = 6;
+          for (let k = 0; k < numArc; k++) {
+            const arc1 = aL + (aR - aL) * (k / numArc);
+            const arc2 = aL + (aR - aL) * ((k + 1) / numArc);
+            setPt(0, R * Math.sin(arc1), R * Math.cos(arc1));
+            setPt(0, R * Math.sin(arc2), R * Math.cos(arc2));
+          }
+          scanFanGeo.setDrawRange(0, pIdx);
+          posAttr.needsUpdate = true;
+
+          if (snr >= 600) {
+            scanFanMat.color.setHex(0x10b981); // Solid Lock Green
+            scanFanMat.opacity = 1.0;
+          } else if (snr >= 200) {
+            scanFanMat.color.setHex(0xf59e0b); // Anomaly Echo Amber
+            scanFanMat.opacity = 0.85;
+          } else {
+            scanFanMat.color.setHex(0x06b6d4); // Active Radar Cyan
+            scanFanMat.opacity = 0.65;
+          }
+        }
+
+        // 3 Structural Defect Markers along Joint Rings
+        const jXTable = [15.0, 30.0, 45.0, 60.0];
+        const defAngles = [tlm.debris_spawn_x, tlm.debris_spawn_y, tlm.debris_spawn_z];
+        const defJoints = [tlm.debris_impact_x, tlm.debris_impact_y, tlm.debris_impact_z];
+        const detBits = (tlm.sensor_edge !== undefined) ? ((tlm.sensor_edge >> 20) & 0x07) : 0;
+
+        for (let d = 0; d < 3; d++) {
+          const marker = defectMarkers[d];
+          if (!marker) continue;
+          const jId = Math.round(defJoints[d] || 0);
+          const angDeg = defAngles[d] || 0.0;
+          if (angDeg === 0.0 && jId === 0 && d > 0) {
+            marker.mesh.visible = false;
+            continue;
+          }
+          const jX = jXTable[jId] || 15.0;
+          const jY = getTrussRailY(jX);
+          const rad = (angDeg * Math.PI) / 180.0;
+          const R = 2.7;
+          marker.mesh.position.set(jX, jY + R * Math.sin(rad), R * Math.cos(rad));
+          marker.mesh.visible = true;
+
+          const isDetected = (detBits & (1 << d)) !== 0;
+          if (isDetected) {
+            marker.mat.color.setHex(0x22c55e); // Detected: Confirmed Green
+            marker.mat.opacity = 0.95;
+            marker.mesh.scale.setScalar(1.2 + 0.2 * Math.sin(Date.now() * 0.006));
+          } else {
+            marker.mat.color.setHex(0xf59e0b); // Undetected: Faint Latent Amber
+            marker.mat.opacity = 0.45;
+            marker.mesh.scale.setScalar(1.0);
+          }
+        }
+      } else {
+        scanFanLine.visible = false;
+        for (let d = 0; d < 3; d++) {
+          if (defectMarkers[d]) defectMarkers[d].mesh.visible = false;
+        }
       }
 
       // Update Stage 4 Docking Crosshair Rotation
@@ -1535,13 +2137,45 @@ export default function SpaceOrbitViewer3D() {
         }
       } else if (stageId === 3) {
         for (const jm of jointMeshes) {
-          const p = toScreen(jm.x, 0, 2.8);
+          const jy = getTrussRailY(jm.x);
+          const p = toScreen(jm.x, jy, 2.8);
           if (p) {
             const isPassed = jm.x < shipX - 0.5;
             const isClose = Math.abs(shipX - jm.x) <= 0.6;
             hudCtx.fillStyle = isClose ? '#facc15' : (isPassed ? '#10b981' : '#38bdf8');
             hudCtx.fillText(jm.name, p.sx, p.sy - 8);
           }
+        }
+        // Major ISS Modules & Facilities
+        const pKibo = toScreen(36.0, 10.5, -2.2);
+        if (pKibo) {
+          hudCtx.font = 'bold 11px monospace';
+          hudCtx.fillStyle = '#38bdf8';
+          hudCtx.fillText('JAXA KIBO (JEM) LAB & EF', pKibo.sx, pKibo.sy - 8);
+        }
+        const pDestiny = toScreen(30.0, 5.0, -2.2);
+        if (pDestiny) {
+          hudCtx.font = '10px monospace';
+          hudCtx.fillStyle = '#06b6d4';
+          hudCtx.fillText('NASA DESTINY (US LAB)', pDestiny.sx, pDestiny.sy - 8);
+        }
+        const pSaw = toScreen(30.0, 0.0, 8.5);
+        if (pSaw) {
+          hudCtx.font = 'bold 10px monospace';
+          hudCtx.fillStyle = '#f59e0b';
+          hudCtx.fillText('SOLAR ARRAY WINGS (4x SAW)', pSaw.sx, pSaw.sy - 8);
+        }
+        const pC1 = toScreen(22.5, getTrussRailY(22.5), 2.4);
+        if (pC1 && shipX <= 28.0) {
+          hudCtx.font = '9px monospace';
+          hudCtx.fillStyle = '#facc15';
+          hudCtx.fillText('⚠️ CURVE 01 [R=5.0m | Fc < 300N]', pC1.sx, pC1.sy - 8);
+        }
+        const pC2 = toScreen(42.5, getTrussRailY(42.5), 2.4);
+        if (pC2 && shipX >= 25.0 && shipX <= 48.0) {
+          hudCtx.font = '9px monospace';
+          hudCtx.fillStyle = '#facc15';
+          hudCtx.fillText('⚠️ CURVE 02 [R=5.0m | Fc < 300N]', pC2.sx, pC2.sy - 8);
         }
       } else if (stageId === 4) {
         for (const cpm of cpMeshes) {
