@@ -25,34 +25,7 @@ graph TD
 
 探査機には、機体全周に対向配置された **12基の RCS パルススラスタ（$F_{\max} = 20.0\text{ N}$）** と、X/Y/Z 各軸の角運動量を電気駆動（燃料消費ゼロ）で吸収する **3軸リアクションホイール・クラスタ** が搭載されています。
 
-```text
-                  [水平面 (XY平面 / Z = 0)]
-                        +Y (Port / 左舷)
-                  [T4]                    [T5]
-                   |                       |
-               +---+-----------------------+---+
-               |                               |
- [-X] [T2] ----|           CoM (0,0)           |---- [T0] [+X]
- Reverse       |    [ 3-Axis Reaction Wheels ] |    Forward
- [-X] [T3] ----|                               |---- [T1] [+X]
-               |                               |
-               +---+-----------------------+---+
-                   |                       |
-                  [T6]                    [T7]
-                        -Y (Starboard / 右舷)
-
-                  [垂直面 (XZ平面 / ピッチ制御)]
-                        +Z (Dorsal / 背面)
-              [T8: Fwd-Dorsal]    [T10: Aft-Dorsal]
-                    |                    |
-             +------+--------------------+------+
-   Forward   |                                  |   Aft
-   (+X)      |             CoM (0,0)            |   (-X)
-             +------+--------------------+------+
-                    |                    |
-             [T9: Fwd-Ventral]   [T11: Aft-Ventral]
-                        -Z (Ventral / 腹面)
-```
+![Spacecraft Hardware Layout (12-Thruster 6-DoF & 3-Axis RW)](images/spacecraft_hardware_layout.svg)
 
 ### (1) 全12基スラスタの公称発生力・トルク特性
 

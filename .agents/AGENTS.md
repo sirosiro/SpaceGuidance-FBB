@@ -13,6 +13,7 @@
 - **Git管理・.gitignore判断時の歴史的意図（ADR）確認プロトコル**: Git管理下のファイルを除外・削除、または `.gitignore` を編集する際は、一般的な教科書的ビルド原則（例: 「生成物はGitに入れない」）を機械的に適用せず、必ず事前に [docs/architecture/AddInfo_history.md](file:///workspaces/FPGA-BoardlessBench/docs/architecture/AddInfo_history.md) や関連マニフェストを参照し、初学者の開発体験（`git clone` 直後の VS Code IntelliSense / clangd エラー防止のための `vfpga_device_config.h` 保持など）や過去の意図的決定（ADR）が存在しないかを思考プロセス内で事前に検証すること。
 - **コード規模計測における `cloc` 使用の標準化**: 今後、プロジェクトのコード量・ファイル数・行数統計を調査・集計・ドキュメント更新する際は、必ず事前に `./tests/run_tests.sh --clean --cleanall` を実行して動的ロードされた外部 RTOS ソース等を完全にクリーンオフした上で、`cloc . --exclude-dir=build,node_modules,dist,obj_dir,.git,.vscode,.gemini,brain,scratch,assets` コマンドを使用し、F-BB 独自の正確な純プログラム行数 (Pure LOC)・コメント行数・空行数を計測・記録すること。
 - **Git Push の完全禁止（厳格遵守）**: エージェントによるリモートリポジトリへの `git push` は、理由の如何を問わず一切禁止とする。エージェントが担当するバージョン管理操作はローカルリポジトリでのコミット（`git commit`）までに厳格に留め、リモートへの反映・プッシュは常にユーザー自身の手動操作に委ねること。
+- **プラグイン完全隔離原則（F-BBコアへの具象名混入の絶対禁止）**: F-BBのコアソースコード（`dashboard/server.js`、`start_lab.sh`、`src/controller/vlogic_controller.py`、`scripts/` 等）に、特定のサードパーティ・プラグインや外部シナリオの具象名（例: `space_guidance_*`, `pilot.py`, `rct_*` 等）を直接記述・ハードコードすることを例外なく一切禁止する。プロセスライフサイクル管理は `/tmp/fbb_app.pid` によるPGID隔離、テレメトリは `/tmp/fbb_scenario_telemetry.json` 等の抽象契約に厳格に限定し、コミット前に必ず `./scripts/verify_plugin_isolation.sh` で違反ゼロであることを検証すること。
 
 
 

@@ -1,0 +1,475 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 880" width="100%" height="100%" style="background:#070b14; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;">
+  <defs>
+    <!-- Background Grid -->
+    <pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse">
+      <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#0e172a" stroke-width="0.8"/>
+    </pattern>
+    <pattern id="majorGrid" width="100" height="100" patternUnits="userSpaceOnUse">
+      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#162238" stroke-width="1.2"/>
+    </pattern>
+
+    <!-- Glow Filters -->
+    <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-core" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-orange" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-magenta" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-red" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Plume Gradients (Hot Exhaust Gases) -->
+    <linearGradient id="plumeDown" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.95" />
+      <stop offset="60%" stop-color="#d97706" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="plumeUp" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.95" />
+      <stop offset="60%" stop-color="#d97706" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="plumeLeft" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.95" />
+      <stop offset="60%" stop-color="#d97706" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="plumeRight" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.95" />
+      <stop offset="60%" stop-color="#d97706" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d97706" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Markers for Reaction Thrust Vectors -->
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#f59e0b" />
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#22c55e" />
+    </marker>
+    <marker id="arrow-magenta" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#ec4899" />
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#ef4444" />
+    </marker>
+  </defs>
+
+  <!-- Grids -->
+  <rect width="1200" height="880" fill="url(#grid)" />
+  <rect width="1200" height="880" fill="url(#majorGrid)" />
+
+  <!-- Outer Frame & Header -->
+  <rect x="20" y="20" width="1160" height="840" rx="8" fill="none" stroke="#1e293b" stroke-width="1.5" />
+  <rect x="20" y="20" width="1160" height="48" rx="8" fill="#0b1220" stroke="#1e293b" stroke-width="1.5" />
+  <circle cx="45" cy="44" r="6" fill="#38bdf8" filter="url(#glow-cyan)" />
+  <text x="62" y="49" fill="#38bdf8" font-size="15" font-weight="700" letter-spacing="1.2">SPACEGUIDANCE STAGE EX // VIEWER-MATCHED 6-DoF DELTA FIGHTER SCHEMATIC</text>
+  <text x="1160" y="49" fill="#f59e0b" font-size="12" text-anchor="end" font-weight="700">OUTWARD EXHAUST &amp; REACTION THRUST TOPOLOGY (NEWTON'S 3RD LAW)</text>
+
+  <!-- =================================================================== -->
+  <!-- VIEW 1: HORIZONTAL TOP VIEW (XY PLANE: YAW & HORIZONTAL MANEUVERS)  -->
+  <!-- =================================================================== -->
+  <g id="view-horizontal">
+    <!-- View Box -->
+    <rect x="35" y="80" width="565" height="490" rx="6" fill="#090f1d" fill-opacity="0.8" stroke="#1e293b" stroke-width="1.2" />
+    <rect x="35" y="80" width="565" height="28" rx="6" fill="#0e172a" stroke="#1e293b" stroke-width="1" />
+    <text x="50" y="99" fill="#38bdf8" font-size="12" font-weight="700">VIEW A: HORIZONTAL PLANE (XY TOP VIEW // Z = 0)</text>
+    <text x="585" y="99" fill="#64748b" font-size="10" text-anchor="end" font-weight="600">Viewer Three.js Delta Wireframe</text>
+
+    <!-- Axis Legend (Top-Right) -->
+    <g transform="translate(555, 145)">
+      <circle cx="0" cy="0" r="22" fill="#0b1220" stroke="#334155" stroke-width="1" />
+      <line x1="0" y1="0" x2="0" y2="-16" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrow-cyan)" />
+      <text x="0" y="-19" fill="#38bdf8" font-size="8" font-weight="700" text-anchor="middle">+X (Nose)</text>
+      <line x1="0" y1="0" x2="-16" y2="0" stroke="#22c55e" stroke-width="1.8" marker-end="url(#arrow-green)" />
+      <text x="-19" y="3" fill="#22c55e" font-size="8" font-weight="700" text-anchor="end">+Y (Port)</text>
+      <circle cx="0" cy="0" r="2.5" fill="#ec4899" />
+      <text x="6" y="12" fill="#ec4899" font-size="7.5" font-weight="600">+Z ⊙</text>
+    </g>
+
+    <!-- Center Line & Grid References (Center CoM at 318, 345) -->
+    <g transform="translate(318, 345)">
+      <!-- Longitudinal Axis X -->
+      <line x1="0" y1="-226" x2="0" y2="194" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3" />
+      <!-- Lateral Axis Y -->
+      <line x1="-240" y1="0" x2="240" y2="0" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3" />
+      <circle cx="0" cy="0" r="3" fill="#94a3b8" />
+      <text x="6" y="-8" fill="#94a3b8" font-size="8.5" font-weight="600">CoM (0,0)</text>
+
+      <!-- ================================================================= -->
+      <!-- EXACT VIEWER THREE.JS DELTA FIGHTER WIREFRAME (fighterHullPts)   -->
+      <!-- ================================================================= -->
+
+      <!-- 1. Outer Glow Wireframe Layer -->
+      <g stroke="#0284c7" stroke-width="3" stroke-opacity="0.55" fill="none" filter="url(#glow-cyan)">
+        <polygon points="0,-220 -180,130 -40,160 40,160 180,130" />
+        <line x1="0" y1="-220" x2="0" y2="20" />
+        <line x1="0" y1="20" x2="-180" y2="130" />
+        <line x1="0" y1="20" x2="180" y2="130" />
+        <line x1="-70" y1="140" x2="0" y2="20" />
+        <line x1="-70" y1="140" x2="-40" y2="160" />
+        <line x1="70" y1="140" x2="0" y2="20" />
+        <line x1="70" y1="140" x2="40" y2="160" />
+        <line x1="0" y1="-220" x2="0" y2="40" stroke-dasharray="3,3" />
+        <line x1="0" y1="40" x2="-180" y2="130" stroke-dasharray="3,3" />
+        <line x1="0" y1="40" x2="180" y2="130" stroke-dasharray="3,3" />
+      </g>
+
+      <!-- 2. Primary Vibrant Neon Cyan Hull Lines -->
+      <g stroke="#38bdf8" stroke-width="1.8" fill="none">
+        <polygon points="0,-220 -180,130 -40,160 40,160 180,130" />
+        <line x1="0" y1="-220" x2="0" y2="20" />
+        <line x1="0" y1="20" x2="-180" y2="130" />
+        <line x1="0" y1="20" x2="180" y2="130" />
+        <line x1="-70" y1="140" x2="0" y2="20" />
+        <line x1="-70" y1="140" x2="-40" y2="160" />
+        <line x1="70" y1="140" x2="0" y2="20" />
+        <line x1="70" y1="140" x2="40" y2="160" />
+      </g>
+
+      <!-- 3. Inner White-Hot Accent Edges (hotCorePts) -->
+      <g stroke="#e0f2fe" stroke-width="1.2" fill="none" filter="url(#glow-core)">
+        <line x1="0" y1="-220" x2="0" y2="20" />
+        <line x1="0" y1="20" x2="0" y2="160" stroke-dasharray="4,2" />
+        <line x1="0" y1="-220" x2="-180" y2="130" />
+        <line x1="0" y1="-220" x2="180" y2="130" />
+      </g>
+
+      <!-- 4. Three.js Center Reaction Wheel Cluster (rwCluster at 0,0,0) -->
+      <g>
+        <circle cx="0" cy="0" r="18" fill="none" stroke="#ec4899" stroke-width="1.6" filter="url(#glow-magenta)" />
+        <line x1="-18" y1="0" x2="18" y2="0" stroke="#ec4899" stroke-width="1" />
+        <line x1="0" y1="-18" x2="0" y2="18" stroke="#ec4899" stroke-width="1" />
+        <ellipse cx="0" cy="-18" rx="16" ry="6" fill="none" stroke="#a855f7" stroke-width="1.3" />
+        <ellipse cx="18" cy="0" rx="6" ry="16" fill="none" stroke="#06b6d4" stroke-width="1.3" />
+        <rect x="-5" y="-5" width="10" height="10" fill="#070b14" stroke="#64748b" stroke-width="1" />
+        <text x="24" y="-12" fill="#ec4899" font-size="8" font-weight="700">3-Axis RW Triad</text>
+      </g>
+
+      <!-- ================================================================= -->
+      <!-- 8 RCS THRUSTERS: CORRECT OUTWARD EXHAUST & REACTION THRUST ARROWS -->
+      <!-- ================================================================= -->
+
+      <!-- [T0: Aft-Port Main/RCS Engine] (-1.6m, -0.4m) -> (-40, 160) -->
+      <!-- Nozzle faces AFT: Flame exhausts BACKWARD (-X / Down). Thrust pushes FORWARD (+X / Up). -->
+      <g transform="translate(-40, 160)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#ef4444" stroke="#fca5a5" stroke-width="1" filter="url(#glow-red)" />
+        <polygon points="-4,5 4,5 0,28" fill="url(#plumeDown)" filter="url(#glow-orange)" />
+        <line x1="0" y1="-5" x2="0" y2="-28" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-cyan)" />
+        <text x="-8" y="-12" fill="#ef4444" font-size="8.5" font-weight="800" text-anchor="end">T0</text>
+        <text x="-8" y="-2" fill="#38bdf8" font-size="7.5" text-anchor="end">Thrust +X (Fwd)</text>
+      </g>
+
+      <!-- [T1: Aft-Starboard Main/RCS Engine] (-1.6m, +0.4m) -> (40, 160) -->
+      <!-- Nozzle faces AFT: Flame exhausts BACKWARD (-X / Down). Thrust pushes FORWARD (+X / Up). -->
+      <g transform="translate(40, 160)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <polygon points="-4,5 4,5 0,28" fill="url(#plumeDown)" filter="url(#glow-orange)" />
+        <line x1="0" y1="-5" x2="0" y2="-28" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-cyan)" />
+        <text x="8" y="-12" fill="#f59e0b" font-size="8.5" font-weight="800">T1</text>
+        <text x="8" y="-2" fill="#38bdf8" font-size="7.5">Thrust +X (Fwd)</text>
+      </g>
+
+      <!-- [T4: Port Wingtip Lateral RCS] (-1.3m, -1.8m) -> (-180, 130) -->
+      <!-- Nozzle faces OUTWARD (LEFT): Flame exhausts LEFT into space. Thrust pushes RIGHT (Inward toward CoM). -->
+      <g transform="translate(-180, 130)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <!-- Plume exhausts OUTWARD into space (LEFT / -X_svg) -->
+        <polygon points="-5,-4 -5,4 -28,0" fill="url(#plumeLeft)" filter="url(#glow-orange)" />
+        <!-- Reaction Thrust Vector pushes RIGHT (Inward / +X_svg) -->
+        <line x1="5" y1="0" x2="28" y2="0" stroke="#22c55e" stroke-width="2" marker-end="url(#arrow-green)" />
+        <text x="-8" y="-10" fill="#f59e0b" font-size="9" font-weight="800" text-anchor="end">T4 (Aft-P)</text>
+        <text x="-8" y="16" fill="#94a3b8" font-size="7.5" text-anchor="end">Plume: Outward Left</text>
+        <text x="32" y="3" fill="#22c55e" font-size="7.5" font-weight="600">Thrust: Inward</text>
+      </g>
+
+      <!-- [T6: Starboard Wingtip Lateral RCS] (-1.3m, +1.8m) -> (180, 130) -->
+      <!-- Nozzle faces OUTWARD (RIGHT): Flame exhausts RIGHT into space. Thrust pushes LEFT (Inward toward CoM). -->
+      <g transform="translate(180, 130)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#ef4444" stroke="#fca5a5" stroke-width="1" filter="url(#glow-red)" />
+        <!-- Plume exhausts OUTWARD into space (RIGHT / +X_svg) -->
+        <polygon points="5,-4 5,4 28,0" fill="url(#plumeRight)" filter="url(#glow-orange)" />
+        <!-- Reaction Thrust Vector pushes LEFT (Inward / -X_svg) -->
+        <line x1="-5" y1="0" x2="-28" y2="0" stroke="#22c55e" stroke-width="2" marker-end="url(#arrow-green)" />
+        <text x="8" y="-10" fill="#ef4444" font-size="9" font-weight="800">T6 (Aft-S)</text>
+        <text x="8" y="16" fill="#94a3b8" font-size="7.5">Plume: Outward Right</text>
+        <text x="-32" y="3" fill="#22c55e" font-size="7.5" font-weight="600" text-anchor="end">Thrust: Inward</text>
+      </g>
+
+      <!-- [T2 / T5: Forward Port Pod] (0.8m, -0.65m) -> (-65, -80) -->
+      <g transform="translate(-65, -80)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <!-- T2 Reverse Nozzle: Flame exhausts FORWARD into space (+X / Up). Thrust pushes AFT (-X / Down). -->
+        <polygon points="-4,-5 4,-5 0,-24" fill="url(#plumeUp)" filter="url(#glow-orange)" />
+        <line x1="0" y1="5" x2="0" y2="24" stroke="#ef4444" stroke-width="2" marker-end="url(#arrow-red)" />
+        <!-- T5 Lateral Nozzle: Flame exhausts OUTWARD LEFT into space. Thrust pushes RIGHT (Inward). -->
+        <polygon points="-5,-3 -5,3 -24,0" fill="url(#plumeLeft)" filter="url(#glow-orange)" />
+        <line x1="5" y1="0" x2="24" y2="0" stroke="#22c55e" stroke-width="2" marker-end="url(#arrow-green)" />
+        <text x="-12" y="-10" fill="#f59e0b" font-size="8.5" font-weight="800" text-anchor="end">T2 (Rev) / T5 (Lat)</text>
+        <text x="-12" y="2" fill="#94a3b8" font-size="7.5" text-anchor="end">Plumes: Fwd / Outward Left</text>
+      </g>
+
+      <!-- [T3 / T7: Forward Starboard Pod] (0.8m, +0.65m) -> (65, -80) -->
+      <g transform="translate(65, -80)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <!-- T3 Reverse Nozzle: Flame exhausts FORWARD into space (+X / Up). Thrust pushes AFT (-X / Down). -->
+        <polygon points="-4,-5 4,-5 0,-24" fill="url(#plumeUp)" filter="url(#glow-orange)" />
+        <line x1="0" y1="5" x2="0" y2="24" stroke="#ef4444" stroke-width="2" marker-end="url(#arrow-red)" />
+        <!-- T7 Lateral Nozzle: Flame exhausts OUTWARD RIGHT into space. Thrust pushes LEFT (Inward). -->
+        <polygon points="5,-3 5,3 24,0" fill="url(#plumeRight)" filter="url(#glow-orange)" />
+        <line x1="-5" y1="0" x2="-24" y2="0" stroke="#22c55e" stroke-width="2" marker-end="url(#arrow-green)" />
+        <text x="12" y="-10" fill="#f59e0b" font-size="8.5" font-weight="800">T3 (Rev) / T7 (Lat)</text>
+        <text x="12" y="2" fill="#94a3b8" font-size="7.5">Plumes: Fwd / Outward Right</text>
+      </g>
+
+      <!-- Vertical Thruster Penetration on Spine (T8, T9, T10, T11) -->
+      <g transform="translate(0, -125)">
+        <circle cx="0" cy="0" r="6" fill="#0f172a" stroke="#ec4899" stroke-width="1.2" stroke-dasharray="2,2" />
+        <circle cx="0" cy="0" r="2.5" fill="#38bdf8" />
+        <text x="10" y="3" fill="#38bdf8" font-size="8" font-weight="700">T8 (Dor ⊙) / T9 (Ven ⊗)</text>
+      </g>
+      <g transform="translate(0, 125)">
+        <circle cx="0" cy="0" r="6" fill="#0f172a" stroke="#ec4899" stroke-width="1.2" stroke-dasharray="2,2" />
+        <circle cx="0" cy="0" r="2.5" fill="#38bdf8" />
+        <text x="10" y="3" fill="#38bdf8" font-size="8" font-weight="700">T10 (Dor ⊙) / T11 (Ven ⊗)</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- =================================================================== -->
+  <!-- VIEW 2: VERTICAL ELEVATION VIEW (XZ PLANE: PITCH & VERTICAL LIFT)   -->
+  <!-- =================================================================== -->
+  <g id="view-vertical">
+    <!-- View Box -->
+    <rect x="620" y="80" width="545" height="490" rx="6" fill="#090f1d" fill-opacity="0.8" stroke="#1e293b" stroke-width="1.2" />
+    <rect x="620" y="80" width="545" height="28" rx="6" fill="#0e172a" stroke="#1e293b" stroke-width="1" />
+    <text x="635" y="99" fill="#38bdf8" font-size="12" font-weight="700">VIEW B: VERTICAL ELEVATION (XZ SIDE VIEW // Y = 0)</text>
+    <text x="1150" y="99" fill="#64748b" font-size="10" text-anchor="end" font-weight="600">Viewer Profile Geometry</text>
+
+    <!-- Axis Legend (Top-Right) -->
+    <g transform="translate(1095, 140)">
+      <circle cx="0" cy="0" r="22" fill="#0b1220" stroke="#334155" stroke-width="1" />
+      <line x1="0" y1="0" x2="0" y2="-16" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrow-cyan)" />
+      <text x="0" y="-19" fill="#38bdf8" font-size="8" font-weight="700" text-anchor="middle">+Z (Dor)</text>
+      <line x1="0" y1="0" x2="16" y2="0" stroke="#22c55e" stroke-width="1.8" marker-end="url(#arrow-green)" />
+      <text x="19" y="3" fill="#22c55e" font-size="8" font-weight="700">+X (Nose)</text>
+      <circle cx="0" cy="0" r="2.5" fill="#ec4899" />
+      <text x="-6" y="12" fill="#ec4899" font-size="7.5" font-weight="600">+Y ⊙</text>
+    </g>
+
+    <!-- Center Line & Grid References (Center CoM at 890, 345) -->
+    <g transform="translate(890, 345)">
+      <!-- Vertical Axis Z -->
+      <line x1="0" y1="-215" x2="0" y2="180" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3" />
+      <!-- Longitudinal Axis X -->
+      <line x1="-240" y1="0" x2="240" y2="0" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3" />
+      <circle cx="0" cy="0" r="3" fill="#94a3b8" />
+      <text x="6" y="-8" fill="#94a3b8" font-size="8.5" font-weight="600">CoM (0,0)</text>
+
+      <!-- ================================================================= -->
+      <!-- EXACT VIEWER THREE.JS SIDE PROFILE WIREFRAME                      -->
+      <!-- ================================================================= -->
+
+      <!-- 1. Outer Glow Wireframe Layer -->
+      <g stroke="#0284c7" stroke-width="3" stroke-opacity="0.55" fill="none" filter="url(#glow-cyan)">
+        <line x1="220" y1="0" x2="-20" y2="-65" />
+        <line x1="-20" y1="-65" x2="-140" y2="-80" />
+        <line x1="-140" y1="-80" x2="-160" y2="0" />
+        <line x1="-20" y1="-65" x2="-130" y2="0" />
+        <line x1="220" y1="0" x2="-40" y2="40" />
+        <line x1="-40" y1="40" x2="-130" y2="0" />
+        <line x1="-40" y1="40" x2="-160" y2="0" />
+        <line x1="220" y1="0" x2="-160" y2="0" />
+      </g>
+
+      <!-- 2. Primary Vibrant Neon Cyan Lines -->
+      <g stroke="#38bdf8" stroke-width="1.8" fill="none">
+        <line x1="220" y1="0" x2="-20" y2="-65" />
+        <line x1="-20" y1="-65" x2="-140" y2="-80" />
+        <line x1="-140" y1="-80" x2="-160" y2="0" />
+        <line x1="-20" y1="-65" x2="-130" y2="0" />
+        <line x1="220" y1="0" x2="-40" y2="40" />
+        <line x1="-40" y1="40" x2="-130" y2="0" />
+        <line x1="-40" y1="40" x2="-160" y2="0" />
+        <line x1="220" y1="0" x2="-160" y2="0" />
+      </g>
+
+      <!-- 3. Inner White-Hot Accent Edges -->
+      <g stroke="#e0f2fe" stroke-width="1.2" fill="none" filter="url(#glow-core)">
+        <line x1="220" y1="0" x2="-20" y2="-65" />
+        <line x1="220" y1="0" x2="-160" y2="0" stroke-dasharray="4,2" />
+      </g>
+
+      <!-- 4. Three.js Reaction Wheels in Side View (Screenshot 2) -->
+      <g>
+        <circle cx="0" cy="0" r="18" fill="none" stroke="#06b6d4" stroke-width="1.8" filter="url(#glow-cyan)" />
+        <line x1="-18" y1="0" x2="18" y2="0" stroke="#06b6d4" stroke-width="1" />
+        <line x1="0" y1="-18" x2="0" y2="18" stroke="#06b6d4" stroke-width="1" />
+        <ellipse cx="18" cy="0" rx="5" ry="18" fill="none" stroke="#a855f7" stroke-width="1.5" />
+        <line x1="18" y1="-18" x2="18" y2="18" stroke="#a855f7" stroke-width="1" />
+        <ellipse cx="0" cy="-18" rx="18" ry="4" fill="none" stroke="#ec4899" stroke-width="1.5" />
+        <rect x="-4" y="-4" width="8" height="8" fill="#070b14" stroke="#64748b" stroke-width="1" />
+      </g>
+
+      <!-- ================================================================= -->
+      <!-- 4 VERTICAL RCS THRUSTERS: OUTWARD EXHAUST & ACTION ARROWS         -->
+      <!-- ================================================================= -->
+
+      <!-- [T8: Forward Dorsal Vertical RCS] (+1.25m, +0.5m) -> (+125, -50) -->
+      <!-- Mounted on Dorsal Roof: Nozzle points UP. Flame shoots UP into space. Thrust pushes DOWN (Pitch Down). -->
+      <g transform="translate(125, -50)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <!-- Plume shoots UPWARD into space -->
+        <polygon points="-4,-5 4,-5 0,-26" fill="url(#plumeUp)" filter="url(#glow-orange)" />
+        <!-- Thrust vector pushes DOWNWARD on the nose -->
+        <line x1="0" y1="5" x2="0" y2="28" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-cyan)" />
+        <text x="0" y="-32" fill="#f59e0b" font-size="9" font-weight="800" text-anchor="middle">T8 (Dor-F)</text>
+        <text x="0" y="-43" fill="#94a3b8" font-size="7.5" text-anchor="middle">Plume: Upward (+Z)</text>
+        <text x="12" y="19" fill="#38bdf8" font-size="7.5" font-weight="600">Thrust: Down</text>
+        <text x="12" y="29" fill="#38bdf8" font-size="7" font-weight="500">(Pitch Down: -25 N·m)</text>
+      </g>
+
+      <!-- [T10: Aft Dorsal Vertical RCS] (-1.25m, +0.5m) -> (-125, -50) -->
+      <!-- Mounted on Dorsal Roof: Nozzle points UP. Flame shoots UP into space. Thrust pushes DOWN (Pitch Up). -->
+      <g transform="translate(-125, -50)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <!-- Plume shoots UPWARD into space -->
+        <polygon points="-4,-5 4,-5 0,-26" fill="url(#plumeUp)" filter="url(#glow-orange)" />
+        <!-- Thrust vector pushes DOWNWARD on the tail -->
+        <line x1="0" y1="5" x2="0" y2="28" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-cyan)" />
+        <text x="0" y="-32" fill="#f59e0b" font-size="9" font-weight="800" text-anchor="middle">T10 (Dor-A)</text>
+        <text x="0" y="-43" fill="#94a3b8" font-size="7.5" text-anchor="middle">Plume: Upward (+Z)</text>
+        <text x="-12" y="19" fill="#38bdf8" font-size="7.5" font-weight="600" text-anchor="end">Thrust: Down</text>
+        <text x="-12" y="29" fill="#38bdf8" font-size="7" font-weight="500" text-anchor="end">(Pitch Up: +25 N·m)</text>
+      </g>
+
+      <!-- [T9: Forward Ventral Vertical RCS] (+1.25m, -0.5m) -> (+125, 50) -->
+      <!-- Mounted on Ventral Keel: Nozzle points DOWN. Flame shoots DOWN into space. Thrust pushes UP (Pitch Up). -->
+      <g transform="translate(125, 50)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <!-- Plume shoots DOWNWARD into space -->
+        <polygon points="-4,5 4,5 0,26" fill="url(#plumeDown)" filter="url(#glow-orange)" />
+        <!-- Thrust vector pushes UPWARD on the nose -->
+        <line x1="0" y1="-5" x2="0" y2="-28" stroke="#ef4444" stroke-width="2" marker-end="url(#arrow-red)" />
+        <text x="0" y="38" fill="#f59e0b" font-size="9" font-weight="800" text-anchor="middle">T9 (Ven-F)</text>
+        <text x="0" y="49" fill="#94a3b8" font-size="7.5" text-anchor="middle">Plume: Downward (-Z)</text>
+        <text x="12" y="-22" fill="#ef4444" font-size="7.5" font-weight="600">Thrust: Up</text>
+        <text x="12" y="-12" fill="#ef4444" font-size="7" font-weight="500">(Pitch Up: +25 N·m)</text>
+      </g>
+
+      <!-- [T11: Aft Ventral Vertical RCS] (-1.25m, -0.5m) -> (-125, 50) -->
+      <!-- Mounted on Ventral Keel: Nozzle points DOWN. Flame shoots DOWN into space. Thrust pushes UP (Pitch Down). -->
+      <g transform="translate(-125, 50)">
+        <rect x="-5" y="-5" width="10" height="10" rx="1" fill="#f59e0b" stroke="#fde68a" stroke-width="1" filter="url(#glow-orange)" />
+        <!-- Plume shoots DOWNWARD into space -->
+        <polygon points="-4,5 4,5 0,26" fill="url(#plumeDown)" filter="url(#glow-orange)" />
+        <!-- Thrust vector pushes UPWARD on the tail -->
+        <line x1="0" y1="-5" x2="0" y2="-28" stroke="#ef4444" stroke-width="2" marker-end="url(#arrow-red)" />
+        <text x="0" y="38" fill="#f59e0b" font-size="9" font-weight="800" text-anchor="middle">T11 (Ven-A)</text>
+        <text x="0" y="49" fill="#94a3b8" font-size="7.5" text-anchor="middle">Plume: Downward (-Z)</text>
+        <text x="-12" y="-22" fill="#ef4444" font-size="7.5" font-weight="600" text-anchor="end">Thrust: Up</text>
+        <text x="-12" y="-12" fill="#ef4444" font-size="7" font-weight="500" text-anchor="end">(Pitch Down: -25 N·m)</text>
+      </g>
+
+      <!-- Centerline Thruster Status Cubes as rendered in Screenshot 2 -->
+      <g transform="translate(-160, 0)">
+        <rect x="-7" y="-4" width="7" height="8" fill="#ef4444" stroke="#fca5a5" stroke-width="0.8" />
+        <rect x="0" y="-4" width="7" height="8" fill="#f59e0b" stroke="#fde68a" stroke-width="0.8" />
+        <text x="-12" y="15" fill="#e2e8f0" font-size="8" font-weight="700" text-anchor="end">T0/T1 (Aft)</text>
+      </g>
+      <g transform="translate(-130, 0)">
+        <rect x="-4" y="-4" width="8" height="8" fill="#ef4444" stroke="#fca5a5" stroke-width="0.8" />
+        <text x="-4" y="-10" fill="#94a3b8" font-size="7.5">T4/T6</text>
+      </g>
+      <g transform="translate(80, 0)">
+        <rect x="-4" y="-4" width="8" height="8" fill="#f59e0b" stroke="#fde68a" stroke-width="0.8" />
+        <text x="0" y="15" fill="#f59e0b" font-size="8" font-weight="700" text-anchor="middle">T2,T3,T5,T7</text>
+      </g>
+
+      <!-- Pitch Coupling Notes -->
+      <text x="0" y="-135" fill="#38bdf8" font-size="10" font-weight="700" text-anchor="middle">COUPLED PITCH TORQUE MANEUVERS</text>
+      <text x="0" y="-120" fill="#94a3b8" font-size="8" text-anchor="middle">T8 + T11 = Max Pitch Down (-50 N·m)  |  T9 + T10 = Max Pitch Up (+50 N·m)</text>
+      <text x="0" y="115" fill="#22c55e" font-size="8.5" font-weight="600" text-anchor="middle">T8 + T10 = Pure Down (-40 N) | T9 + T11 = Pure Up (+40 N)</text>
+    </g>
+  </g>
+
+  <!-- =================================================================== -->
+  <!-- BOTTOM PANELS: HARDWARE REGISTER MAP & FDIR RECOVERY ARCHITECTURE   -->
+  <!-- =================================================================== -->
+
+  <!-- Panel 1: 12-Channel Thruster Bitmask Reference Table (Bottom Left) -->
+  <g transform="translate(35, 585)">
+    <rect x="0" y="0" width="565" height="260" rx="6" fill="#090f1d" fill-opacity="0.85" stroke="#1e293b" stroke-width="1.2" />
+    <rect x="0" y="0" width="565" height="26" rx="6" fill="#0e172a" stroke="#1e293b" stroke-width="1" />
+    <text x="14" y="17" fill="#f59e0b" font-size="11" font-weight="700">12-CHANNEL THRUSTER MATRIX &amp; PHYSICAL ACTION TABLE</text>
+
+    <!-- Table Header -->
+    <rect x="10" y="32" width="545" height="18" fill="#131e36" />
+    <text x="18" y="45" fill="#38bdf8" font-size="8.5" font-weight="700">BIT</text>
+    <text x="48" y="45" fill="#38bdf8" font-size="8.5" font-weight="700">NAME</text>
+    <text x="135" y="45" fill="#38bdf8" font-size="8.5" font-weight="700">NOZZLE POS</text>
+    <text x="240" y="45" fill="#38bdf8" font-size="8.5" font-weight="700">PLUME (EXHAUST)</text>
+    <text x="350" y="45" fill="#38bdf8" font-size="8.5" font-weight="700">THRUST (REACTION)</text>
+    <text x="475" y="45" fill="#38bdf8" font-size="8.5" font-weight="700">TORQUE τ_i</text>
+
+    <!-- Rows (T0 to T7) -->
+    <text x="18" y="65" fill="#f59e0b" font-size="8" font-weight="700">b0</text><text x="48" y="65" fill="#e2e8f0" font-size="8">T0: Aft-L (Fwd)</text><text x="135" y="65" fill="#94a3b8" font-size="8">[-1.6, -0.4,  0.0]</text><text x="240" y="65" fill="#f59e0b" font-size="8">Aft / Backward (-X)</text><text x="350" y="65" fill="#38bdf8" font-size="8">+20 N (+X Forward)</text><text x="475" y="65" fill="#f87171" font-size="8">τz: -20 N·m</text>
+    <text x="18" y="81" fill="#f59e0b" font-size="8" font-weight="700">b1</text><text x="48" y="81" fill="#e2e8f0" font-size="8">T1: Aft-R (Fwd)</text><text x="135" y="81" fill="#94a3b8" font-size="8">[-1.6, +0.4,  0.0]</text><text x="240" y="81" fill="#f59e0b" font-size="8">Aft / Backward (-X)</text><text x="350" y="81" fill="#38bdf8" font-size="8">+20 N (+X Forward)</text><text x="475" y="81" fill="#4ade80" font-size="8">τz: +20 N·m</text>
+    <text x="18" y="97" fill="#f59e0b" font-size="8" font-weight="700">b2</text><text x="48" y="97" fill="#e2e8f0" font-size="8">T2: Fwd-L (Rev)</text><text x="135" y="97" fill="#94a3b8" font-size="8">[ 0.8, -0.65, 0.0]</text><text x="240" y="97" fill="#f59e0b" font-size="8">Forward (+X)</text><text x="350" y="97" fill="#ef4444" font-size="8">-20 N (-X Braking)</text><text x="475" y="97" fill="#4ade80" font-size="8">τz: +20 N·m</text>
+    <text x="18" y="113" fill="#f59e0b" font-size="8" font-weight="700">b3</text><text x="48" y="113" fill="#e2e8f0" font-size="8">T3: Fwd-R (Rev)</text><text x="135" y="113" fill="#94a3b8" font-size="8">[ 0.8, +0.65, 0.0]</text><text x="240" y="113" fill="#f59e0b" font-size="8">Forward (+X)</text><text x="350" y="113" fill="#ef4444" font-size="8">-20 N (-X Braking)</text><text x="475" y="113" fill="#f87171" font-size="8">τz: -20 N·m</text>
+    <text x="18" y="129" fill="#f59e0b" font-size="8" font-weight="700">b4</text><text x="48" y="129" fill="#e2e8f0" font-size="8">T4: Wing-P (Lat)</text><text x="135" y="129" fill="#94a3b8" font-size="8">[-1.3, -1.8,  0.0]</text><text x="240" y="129" fill="#f59e0b" font-size="8">Outward Left (+Y)</text><text x="350" y="129" fill="#22c55e" font-size="8">+20 N (Inward Right)</text><text x="475" y="129" fill="#f87171" font-size="8">τz: -20 N·m</text>
+    <text x="18" y="145" fill="#f59e0b" font-size="8" font-weight="700">b5</text><text x="48" y="145" fill="#e2e8f0" font-size="8">T5: Fwd-P (Lat)</text><text x="135" y="145" fill="#94a3b8" font-size="8">[ 0.8, -0.65, 0.0]</text><text x="240" y="145" fill="#f59e0b" font-size="8">Outward Left (+Y)</text><text x="350" y="145" fill="#22c55e" font-size="8">+20 N (Inward Right)</text><text x="475" y="145" fill="#4ade80" font-size="8">τz: +20 N·m</text>
+    <text x="18" y="161" fill="#f59e0b" font-size="8" font-weight="700">b6</text><text x="48" y="161" fill="#e2e8f0" font-size="8">T6: Wing-S (Lat)</text><text x="135" y="161" fill="#94a3b8" font-size="8">[-1.3, +1.8,  0.0]</text><text x="240" y="161" fill="#f59e0b" font-size="8">Outward Right (-Y)</text><text x="350" y="161" fill="#22c55e" font-size="8">-20 N (Inward Left)</text><text x="475" y="161" fill="#4ade80" font-size="8">τz: +20 N·m</text>
+    <text x="18" y="177" fill="#f59e0b" font-size="8" font-weight="700">b7</text><text x="48" y="177" fill="#e2e8f0" font-size="8">T7: Fwd-S (Lat)</text><text x="135" y="177" fill="#94a3b8" font-size="8">[ 0.8, +0.65, 0.0]</text><text x="240" y="177" fill="#f59e0b" font-size="8">Outward Right (-Y)</text><text x="350" y="177" fill="#22c55e" font-size="8">-20 N (Inward Left)</text><text x="475" y="177" fill="#f87171" font-size="8">τz: -20 N·m</text>
+
+    <!-- Rows (T8 to T11 Vertical) -->
+    <rect x="10" y="186" width="545" height="66" fill="#1e1833" fill-opacity="0.6" stroke="#ec4899" stroke-width="0.8" rx="3" />
+    <text x="18" y="201" fill="#ec4899" font-size="8" font-weight="700">b8</text><text x="48" y="201" fill="#f472b6" font-size="8" font-weight="700">T8: Dor-F (Pitch)</text><text x="135" y="201" fill="#e2e8f0" font-size="8">[+1.25, 0.0, +0.5]</text><text x="240" y="201" fill="#f59e0b" font-size="8">Upward (+Z)</text><text x="350" y="201" fill="#38bdf8" font-size="8">Push Down (-Z)</text><text x="475" y="201" fill="#f87171" font-size="8">τy: -25 N·m (P-Down)</text>
+    <text x="18" y="217" fill="#ec4899" font-size="8" font-weight="700">b9</text><text x="48" y="217" fill="#f472b6" font-size="8" font-weight="700">T9: Ven-F (Pitch)</text><text x="135" y="217" fill="#e2e8f0" font-size="8">[+1.25, 0.0, -0.5]</text><text x="240" y="217" fill="#f59e0b" font-size="8">Downward (-Z)</text><text x="350" y="217" fill="#ef4444" font-size="8">Push Up (+Z)</text><text x="475" y="217" fill="#4ade80" font-size="8">τy: +25 N·m (P-Up)</text>
+    <text x="18" y="233" fill="#ec4899" font-size="8" font-weight="700">b10</text><text x="48" y="233" fill="#f472b6" font-size="8" font-weight="700">T10: Dor-A(Pitch)</text><text x="135" y="233" fill="#e2e8f0" font-size="8">[-1.25, 0.0, +0.5]</text><text x="240" y="233" fill="#f59e0b" font-size="8">Upward (+Z)</text><text x="350" y="233" fill="#38bdf8" font-size="8">Push Down (-Z)</text><text x="475" y="233" fill="#4ade80" font-size="8">τy: +25 N·m (P-Up)</text>
+    <text x="18" y="247" fill="#ec4899" font-size="8" font-weight="700">b11</text><text x="48" y="247" fill="#f472b6" font-size="8" font-weight="700">T11: Ven-A(Pitch)</text><text x="135" y="247" fill="#e2e8f0" font-size="8">[-1.25, 0.0, -0.5]</text><text x="240" y="247" fill="#f59e0b" font-size="8">Downward (-Z)</text><text x="350" y="247" fill="#ef4444" font-size="8">Push Up (+Z)</text><text x="475" y="247" fill="#f87171" font-size="8">τy: -25 N·m (P-Down)</text>
+  </g>
+
+  <!-- Panel 2: Visual Physics Convention & 3-Axis RW Specs (Bottom Right) -->
+  <g transform="translate(620, 585)">
+    <rect x="0" y="0" width="545" height="260" rx="6" fill="#090f1d" fill-opacity="0.85" stroke="#1e293b" stroke-width="1.2" />
+    <rect x="0" y="0" width="545" height="26" rx="6" fill="#0e172a" stroke="#1e293b" stroke-width="1" />
+    <text x="14" y="17" fill="#38bdf8" font-size="11" font-weight="700">VISUAL CONVENTION &amp; NEWTON'S 3RD LAW OF ACTION-REACTION</text>
+
+    <!-- Visual Convention Box -->
+    <rect x="12" y="34" width="521" height="74" rx="4" fill="#131e36" stroke="#334155" stroke-width="0.8" />
+    <text x="22" y="50" fill="#f59e0b" font-size="9.5" font-weight="700">PHYSICAL NOTATION GUIDE (NEWTON'S THIRD LAW):</text>
+    <text x="24" y="66" fill="#e2e8f0" font-size="8.5">• <tspan fill="#f59e0b" font-weight="700">Orange Plume (Exhaust)</tspan>: Hot gas ejection direction. Always expelled outward into cold vacuum space.</text>
+    <text x="24" y="80" fill="#e2e8f0" font-size="8.5">• <tspan fill="#22c55e" font-weight="700">Colored Arrow (Reaction Thrust)</tspan>: Force acting on vehicle (F_thrust = -F_exhaust), directly opposite to plume.</text>
+    <text x="24" y="94" fill="#94a3b8" font-size="8.5">• Outward gas ejection prevents thermal plume impingement on vehicle hull and delivers pure reaction thrust.</text>
+
+    <!-- Reaction Wheel Specs -->
+    <rect x="12" y="116" width="521" height="58" rx="4" fill="#150f26" stroke="#ec4899" stroke-width="0.8" />
+    <text x="22" y="132" fill="#ec4899" font-size="9" font-weight="700">3-AXIS REACTION WHEEL CLUSTER (Zero Propellant Burn):</text>
+    <text x="24" y="146" fill="#e2e8f0" font-size="8">• Triad Mounting: Wheel X (Roll/Purple, +X), Wheel Y (Pitch/Cyan, +Y), Wheel Z (Yaw/Magenta, +Z)</text>
+    <text x="24" y="159" fill="#94a3b8" font-size="8">• Inertia: Iw = 0.05 kg·m² | Limit: ±6,000 RPM | Registers: 0x2C (RW_Z), 0x98 (RW_X), 0x9C (RW_Y)</text>
+
+    <!-- Referee Rules Summary -->
+    <rect x="12" y="184" width="521" height="64" rx="4" fill="#0f172a" stroke="#1e293b" stroke-width="0.8" />
+    <text x="22" y="200" fill="#f59e0b" font-size="9" font-weight="700">OFFICIAL REFEREE SCORING &amp; STATUS INDICATION:</text>
+    <text x="24" y="215" fill="#94a3b8" font-size="8">• Thruster Cube Colors: <tspan fill="#f59e0b" font-weight="700">Orange</tspan> = Healthy (0x0FFF) | <tspan fill="#ef4444" font-weight="700">Red</tspan> = Damaged / Dead Nozzle</text>
+    <text x="24" y="228" fill="#94a3b8" font-size="8">• Detumble Bonus: Up to +3,000 pts | Center Bullseye Bonus (r ≤ 1.0m): +2,500 pts</text>
+    <text x="24" y="240" fill="#94a3b8" font-size="8">• Leak Rate: -0.15 %/s | Grade S: ≥ 8,000 pts (Elite Astronaut Certification)</text>
+  </g>
+
+</svg>
