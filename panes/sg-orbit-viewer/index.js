@@ -109,7 +109,8 @@ export default function SpaceOrbitViewer3D() {
     } else {
       const timer = setInterval(async () => {
         try {
-          const res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
+          let res = await fetch('/api/file?path=/tmp/fbb_scenario_telemetry.json');
+          if (!res.ok) res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
           if (res.ok) {
             const data = await res.json();
             handleTelemetry(data);
@@ -1199,10 +1200,96 @@ export default function SpaceOrbitViewer3D() {
 
     // C. Mobile Transporter / ISS Truss Pipe Crawler Robot (Stage 3)
     const inspectorGroup = new THREE.Group();
-    const inspPts = [];
     const chHalfX = 0.38, chHalfY = 0.18, chHalfZ = 0.10; // Compact 0.76m x 0.36m x 0.20m aerospace body
 
-    // 1. Sleek Beveled Aerospace Chassis Capsule
+    // 0. Sleek Aerodynamic Composite Hull (Strictly fitted INSIDE gold wireframe)
+    // Sized to fill 97% of the main chassis box (leaving crisp 5mm border) plus integrated nose & tail cones
+    const hx = (chHalfX - 0.08) - 0.005; // 0.295m (wireframe chassis box is 0.300m)
+    const hy = chHalfY - 0.005;          // 0.175m (wireframe width is 0.180m)
+    const hz = chHalfZ - 0.005;          // 0.095m (wireframe height is 0.100m)
+    const tby = (chHalfY * 0.7) - 0.005; // 0.121m tail/nose cone base width (wireframe is 0.126m)
+    const tbz = (chHalfZ * 0.7) - 0.005; // 0.065m tail/nose cone base height (wireframe is 0.070m)
+    const noseTipX = (chHalfX + 0.08) - 0.010;  // 0.450m (wireframe tip is 0.460m)
+    const tailTipX = (-chHalfX - 0.08) + 0.010; // -0.450m (wireframe tip is -0.460m)
+
+    // Main central chassis box corners:
+    const v = [
+      [-hx, -hy, -hz], // 0: Aft Right Bottom
+      [ hx, -hy, -hz], // 1: Fwd Right Bottom
+      [ hx,  hy, -hz], // 2: Fwd Left Bottom
+      [-hx,  hy, -hz], // 3: Aft Left Bottom
+      [-hx, -hy,  hz], // 4: Aft Right Top
+      [ hx, -hy,  hz], // 5: Fwd Right Top
+      [ hx,  hy,  hz], // 6: Fwd Left Top
+      [-hx,  hy,  hz]  // 7: Aft Left Top
+    ];
+
+    // Nose & Tail cone bases & tips:
+    const n = [
+      [ hx, -tby, -tbz], // N0: Fwd-Right-Bottom
+      [ hx,  tby, -tbz], // N1: Fwd-Left-Bottom
+      [ hx,  tby,  tbz], // N2: Fwd-Left-Top
+      [ hx, -tby,  tbz], // N3: Fwd-Right-Top
+      [ noseTipX, 0, 0]  // N4: Nose Apex (+X)
+    ];
+
+    const t = [
+      [-hx, -tby, -tbz], // T0: Aft-Right-Bottom
+      [-hx,  tby, -tbz], // T1: Aft-Left-Bottom
+      [-hx,  tby,  tbz], // T2: Aft-Left-Top
+      [-hx, -tby,  tbz], // T3: Aft-Right-Top
+      [ tailTipX, 0, 0]  // T4: Tail Apex (-X)
+    ];
+
+    const hullTriangles = [
+      // 1. Main Central Chassis Box Faces (fills 97% of gold rectangle cross section)
+      // Top (+Z)
+      v[4], v[5], v[6],  v[4], v[6], v[7],
+      // Bottom (-Z)
+      v[0], v[2], v[1],  v[0], v[3], v[2],
+      // Left (+Y)
+      v[3], v[6], v[2],  v[3], v[7], v[6],
+      // Right (-Y)
+      v[0], v[1], v[5],  v[0], v[5], v[4],
+      // Front Face (+X)
+      v[1], v[2], v[6],  v[1], v[6], v[5],
+      // Rear Face (-X, directly facing CHASE camera)
+      v[0], v[7], v[3],  v[0], v[4], v[7],
+
+      // 2. Aerodynamic Nose Cone (+X)
+      n[0], n[1], n[4],  // Bottom to nose
+      n[1], n[2], n[4],  // Left to nose
+      n[2], n[3], n[4],  // Top to nose
+      n[3], n[0], n[4],  // Right to nose
+
+      // 3. Tapered Tail Cone (-X)
+      t[0], t[4], t[1],  // Bottom to tail
+      t[1], t[4], t[2],  // Left to tail
+      t[2], t[4], t[3],  // Top to tail
+      t[3], t[4], t[0]   // Right to tail
+    ];
+
+    const hullVerts = [];
+    for (const pt of hullTriangles) {
+      hullVerts.push(pt[0], pt[1], pt[2]);
+    }
+
+    const hullGeo = new THREE.BufferGeometry();
+    hullGeo.setAttribute('position', new THREE.Float32BufferAttribute(hullVerts, 3));
+    hullGeo.computeVertexNormals();
+
+    const hullMat = new THREE.MeshBasicMaterial({
+      color: 0x0a1e36, // Deep space slate navy
+      transparent: true,
+      opacity: 0.50,   // Balanced translucency - crisp visual shielding of ISS lines
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const hullMesh = new THREE.Mesh(hullGeo, hullMat);
+    inspectorGroup.add(hullMesh);
+
+    // 1. Sleek Beveled Aerospace Chassis Capsule (High-Visibility Aerospace Gold #fbbf24)
+    const inspPts = [];
     const chCorners = [
       [-chHalfX + 0.08, -chHalfY, -chHalfZ],
       [chHalfX - 0.08, -chHalfY, -chHalfZ],
@@ -1248,18 +1335,7 @@ export default function SpaceOrbitViewer3D() {
       inspPts.push(...tailBase[i], ...tailBase[next]);
     }
 
-    // 2. Conformal Phased-Array Flat Antenna (Flush mounted on top surface; NO protruding vertical antenna!)
-    const antX1 = -0.16, antX2 = 0.12;
-    const antY = 0.11, antZ = chHalfZ;
-    inspPts.push(antX1, -antY, antZ, antX2, -antY, antZ);
-    inspPts.push(antX2, -antY, antZ, antX2, antY, antZ);
-    inspPts.push(antX2, antY, antZ, antX1, antY, antZ);
-    inspPts.push(antX1, antY, antZ, antX1, -antY, antZ);
-    // Microstrip cross divisions
-    inspPts.push(0, -antY, antZ, 0, antY, antZ);
-    inspPts.push(antX1, 0, antZ, antX2, 0, antZ);
-
-    // 3. Pipe-Gripping C-Clamps & Pinch Rollers (Hugging structural guide pipe; NO wheels/tires!)
+    // 2. Pipe-Gripping C-Clamps & Pinch Rollers (Hugging structural guide pipe; NO wheels/tires!)
     for (const gx of [-0.22, 0.22]) {
       // Mechanical suspension arm connecting chassis to pipe gripper
       inspPts.push(gx, -0.12, -chHalfZ, gx, -0.11, -0.06);
@@ -1283,33 +1359,45 @@ export default function SpaceOrbitViewer3D() {
 
     const inspGeo = new THREE.BufferGeometry();
     inspGeo.setAttribute('position', new THREE.Float32BufferAttribute(inspPts, 3));
-    inspectorGroup.add(new THREE.LineSegments(inspGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 })));
+    // High-visibility Aerospace Gold / Solar MLI Thermal Blanket wireframe (#fbbf24)
+    inspectorGroup.add(new THREE.LineSegments(inspGeo, new THREE.LineBasicMaterial({ color: 0xfbbf24, linewidth: 2 })));
 
-    // 4. Forward-Emitting Inspection Laser Scan Fan (From nose window directly along pipe corridor)
-    const laserBeamPts = [];
-    const lbApex = [chHalfX + 0.08, 0, 0];
-    const lbBase = [
-      [1.6, -0.5, -0.4],
-      [1.6, 0.5, -0.4],
-      [1.6, 0.5, 0.4],
-      [1.6, -0.5, 0.4]
+    // 3. Conformal Phased-Array Flat Antenna (Cyber Cyan #00f0ff on gold hull)
+    const antPts = [];
+    const antX1 = -0.16, antX2 = 0.12;
+    const antY = 0.11, antZ = chHalfZ;
+    antPts.push(antX1, -antY, antZ, antX2, -antY, antZ);
+    antPts.push(antX2, -antY, antZ, antX2, antY, antZ);
+    antPts.push(antX2, antY, antZ, antX1, antY, antZ);
+    antPts.push(antX1, antY, antZ, antX1, -antY, antZ);
+    antPts.push(0, -antY, antZ, 0, antY, antZ);
+    antPts.push(antX1, 0, antZ, antX2, 0, antZ);
+    const antGeo = new THREE.BufferGeometry();
+    antGeo.setAttribute('position', new THREE.Float32BufferAttribute(antPts, 3));
+    inspectorGroup.add(new THREE.LineSegments(antGeo, new THREE.LineBasicMaterial({ color: 0x00f0ff, linewidth: 2 })));
+
+    // 4. Aerospace Navigation / Strobe Beacons (Port red, Starboard green, Nose/Tail strobe)
+    const navPts = [
+      chHalfX - 0.06, chHalfY, chHalfZ,   // Port Forward (Red)
+      -chHalfX + 0.06, chHalfY, chHalfZ,  // Port Aft (Red)
+      chHalfX - 0.06, -chHalfY, chHalfZ,  // Starboard Forward (Green)
+      -chHalfX + 0.06, -chHalfY, chHalfZ, // Starboard Aft (Green)
+      chHalfX + 0.08, 0, 0,              // Nose Beacon (White)
+      -chHalfX - 0.08, 0, 0              // Tail Beacon (Amber)
     ];
-    for (let i = 0; i < 4; i++) {
-      laserBeamPts.push(...lbApex, ...lbBase[i]);
-      const next = (i + 1) % 4;
-      laserBeamPts.push(...lbBase[i], ...lbBase[next]);
-    }
-    const laserBeamGeo = new THREE.BufferGeometry();
-    laserBeamGeo.setAttribute('position', new THREE.Float32BufferAttribute(laserBeamPts, 3));
-    const inspectorLaserMat = new THREE.LineBasicMaterial({
-      color: 0x22c55e,
-      linewidth: 2,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending
-    });
-    const inspectorLaserLine = new THREE.LineSegments(laserBeamGeo, inspectorLaserMat);
-    inspectorGroup.add(inspectorLaserLine);
+    const navColors = [
+      1.0, 0.2, 0.2, // Red
+      1.0, 0.2, 0.2, // Red
+      0.1, 0.9, 0.3, // Green
+      0.1, 0.9, 0.3, // Green
+      1.0, 1.0, 1.0, // White
+      1.0, 0.7, 0.1  // Amber
+    ];
+    const navGeo = new THREE.BufferGeometry();
+    navGeo.setAttribute('position', new THREE.Float32BufferAttribute(navPts, 3));
+    navGeo.setAttribute('color', new THREE.Float32BufferAttribute(navColors, 3));
+    const navMat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, vertexColors: true });
+    inspectorGroup.add(new THREE.Points(navGeo, navMat));
 
     // 5. Front & Rear Magnetic Locking Clamp Pads (Locks firmly onto pipe collar during joint scan)
     const inspectorClampMat = new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 3, transparent: true, opacity: 0.9 });
@@ -1470,13 +1558,6 @@ export default function SpaceOrbitViewer3D() {
       if (earthGlobeGroup) {
         earthGlobeGroup.rotation.y = (now * 0.00008) % (Math.PI * 2);
       }
-      if (inspectorLaserLine) {
-        const isScanning = (stageId === 3 && (tlm.fdir_mode === 1 || Math.abs(tlm.vel_x || 0) < 0.25));
-        inspectorLaserLine.visible = isScanning;
-        if (isScanning) {
-          inspectorLaserMat.opacity = 0.5 + 0.45 * Math.sin(now * 0.015);
-        }
-      }
       if (inspectorClampMat) {
         inspectorClampMat.color.setHex(tlm.fdir_mode === 1 ? 0xfacc15 : 0x0284c7);
       }
@@ -1574,9 +1655,13 @@ export default function SpaceOrbitViewer3D() {
       let isPanicTumbling = false;
       const stageElapsed = tlm.elapsed_time !== undefined ? tlm.elapsed_time : 0.0;
       if (stageId === 5) {
-        if (stageElapsed >= 0.6 && (tlm.fdir_mode === 0 || tlm.fdir_mode === undefined)) {
+        // Prologue assessment phase lasts 4.5s (debris collision occurs at T=0.6s)
+        const isPrologue = (stageElapsed >= 0.6 && stageElapsed < 4.5 && (tlm.fdir_mode === 0 || tlm.fdir_mode === undefined) && !tlm.is_detumbled);
+        if (isPrologue) {
           isGhost = true;
           isPanicTumbling = true;
+        } else if (tlm.mission_status === 'FAILED') {
+          isGhost = true;
         }
       } else {
         isGhost = tlm.carrier_lost || tlm.fdir_mode === 1;
@@ -1604,17 +1689,18 @@ export default function SpaceOrbitViewer3D() {
 
       // Update Dynamic Plumes & Particles
       const hasFuel = (tlm.fuel === undefined || tlm.fuel > 0);
-      const thrustMask = (tlm.thrust_z !== undefined) ? (tlm.thrust_z & 0xFF) : 0;
+      const thrustMask = (tlm.thrust_z !== undefined) ? (tlm.thrust_z & 0xFFF) : 0;
       const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
       const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
       const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
 
       // Main thrusters T0, T1
       const isReverse = (stageId === 3 || stageId !== 5) && (actualFx < -0.005);
-      const isForward = hasFuel && (healthMask & 1) && ((thrustMask & 1) || (stageId !== 5 && actualFx > 0.005));
+      const isT0Forward = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || actualFx > 0.005);
+      const isT1Forward = hasFuel && (healthMask & (1 << 1)) && ((thrustMask & (1 << 1)) || actualFx > 0.005);
       const isCounterFiring = hasFuel && isReverse;
-      const isT0Firing = isForward || isCounterFiring;
-      const isT1Firing = isForward || isCounterFiring;
+      const isT0Firing = isT0Forward || isCounterFiring;
+      const isT1Firing = isT1Forward || isCounterFiring;
 
       // Dynamic plume tint: white-blue on counter brake, cyan on standard drive
       plumeMat.color.setHex(isCounterFiring ? 0xe0f2fe : 0x38bdf8);
@@ -1696,8 +1782,8 @@ export default function SpaceOrbitViewer3D() {
         if (isT6) addJet(-1.3, 1.8, 0, 0, (0.5 + Math.random() * 0.35), 0);
 
         // Reverse braking T2, T3
-        if ((healthMask & (1 << 2)) && (thrustMask & (1 << 2))) addJet(0.8, -0.65, 0, 0.6, 0, 0);
-        if ((healthMask & (1 << 3)) && (thrustMask & (1 << 3))) addJet(0.8, 0.65, 0, 0.6, 0, 0);
+        if ((healthMask & (1 << 2)) && ((thrustMask & (1 << 2)) || (stageId === 5 && actualFx < -0.005))) addJet(0.8, -0.65, 0, 0.6, 0, 0);
+        if ((healthMask & (1 << 3)) && ((thrustMask & (1 << 3)) || (stageId === 5 && actualFx < -0.005))) addJet(0.8, 0.65, 0, 0.6, 0, 0);
 
         // Vertical T8..T11
         if ((healthMask & (1 << 8)) && (thrustMask & (1 << 8))) addJet(1.2, 0, 0.4, 0, 0, 0.7);
@@ -1922,6 +2008,8 @@ export default function SpaceOrbitViewer3D() {
           let corridorY = 0.0;
           if (stageId === 1) {
             corridorY = getPipelineY(targetStationX);
+          } else if (stageId === 3) {
+            corridorY = getTrussRailY(targetStationX);
           } else if (stageId === 5) {
             corridorY = Math.max(-1.5, Math.min(1.5, shipY * 0.4));
           }
@@ -1931,11 +2019,12 @@ export default function SpaceOrbitViewer3D() {
           // Four observation quadrants relative to flight corridor:
           // Top-Right (右上: -Y, +Z), Top-Left (左上: +Y, +Z),
           // Bottom-Right (右下: -Y, -Z), Bottom-Left (左下: +Y, -Z)
+          const qScale = (stageId === 3) ? 0.5 : 1.0;
           const quadrants = [
-            { y: -2.8, z: 1.2 },  // 右上 (Starboard Elevated)
-            { y: 2.8, z: 1.2 },   // 左上 (Port Elevated)
-            { y: -2.8, z: -1.2 }, // 右下 (Starboard Ventral)
-            { y: 2.8, z: -1.2 }   // 左下 (Port Ventral)
+            { y: -2.8 * qScale, z: 1.2 * qScale },  // 右上 (Starboard Elevated)
+            { y: 2.8 * qScale, z: 1.2 * qScale },   // 左上 (Port Elevated)
+            { y: -2.8 * qScale, z: -1.2 * qScale }, // 右下 (Starboard Ventral)
+            { y: 2.8 * qScale, z: -1.2 * qScale }   // 左下 (Port Ventral)
           ];
 
           const prevQuad = (st.trackQuadIndex !== undefined) ? st.trackQuadIndex : -1;
@@ -1961,7 +2050,7 @@ export default function SpaceOrbitViewer3D() {
         }
 
         const anchor = st.trackAnchor;
-        const zoomScale = 1.0 / Math.max(0.4, Math.min(2.5, st.zoom));
+        const zoomScale = 1.0 / Math.max(0.4, Math.min(5.0, st.zoom));
 
         camX = anchor.stationX + st.userOffset.yaw * 6.0 + shakeX;
         camY = anchor.corridorY + (anchor.relY * zoomScale) + shakeY;
@@ -1972,31 +2061,32 @@ export default function SpaceOrbitViewer3D() {
         camera.lookAt(shipX, shipY, shipZ);
       } else {
         // Spacecraft-relative camera views: chase, nose, hero, orbit
+        // Stage 3 crawler is 0.76m (compact), so baseDist is calibrated 2.5x closer for crisp default visibility!
         let baseAzimuth = 0.0;
         let baseElevation = 0.26;
-        let baseDist = 9.0;
+        let baseDist = (stageId === 3) ? 3.6 : 9.0;
 
         if (effectiveMode === 'chase') {
           baseAzimuth = 0.0;
           baseElevation = 0.26;
-          baseDist = 9.0;
+          baseDist = (stageId === 3) ? 3.6 : 9.0;
         } else if (effectiveMode === 'nose') {
           baseAzimuth = Math.PI;
           baseElevation = 0.20;
-          baseDist = 7.5;
+          baseDist = (stageId === 3) ? 3.0 : 7.5;
         } else if (effectiveMode === 'hero') {
           baseAzimuth = -0.75;
           baseElevation = -0.28;
-          baseDist = 6.2;
+          baseDist = (stageId === 3) ? 2.5 : 6.2;
         } else if (effectiveMode === 'orbit') {
           baseAzimuth = (now * 0.00045) % (Math.PI * 2);
           baseElevation = 0.24 + 0.12 * Math.sin(now * 0.0003);
-          baseDist = 8.8;
+          baseDist = (stageId === 3) ? 3.5 : 8.8;
         }
 
         const finalAzimuth = baseAzimuth + st.userOffset.yaw;
         const finalElevation = Math.max(-1.3, Math.min(1.3, baseElevation + st.userOffset.pitch));
-        const finalDist = baseDist / Math.max(0.4, Math.min(2.5, st.zoom));
+        const finalDist = baseDist / Math.max(0.4, Math.min(5.0, st.zoom));
 
         const cosA = Math.cos(finalAzimuth);
         const sinA = Math.sin(finalAzimuth);
@@ -2251,7 +2341,7 @@ export default function SpaceOrbitViewer3D() {
 
   const handleWheel = (e) => {
     e.preventDefault();
-    setZoom(prev => Math.max(0.4, Math.min(2.5, prev - e.deltaY * 0.0015)));
+    setZoom(prev => Math.max(0.4, Math.min(5.0, prev - e.deltaY * 0.0015)));
   };
 
   const resetView = () => {
@@ -2346,7 +2436,7 @@ export default function SpaceOrbitViewer3D() {
       React.createElement('input', {
         type: 'range',
         min: '0.4',
-        max: '2.5',
+        max: '5.0',
         step: '0.1',
         value: zoom,
         onChange: (e) => setZoom(parseFloat(e.target.value)),
@@ -2458,11 +2548,11 @@ export default function SpaceOrbitViewer3D() {
       ) : telemetry.stage_id === 3 ? (
         React.createElement(React.Fragment, null,
           React.createElement('span', { style: { color: '#38bdf8', fontWeight: 'bold' } }, 'STAGE 3: ISS TRUSS'),
-          React.createElement('span', null, `RAIL: ${telemetry.pos_x.toFixed(1)}m / 60m`),
+          React.createElement('span', null, `PIPE: ${telemetry.pos_x.toFixed(1)}m / 60m`),
           React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(2)} m/s`),
           React.createElement('span', {
             style: { color: Math.abs(telemetry.cross_track_err || 0) > 250 ? '#ef4444' : '#10b981', fontWeight: 'bold' }
-          }, `RAIL LOAD: ${(telemetry.cross_track_err || 0).toFixed(1)}N / 300N`),
+          }, `CLAMP LOAD: ${(telemetry.cross_track_err || 0).toFixed(1)}N / 300N`),
           React.createElement('span', null, `BATT: ${(telemetry.fuel || 100).toFixed(1)}%`)
         )
       ) : telemetry.stage_id === 4 ? (

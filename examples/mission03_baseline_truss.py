@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SpaceGuidance-FBB: Stage 3 ISS Truss Inspector (Calibrated High-Performance Autopilot)
-# 国際宇宙ステーション (ISS) の立体トラス外壁レールを巡回・スキャンするお手本コードです。
+# 国際宇宙ステーション (ISS) の立体トラス主構造ガイドパイプを巡回・スキャンするお手本コードです。
 
 import sys
 import os
@@ -81,8 +81,8 @@ def run_pilot():
     hw = SpaceGuidanceHardware()
     hw.engage() # 公式タイマースタート＆MMIOイネーブル (ADR #002)
     print("[Pilot] Stage 3: ISS Truss Inspector System Online.")
-    print("[Pilot] 60m 3D Truss Rail Corridor. 4 Critical Inspection Joints.")
-    print("[Pilot] Actuators: 3D Rail Drive + Active Counter-Braking Thrusters + Electromagnetic Gripper Latch.\n")
+    print("[Pilot] 60m 3D Truss Guide Pipe Corridor. 4 Critical Inspection Joints.")
+    print("[Pilot] Actuators: Guide Pipe Pinch Drive + Active Counter-Braking Thrusters + Electromagnetic Gripper Latch.\n")
 
     # =========================================================================
     # 🎯 TUNE ZONE: 巡航速度・コーナー速度・減速設定
@@ -99,12 +99,12 @@ def run_pilot():
         while True:
             hw.kick_watchdog()
             tlm = hw.read_registers()
-            pos_x = tlm["pos_x"]               # レール沿い距離 (m)
+            pos_x = tlm["pos_x"]               # パイプ軌道沿い距離 (m)
             vel_x = tlm["vel_x"]               # 走行速度 (m/s)
             rail_load = tlm["cross_track_err"] # 遠心ラジアル荷重 (N)
             fuel = tlm["fuel"]
 
-            # レール脱線・破損判定チェック
+            # 軌道離脱・メカ破損判定チェック
             if abs(rail_load) >= 999.0:
                 print(f"\n🚨 [FAILURE] Clamp Pin Sheared! Clamped at high speed (> 0.40m/s).")
                 break
@@ -112,7 +112,7 @@ def run_pilot():
                 print(f"\n🚨 [FAILURE] Over-Speed Clamp Chatter Derailment (> 3.50m/s)!")
                 break
             if abs(rail_load) > 300.0:
-                print(f"\n🚨 [DERAILMENT] Centrifugal rail load exceeded 300N ({abs(rail_load):.1f}N)! Off-track failure.")
+                print(f"\n🚨 [DERAILMENT] Centrifugal load exceeded C-clamp retention limit (300N, got {abs(rail_load):.1f}N)! Off-track failure.")
                 break
 
             # 次の未点検ジョイント検索

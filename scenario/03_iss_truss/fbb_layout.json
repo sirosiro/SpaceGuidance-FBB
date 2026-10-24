@@ -39,6 +39,7 @@
                             "type": "leaf",
                             "data": {
                                 "views": [
+                                    "gpioPanel",
                                     "sg-orbit-viewer"
                                 ],
                                 "activeView": "sg-orbit-viewer",
@@ -58,7 +59,7 @@
                             "size": 454
                         }
                     ],
-                    "size": 1035
+                    "size": 959
                 },
                 {
                     "type": "branch",
@@ -75,7 +76,7 @@
                                         "activeView": "sg-telemetry-gauge",
                                         "id": "6"
                                     },
-                                    "size": 360
+                                    "size": 398
                                 },
                                 {
                                     "type": "leaf",
@@ -86,7 +87,7 @@
                                         "activeView": "sg-chaos-fdir",
                                         "id": "8"
                                     },
-                                    "size": 364
+                                    "size": 402
                                 }
                             ],
                             "size": 433
@@ -103,7 +104,7 @@
                             "size": 727
                         }
                     ],
-                    "size": 724
+                    "size": 800
                 }
             ],
             "size": 1160
@@ -136,6 +137,14 @@
                 "_componentName": "registerTracer"
             },
             "title": "Tracer"
+        },
+        "gpioPanel": {
+            "id": "gpioPanel",
+            "contentComponent": "gpioPanel",
+            "params": {
+                "_componentName": "gpioPanel"
+            },
+            "title": "GPIO / Pin Array"
         },
         "sg-orbit-viewer": {
             "id": "sg-orbit-viewer",
@@ -179,5 +188,5 @@
             "title": "Chaos & Fault Injection"
         }
     },
-    "activeGroup": "1"
+    "activeGroup": "7"
 }

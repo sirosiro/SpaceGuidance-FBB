@@ -26,7 +26,8 @@
                                     "type": "leaf",
                                     "data": {
                                         "views": [
-                                            "sg-orbit-viewer"
+                                            "sg-orbit-viewer",
+                                            "gpioPanel"
                                         ],
                                         "activeView": "sg-orbit-viewer",
                                         "id": "7"
@@ -135,6 +136,14 @@
             },
             "title": "SG 3D Cyber Orbit Viewer"
         },
+        "gpioPanel": {
+            "id": "gpioPanel",
+            "contentComponent": "gpioPanel",
+            "params": {
+                "_componentName": "gpioPanel"
+            },
+            "title": "GPIO / Pin Array"
+        },
         "chaosEngine": {
             "id": "chaosEngine",
             "contentComponent": "chaosEngine",
@@ -169,5 +178,5 @@
             "title": "SG Chaos FDIR & Scorecard"
         }
     },
-    "activeGroup": "1"
+    "activeGroup": "7"
 }

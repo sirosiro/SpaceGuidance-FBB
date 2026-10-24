@@ -248,7 +248,7 @@ class SpaceGuidanceHardware:
 
     def set_inspection_scan(self, angle_deg, beam_width_deg=15.0, drive_thrust=0.0, fdir_mode=1):
         """
-        Stage 3 360-degree Ultrasonic / Laser Flaw Inspection Scanner API.
+        Stage 3 360-degree Optical Laser / LiDAR Flaw Inspection Scanner API.
         Controls the turret scan angle and aperture beam width.
         - angle_deg: Turret scan angle around the truss joint (0 to 360 deg)
         - beam_width_deg: Aperture width in degrees (narrow = high SNR sensitivity, wide = fast coarse sweep)

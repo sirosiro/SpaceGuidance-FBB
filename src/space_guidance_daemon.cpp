@@ -692,6 +692,80 @@ int main(int argc, char** argv) {
         std::atomic_signal_fence(std::memory_order_release);
         shm->seq_num++; // Even: write complete, safe to read
 
+        // Standard F-BB scenario telemetry export (33Hz atomic snapshot)
+        static int telem_tick = 0;
+        if (++telem_tick % 3 == 0) {
+            std::string tmp_f = "/tmp/fbb_scenario_telemetry.json.tmp";
+            std::string dst_f = "/tmp/fbb_scenario_telemetry.json";
+            std::string legacy_f = "/tmp/space_guidance_telemetry.json";
+            std::ofstream jf(tmp_f);
+            if (jf.is_open()) {
+                jf << "{"
+                   << "\"type\":\"space_guidance\","
+                   << "\"stage_id\":" << stage_id << ","
+                   << "\"pos_x\":" << state.pos.x << ","
+                   << "\"pos_y\":" << state.pos.y << ","
+                   << "\"pos_z\":" << state.pos_z << ","
+                   << "\"vel_x\":" << state.vel.x << ","
+                   << "\"vel_y\":" << state.vel.y << ","
+                   << "\"vel_z\":" << state.vel_z << ","
+                   << "\"angle\":" << state.angle << ","
+                   << "\"omega\":" << state.omega << ","
+                   << "\"roll\":" << state.roll << ","
+                   << "\"pitch\":" << state.pitch << ","
+                   << "\"yaw\":" << state.yaw << ","
+                   << "\"omega_x\":" << state.omega_x << ","
+                   << "\"omega_y\":" << state.omega_y << ","
+                   << "\"omega_z\":" << state.omega_z << ","
+                   << "\"wheel_rpm\":" << state.wheel_rpm << ","
+                   << "\"wheel_rpm_x\":" << state.wheel_rpm_x << ","
+                   << "\"wheel_rpm_y\":" << state.wheel_rpm_y << ","
+                   << "\"wheel_rpm_z\":" << state.wheel_rpm_z << ","
+                   << "\"fuel\":" << state.fuel << ","
+                   << "\"cross_track_err\":" << shm->cross_track_err << ","
+                   << "\"fdir_mode\":" << shm->fdir_mode << ","
+                   << "\"sensor_raw\":" << shm->sensor_raw << ","
+                   << "\"sensor_edge\":" << shm->sensor_edge << ","
+                   << "\"thrust_x\":" << (static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0) << ","
+                   << "\"thrust_y\":" << (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0) << ","
+                   << "\"thrust_z\":" << shm->thrust_cmd_z << ","
+                   << "\"torque\":" << (static_cast<int32_t>(shm->torque_cmd) / 65536.0) << ","
+                   << "\"wheel_torque\":" << (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0) << ","
+                   << "\"cable_tension\":" << state.cable_tension << ","
+                   << "\"cable_vibration\":" << state.cable_vibration << ","
+                   << "\"cable_snapped\":" << shm->ext.cable_snapped << ","
+                   << "\"detumble_time\":" << physics.get_detumble_time() << ","
+                   << "\"elapsed_time\":" << referee.elapsed_time << ","
+                   << "\"debris_azimuth\":" << shm->ext.debris_azimuth << ","
+                   << "\"debris_elevation\":" << shm->ext.debris_elevation << ","
+                   << "\"debris_spawn_x\":" << shm->ext.debris_spawn_x << ","
+                   << "\"debris_spawn_y\":" << shm->ext.debris_spawn_y << ","
+                   << "\"debris_spawn_z\":" << shm->ext.debris_spawn_z << ","
+                   << "\"debris_impact_x\":" << shm->ext.debris_impact_x << ","
+                   << "\"debris_impact_y\":" << shm->ext.debris_impact_y << ","
+                   << "\"debris_impact_z\":" << shm->ext.debris_impact_z << ","
+                   << "\"thruster_health\":" << shm->ext.thruster_health << ","
+                   << "\"is_detumbled\":" << shm->ext.is_detumbled << ","
+                   << "\"debris_hits\":" << shm->ext.debris_hits << ","
+                   << "\"chaos_seed\":" << shm->ext.chaos_seed << ","
+                   << "\"damaged_thruster_1\":" << shm->ext.damaged_thruster_1 << ","
+                   << "\"damaged_thruster_2\":" << shm->ext.damaged_thruster_2 << ","
+                   << "\"score\":" << referee.total_score << ","
+                   << "\"checkpoint_score\":" << referee.checkpoint_score << ","
+                   << "\"bonus_score\":" << referee.bonus_score << ","
+                   << "\"passed_checkpoints\":" << referee.passed_checkpoints << ","
+                   << "\"total_checkpoints\":" << referee.total_checkpoints << ","
+                   << "\"mission_status\":\"" << (referee.is_failed ? "FAILED" : (referee.is_completed ? "COMPLETE" : "ACTIVE")) << "\","
+                   << "\"official_grade\":\"" << referee.official_grade << "\","
+                   << "\"last_event\":\"" << referee.last_event << "\""
+                   << "}\n";
+                jf.close();
+                rename(tmp_f.c_str(), dst_f.c_str());
+                unlink(legacy_f.c_str());
+                link(dst_f.c_str(), legacy_f.c_str());
+            }
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
