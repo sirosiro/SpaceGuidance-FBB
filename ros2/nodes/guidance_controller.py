@@ -103,9 +103,10 @@ class SpaceGuidanceHardware:
         self.mm.write(struct.pack("=I", cr))
 
     def read_registers(self):
-        # Seqlock lock-free retry loop (up to 5 attempts) to prevent torn reads
+        # Seqlock lock-free retry loop (up to 10 attempts) to prevent torn reads
         res = {}
-        for retry in range(5):
+        shm_ext_loaded = False
+        for retry in range(10):
             self.mm.seek(0)
             data = self.mm.read(self.SIZE)
             seq_start = 0
@@ -113,6 +114,7 @@ class SpaceGuidanceHardware:
                 magic_check, seq_start = struct.unpack_from("=2I", data, 0xA8)
                 if magic_check == 0x53504731 and (seq_start & 1):
                     # Odd sequence number indicates daemon write in progress; retry
+                    time.sleep(0.0005)
                     continue
 
             unpacked = struct.unpack(self.SHM_LAYOUT, data[:struct.calcsize(self.SHM_LAYOUT)])
@@ -148,12 +150,12 @@ class SpaceGuidanceHardware:
             }
 
             # Zero Disk I/O: Unpack extended 6-DoF telemetry directly from SHM if magic 'SPG1' matches
-            shm_ext_loaded = False
             if len(data) >= 496:
                 magic, seq_end = struct.unpack_from("=2I", data, 0xA8)
                 if magic == 0x53504731: # 'SPG1'
                     if seq_start != seq_end:
                         # Sequence changed during unpack (torn read); retry
+                        time.sleep(0.0005)
                         continue
                     doubles = struct.unpack_from("=23d", data, 0xB0)
                     res["pos_z"] = doubles[0]
