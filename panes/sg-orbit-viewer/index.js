@@ -827,28 +827,148 @@ export default function SpaceOrbitViewer3D() {
       stage4Group.add(cLine);
     }
 
-    // Rotating Docking Station Port Ring at X = 50m
+    // (A) ISS Forward Docking Complex & Full Station at X >= 50m
+    const issStationGroup = new THREE.Group();
+    issStationGroup.position.set(50.0, 0, 0);
+
+    // Rotating Docking Station Port Ring & Capture Guide Petals at X = 50.0m
     const dockPortGroup = new THREE.Group();
-    dockPortGroup.position.set(50.0, 0, 0);
+    dockPortGroup.position.set(0, 0, 0);
 
     const portRingPts = [];
     for (let i = 0; i <= 24; i++) {
       const a = (i * Math.PI * 2) / 24;
-      portRingPts.push(new THREE.Vector3(0, 3.2 * Math.sin(a), 3.2 * Math.cos(a)));
+      portRingPts.push(new THREE.Vector3(0, 1.8 * Math.sin(a), 1.8 * Math.cos(a)));
     }
     const portRingGeo = new THREE.BufferGeometry().setFromPoints(portRingPts);
-    dockPortGroup.add(new THREE.Line(portRingGeo, new THREE.LineBasicMaterial({ color: 0xeab308, linewidth: 2 })));
+    dockPortGroup.add(new THREE.Line(portRingGeo, new THREE.LineBasicMaterial({ color: 0xfacc15, linewidth: 2.5 })));
 
-    // Rotating Crosshair Arms
+    // 3 APAS/IDA Docking Guide Petals (at 0, 120, 240 deg)
+    const petalPts = [];
+    for (const aDeg of [0, 120, 240]) {
+      const aRad = (aDeg * Math.PI) / 180;
+      const cosA = Math.cos(aRad), sinA = Math.sin(aRad);
+      const cosA1 = Math.cos(aRad - 0.2), sinA1 = Math.sin(aRad - 0.2);
+      const cosA2 = Math.cos(aRad + 0.2), sinA2 = Math.sin(aRad + 0.2);
+      petalPts.push(0, 1.8 * cosA1, 1.8 * sinA1, -0.6, 2.3 * cosA, 2.3 * sinA);
+      petalPts.push(-0.6, 2.3 * cosA, 2.3 * sinA, 0, 1.8 * cosA2, 1.8 * sinA2);
+    }
+    const petalGeo = new THREE.BufferGeometry();
+    petalGeo.setAttribute('position', new THREE.Float32BufferAttribute(petalPts, 3));
+    dockPortGroup.add(new THREE.LineSegments(petalGeo, new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 2 })));
+
+    // Rotating Optical Docking Crosshair Arms
     const crossArmPts = [
-      0, -3.2, 0, 0, 3.2, 0,
-      0, 0, -3.2, 0, 0, 3.2
+      0, -1.8, 0, 0, 1.8, 0,
+      0, 0, -1.8, 0, 0, 1.8
     ];
     const crossGeo = new THREE.BufferGeometry();
     crossGeo.setAttribute('position', new THREE.Float32BufferAttribute(crossArmPts, 3));
     const crossLine = new THREE.LineSegments(crossGeo, new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 1.5 }));
     dockPortGroup.add(crossLine);
-    stage4Group.add(dockPortGroup);
+    issStationGroup.add(dockPortGroup);
+
+    // PMA-2 (Pressurized Mating Adapter 2) Conical Mating Adapter (x = 0 to 3.2m)
+    const pmaPts = [];
+    for (let a = 0; a < 8; a++) {
+      const a1 = (a * Math.PI * 2) / 8;
+      const a2 = ((a + 1) * Math.PI * 2) / 8;
+      pmaPts.push(0, 1.8 * Math.cos(a1), 1.8 * Math.sin(a1), 0, 1.8 * Math.cos(a2), 1.8 * Math.sin(a2));
+      pmaPts.push(3.2, 2.4 * Math.cos(a1), 2.4 * Math.sin(a1), 3.2, 2.4 * Math.cos(a2), 2.4 * Math.sin(a2));
+      pmaPts.push(0, 1.8 * Math.cos(a1), 1.8 * Math.sin(a1), 3.2, 2.4 * Math.cos(a1), 2.4 * Math.sin(a1));
+    }
+    const pmaGeo = new THREE.BufferGeometry();
+    pmaGeo.setAttribute('position', new THREE.Float32BufferAttribute(pmaPts, 3));
+    issStationGroup.add(new THREE.LineSegments(pmaGeo, new THREE.LineBasicMaterial({ color: 0x94a3b8 })));
+
+    // ISS Main Pressurized Modules Cluster (Harmony, Destiny, Kibo, Columbus)
+    const issModPts = [];
+    const addModCylinderX = (x1, x2, cy, cz, r) => {
+      for (const xc of [x1, (x1 + x2) * 0.5, x2]) {
+        for (let a = 0; a < 8; a++) {
+          const a1 = (a * Math.PI * 2) / 8;
+          const a2 = ((a + 1) * Math.PI * 2) / 8;
+          issModPts.push(xc, cy + r * Math.cos(a1), cz + r * Math.sin(a1),
+                         xc, cy + r * Math.cos(a2), cz + r * Math.sin(a2));
+        }
+      }
+      for (let a = 0; a < 4; a++) {
+        const ang = (a * Math.PI * 2) / 4;
+        issModPts.push(x1, cy + r * Math.cos(ang), cz + r * Math.sin(ang),
+                       x2, cy + r * Math.cos(ang), cz + r * Math.sin(ang));
+      }
+    };
+    const addModCylinderZ = (z1, z2, cx, cy, r) => {
+      for (const zc of [z1, (z1 + z2) * 0.5, z2]) {
+        for (let a = 0; a < 8; a++) {
+          const a1 = (a * Math.PI * 2) / 8;
+          const a2 = ((a + 1) * Math.PI * 2) / 8;
+          issModPts.push(cx + r * Math.cos(a1), cy + r * Math.sin(a1), zc,
+                         cx + r * Math.cos(a2), cy + r * Math.sin(a2), zc);
+        }
+      }
+      for (let a = 0; a < 4; a++) {
+        const ang = (a * Math.PI * 2) / 4;
+        issModPts.push(cx + r * Math.cos(ang), cy + r * Math.sin(ang), z1,
+                       cx + r * Math.cos(ang), cy + r * Math.sin(ang), z2);
+      }
+    };
+
+    // Node 2 (Harmony): x = 3.2 to 10.5
+    addModCylinderX(3.2, 10.5, 0, 0, 2.4);
+    // Destiny US Lab: x = 10.5 to 22.0
+    addModCylinderX(10.5, 22.0, 0, 0, 2.4);
+    // JAXA Kibo Module (Starboard +Z): z = 2.4 to 13.5 at x = 7.0
+    addModCylinderZ(2.4, 13.5, 7.0, 0, 2.3);
+    // Columbus ESA Lab (Port -Z): z = -2.4 to -8.5 at x = 7.0
+    addModCylinderZ(-8.5, -2.4, 7.0, 0, 2.2);
+
+    const issModGeo = new THREE.BufferGeometry();
+    issModGeo.setAttribute('position', new THREE.Float32BufferAttribute(issModPts, 3));
+    issStationGroup.add(new THREE.LineSegments(issModGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.85 })));
+
+    // ISS Integrated Truss Structure (ITS) at x = 17.0m, spanning Z = -28m to +28m
+    const issTrussPts = [];
+    const tx = 17.0, trY = 0.0, trW = 1.4;
+    for (const zc of [-28.0, 28.0]) {
+      issTrussPts.push(tx - trW, trY - trW, zc, tx + trW, trY - trW, zc);
+      issTrussPts.push(tx + trW, trY - trW, zc, tx + trW, trY + trW, zc);
+      issTrussPts.push(tx + trW, trY + trW, zc, tx - trW, trY + trW, zc);
+      issTrussPts.push(tx - trW, trY + trW, zc, tx - trW, trY - trW, zc);
+    }
+    for (const [xSign, ySign] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      issTrussPts.push(tx + xSign * trW, trY + ySign * trW, -28.0, tx + xSign * trW, trY + ySign * trW, 28.0);
+    }
+    for (let zc = -24.0; zc <= 24.0; zc += 8.0) {
+      issTrussPts.push(tx - trW, trY - trW, zc, tx + trW, trY - trW, zc);
+      issTrussPts.push(tx + trW, trY + trW, zc, tx - trW, trY + trW, zc);
+      issTrussPts.push(tx - trW, trY - trW, zc, tx + trW, trY + trW, zc);
+    }
+    const issTrussGeo = new THREE.BufferGeometry();
+    issTrussGeo.setAttribute('position', new THREE.Float32BufferAttribute(issTrussPts, 3));
+    issStationGroup.add(new THREE.LineSegments(issTrussGeo, new THREE.LineBasicMaterial({ color: 0x64748b, linewidth: 2 })));
+
+    // 4 Massive Solar Array Wings (SAW) on Truss Tips (z = -22m and z = +22m, extending Y = +-12m)
+    const sawPts = [];
+    for (const zSaw of [-22.0, 22.0]) {
+      for (const ySign of [1, -1]) {
+        const y0 = ySign * 2.0;
+        const y1 = ySign * 13.5;
+        sawPts.push(tx - 3.0, y0, zSaw, tx + 3.0, y0, zSaw);
+        sawPts.push(tx - 3.0, y1, zSaw, tx + 3.0, y1, zSaw);
+        sawPts.push(tx - 3.0, y0, zSaw, tx - 3.0, y1, zSaw);
+        sawPts.push(tx + 3.0, y0, zSaw, tx + 3.0, y1, zSaw);
+        sawPts.push(tx, y0, zSaw, tx, y1, zSaw);
+        for (let yc = y0 + ySign * 2.8; Math.abs(yc) < Math.abs(y1); yc += ySign * 2.8) {
+          sawPts.push(tx - 3.0, yc, zSaw, tx + 3.0, yc, zSaw);
+        }
+      }
+    }
+    const sawGeo = new THREE.BufferGeometry();
+    sawGeo.setAttribute('position', new THREE.Float32BufferAttribute(sawPts, 3));
+    issStationGroup.add(new THREE.LineSegments(sawGeo, new THREE.LineBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.9 })));
+
+    stage4Group.add(issStationGroup);
     scene.add(stage4Group);
 
     // ------------------------------------------------------------------------
@@ -1425,35 +1545,61 @@ export default function SpaceOrbitViewer3D() {
     // ------------------------------------------------------------------------
     const thrusterGroup = new THREE.Group();
 
-    // Main Engine Plumes (T0, T1)
-    const plumeGeo = new THREE.BufferGeometry();
-    const plumePts = new Float32Array(4 * 3); // 2 lines: core + outer
-    plumeGeo.setAttribute('position', new THREE.BufferAttribute(plumePts, 3));
+    // Main Engine Plumes (T0, T1): Volumetric Vacuum Expansion Bell (10 segments each)
+    const plumePtsCount = 20 * 2 * 3; // 20 segments * 2 vertices * 3 coords
+    const plumeGeo0 = new THREE.BufferGeometry();
+    plumeGeo0.setAttribute('position', new THREE.BufferAttribute(new Float32Array(plumePtsCount), 3));
+    const plumeGeo1 = new THREE.BufferGeometry();
+    plumeGeo1.setAttribute('position', new THREE.BufferAttribute(new Float32Array(plumePtsCount), 3));
+
+    // Outer Neon Glow: Saturated Vibrant Electric Yellow (High contrast against black space & cyan frames)
     const plumeMat = new THREE.LineBasicMaterial({
-      color: 0x38bdf8,
+      color: 0xfacc15, // Bright Neon Yellow
       linewidth: 3.0,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
       blending: THREE.AdditiveBlending
     });
-    const plumeT0 = new THREE.LineSegments(plumeGeo.clone(), plumeMat);
-    const plumeT1 = new THREE.LineSegments(plumeGeo.clone(), plumeMat);
+    // Inner White-Hot Core Laser Ray: Pure Incandescent White (Dual-pass neon bloom)
+    const plumeCoreMat = new THREE.LineBasicMaterial({
+      color: 0xffffff, // Pure Incandescent White
+      linewidth: 1.5,
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending
+    });
+
+    const plumeT0 = new THREE.LineSegments(plumeGeo0, plumeMat);
+    const plumeT1 = new THREE.LineSegments(plumeGeo1, plumeMat);
+    const plumeCoreT0 = new THREE.LineSegments(plumeGeo0, plumeCoreMat);
+    const plumeCoreT1 = new THREE.LineSegments(plumeGeo1, plumeCoreMat);
     thrusterGroup.add(plumeT0);
     thrusterGroup.add(plumeT1);
+    thrusterGroup.add(plumeCoreT0);
+    thrusterGroup.add(plumeCoreT1);
 
-    // Multi-Nozzle RCS Jets (T2..T11)
+    // Multi-Nozzle RCS Jets (T2..T11): Multi-Ray Plasma Spray Fan
     const rcsJetGeo = new THREE.BufferGeometry();
-    const rcsJetPositions = new Float32Array(10 * 2 * 3); // 10 jets * 2 points
+    const rcsJetPositions = new Float32Array(128 * 2 * 3); // 128 rays * 2 points
     rcsJetGeo.setAttribute('position', new THREE.BufferAttribute(rcsJetPositions, 3));
     const rcsJetMat = new THREE.LineBasicMaterial({
-      color: 0xf59e0b,
-      linewidth: 2.2,
+      color: 0xfbbf24, // Electric Amber Yellow
+      linewidth: 2.5,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending
+    });
+    const rcsCoreMat = new THREE.LineBasicMaterial({
+      color: 0xffffff, // Blinding White Core
+      linewidth: 1.5,
+      transparent: true,
+      opacity: 1.0,
       blending: THREE.AdditiveBlending
     });
     const rcsJetLines = new THREE.LineSegments(rcsJetGeo, rcsJetMat);
+    const rcsCoreLines = new THREE.LineSegments(rcsJetGeo, rcsCoreMat);
     thrusterGroup.add(rcsJetLines);
+    thrusterGroup.add(rcsCoreLines);
 
     shipRoot.add(thrusterGroup);
 
@@ -1616,7 +1762,7 @@ export default function SpaceOrbitViewer3D() {
       const shipZ = sm.z;
       const shipYaw = sm.yaw;
       const shipPitch = sm.pitch;
-      const shipRoll = (stageId === 5 ? sm.roll : sm.bank);
+      const shipRoll = (stageId === 5 || stageId === 4) ? sm.roll : sm.bank;
 
       // Position & Rotate Spacecraft in Three.js
       shipRoot.position.set(shipX, shipY, shipZ);
@@ -1694,102 +1840,184 @@ export default function SpaceOrbitViewer3D() {
       const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
       const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
 
-      // Main thrusters T0, T1
-      const isReverse = (stageId === 3 || stageId !== 5) && (actualFx < -0.005);
-      const isT0Forward = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || actualFx > 0.005);
-      const isT1Forward = hasFuel && (healthMask & (1 << 1)) && ((thrustMask & (1 << 1)) || actualFx > 0.005);
-      const isCounterFiring = hasFuel && isReverse;
-      const isT0Firing = isT0Forward || isCounterFiring;
-      const isT1Firing = isT1Forward || isCounterFiring;
+      // ------------------------------------------------------------------------
+      // 1. Main Thrusters T0, T1 (Volumetric Vacuum Bell & Dual-Pass Neon Glow)
+      // ------------------------------------------------------------------------
+      const isReverse = (actualFx < -0.005);
+      const fxForwardMag = Math.min(1.0, Math.max(0.0, actualFx));
+      const fxBrakeMag = Math.min(1.0, Math.max(0.0, -actualFx));
 
-      // Dynamic plume tint: white-blue on counter brake, cyan on standard drive
-      plumeMat.color.setHex(isCounterFiring ? 0xe0f2fe : 0x38bdf8);
+      // For Stage 3 (Crawler): T0/T1 are mounted on crawler and can counter-fire
+      // For Fighters (Stage 1, 4, 5): T0/T1 are REAR forward propulsion engines only!
+      let isT0Firing = false;
+      let isT1Firing = false;
+      let isCounterFiring = false;
+
+      if (stageId === 3) {
+        isCounterFiring = hasFuel && isReverse;
+        isT0Firing = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || Math.abs(actualFx) > 0.005);
+        isT1Firing = hasFuel && (healthMask & (1 << 1)) && ((thrustMask & (1 << 1)) || Math.abs(actualFx) > 0.005);
+      } else {
+        // Rear main thrusters ONLY fire when accelerating forward (+X)
+        isT0Firing = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || actualFx > 0.005);
+        isT1Firing = hasFuel && (healthMask & (1 << 1)) && ((thrustMask & (1 << 1)) || actualFx > 0.005);
+        isCounterFiring = false;
+      }
+
+      // Dynamic plume tint: High-contrast incandescent neon yellow/gold
+      plumeMat.color.setHex(isCounterFiring ? 0xfef08a : 0xfacc15);
+      plumeCoreMat.color.setHex(0xffffff);
+
+      // Visibility floor: 0.22m minimum visible bell ensures micro-trimming is clearly visible
+      // Full throttle (1.0) -> expands to 1.55m roaring bell
+      const mainThrottle = (stageId === 3) ? Math.min(1.0, Math.abs(actualFx)) : fxForwardMag;
+      const minPlumeLen = 0.22;
+      const maxExtraLen = (stageId === 3) ? 0.65 : 1.35;
+      const pLen = (minPlumeLen + maxExtraLen * Math.min(1.0, mainThrottle)) * (0.90 + Math.random() * 0.20);
+      const plumeW = Math.max(0.08, pLen * 0.28);
+      const jx = (Math.random() - 0.5) * 0.05 * Math.max(0.3, mainThrottle);
+
+      plumeMat.opacity = Math.max(0.55, Math.min(0.98, 0.55 + mainThrottle * 0.43));
+      plumeCoreMat.opacity = Math.max(0.70, Math.min(1.0, 0.70 + mainThrottle * 0.30));
+
+      // Helper: Writes a 10-segment 3D vacuum expansion bell into BufferGeometry
+      const writePlumeBell = (posAttr, ox, oy, oz, dirX, len, w, jit) => {
+        const xTip = ox + dirX * len;
+        let v = 0;
+        const setSeg = (x1, y1, z1, x2, y2, z2) => {
+          posAttr.setXYZ(v++, x1, y1, z1);
+          posAttr.setXYZ(v++, x2, y2, z2);
+        };
+        // 1. Central incandescent spine
+        setSeg(ox, oy, oz, xTip, oy + jit, oz + jit);
+        // 2-5. 4 Vacuum cone expansion boundary rays
+        setSeg(ox, oy, oz, xTip, oy + w, oz);
+        setSeg(ox, oy, oz, xTip, oy - w, oz);
+        setSeg(ox, oy, oz, xTip, oy, oz + w);
+        setSeg(ox, oy, oz, xTip, oy, oz - w);
+        // 6-9. Outer expansion bell perimeter crossbars
+        setSeg(xTip, oy + w, oz, xTip, oy, oz + w);
+        setSeg(xTip, oy, oz + w, xTip, oy - w, oz);
+        setSeg(xTip, oy - w, oz, xTip, oy, oz - w);
+        setSeg(xTip, oy, oz - w, xTip, oy + w, oz);
+        // 10. Inner Mach shock diamond streak
+        const xMid = ox + dirX * len * 0.45;
+        setSeg(xMid, oy, oz, xTip, oy + jit, oz + jit);
+        posAttr.needsUpdate = true;
+      };
 
       plumeT0.visible = !!isT0Firing;
+      plumeCoreT0.visible = !!isT0Firing;
       if (isT0Firing) {
-        const pLen = (stageId === 3) ? (0.35 + Math.random() * 0.25) : (1.0 + Math.random() * 0.5);
-        const jx = (Math.random() - 0.5) * 0.05;
-        const posAttr = plumeT0.geometry.attributes.position;
+        const posAttr = plumeGeo0.attributes.position;
         if (stageId === 3) {
-          if (isCounterFiring) {
-            // Forward counter-thruster nozzle firing FORWARD (+X) to brake
-            posAttr.setXYZ(0, 0.38, -0.10, 0);
-            posAttr.setXYZ(1, 0.38 + pLen, -0.10 + jx, jx);
-            posAttr.setXYZ(2, 0.38, -0.10, 0);
-            posAttr.setXYZ(3, 0.38 + pLen * 0.45, -0.10, 0);
-          } else {
-            // Rear drive thruster nozzle firing BACKWARD (-X) to accelerate
-            posAttr.setXYZ(0, -0.38, -0.10, 0);
-            posAttr.setXYZ(1, -0.38 - pLen, -0.10 + jx, jx);
-            posAttr.setXYZ(2, -0.38, -0.10, 0);
-            posAttr.setXYZ(3, -0.38 - pLen * 0.45, -0.10, 0);
-          }
+          writePlumeBell(posAttr, 0.38, -0.10, 0, isCounterFiring ? 1.0 : -1.0, pLen, plumeW, jx);
         } else {
-          posAttr.setXYZ(0, -1.6, -0.4, 0);
-          posAttr.setXYZ(1, -1.6 - pLen, -0.4 + jx, jx);
-          posAttr.setXYZ(2, -1.6, -0.4, 0);
-          posAttr.setXYZ(3, -1.6 - pLen * 0.45, -0.4, 0);
+          writePlumeBell(posAttr, -1.6, -0.4, 0, -1.0, pLen, plumeW, jx);
         }
-        posAttr.needsUpdate = true;
       }
 
       plumeT1.visible = !!isT1Firing;
+      plumeCoreT1.visible = !!isT1Firing;
       if (isT1Firing) {
-        const pLen = (stageId === 3) ? (0.35 + Math.random() * 0.25) : (1.0 + Math.random() * 0.5);
-        const jx = (Math.random() - 0.5) * 0.05;
-        const posAttr = plumeT1.geometry.attributes.position;
+        const posAttr = plumeGeo1.attributes.position;
         if (stageId === 3) {
-          if (isCounterFiring) {
-            // Forward counter-thruster nozzle firing FORWARD (+X) to brake
-            posAttr.setXYZ(0, 0.38, 0.10, 0);
-            posAttr.setXYZ(1, 0.38 + pLen, 0.10 + jx, jx);
-            posAttr.setXYZ(2, 0.38, 0.10, 0);
-            posAttr.setXYZ(3, 0.38 + pLen * 0.45, 0.10, 0);
-          } else {
-            // Rear drive thruster nozzle firing BACKWARD (-X) to accelerate
-            posAttr.setXYZ(0, -0.38, 0.10, 0);
-            posAttr.setXYZ(1, -0.38 - pLen, 0.10 + jx, jx);
-            posAttr.setXYZ(2, -0.38, 0.10, 0);
-            posAttr.setXYZ(3, -0.38 - pLen * 0.45, 0.10, 0);
-          }
+          writePlumeBell(posAttr, 0.38, 0.10, 0, isCounterFiring ? 1.0 : -1.0, pLen, plumeW, jx);
         } else {
-          posAttr.setXYZ(0, -1.6, 0.4, 0);
-          posAttr.setXYZ(1, -1.6 - pLen, 0.4 + jx, jx);
-          posAttr.setXYZ(2, -1.6, 0.4, 0);
-          posAttr.setXYZ(3, -1.6 - pLen * 0.45, 0.4, 0);
+          writePlumeBell(posAttr, -1.6, 0.4, 0, -1.0, pLen, plumeW, jx);
         }
-        posAttr.needsUpdate = true;
       }
 
-      // RCS Jet lines
+      // ------------------------------------------------------------------------
+      // 2. Multi-Nozzle RCS Jets (T2..T11) with Multi-Ray Plasma Spray Fans
+      // ------------------------------------------------------------------------
       let rcsIdx = 0;
       const rcsPos = rcsJetGeo.attributes.position;
-      const addJet = (ox, oy, oz, dx, dy, dz) => {
-        rcsPos.setXYZ(rcsIdx * 2, ox, oy, oz);
-        rcsPos.setXYZ(rcsIdx * 2 + 1, ox + dx, oy + dy, oz + dz);
-        rcsIdx++;
+
+      // Writes 1 full central jet ray + 4 short (20% length) root flare rays (horizontal & vertical)
+      const addRcsSpray = (ox, oy, oz, axis, sign, len) => {
+        if (rcsIdx >= 110) return;
+        const shortLen = len * 0.20;
+        const flareW = Math.max(0.015, shortLen * 0.60);
+        const setRay = (x1, y1, z1, x2, y2, z2) => {
+          rcsPos.setXYZ(rcsIdx * 2, x1, y1, z1);
+          rcsPos.setXYZ(rcsIdx * 2 + 1, x2, y2, z2);
+          rcsIdx++;
+        };
+
+        if (axis === 'x') {
+          const dx = sign * len;
+          const dxS = sign * shortLen;
+          // 1. Central main jet ray (100% length)
+          setRay(ox, oy, oz, ox + dx, oy, oz);
+          // 2. Two horizontal short flare rays (20% length)
+          setRay(ox, oy, oz, ox + dxS, oy + flareW, oz);
+          setRay(ox, oy, oz, ox + dxS, oy - flareW, oz);
+          // 3. Two vertical short flare rays (20% length)
+          setRay(ox, oy, oz, ox + dxS, oy, oz + flareW);
+          setRay(ox, oy, oz, ox + dxS, oy, oz - flareW);
+        } else if (axis === 'y') {
+          const dy = sign * len;
+          const dyS = sign * shortLen;
+          // 1. Central main jet ray (100% length)
+          setRay(ox, oy, oz, ox, oy + dy, oz);
+          // 2. Two horizontal short flare rays (20% length)
+          setRay(ox, oy, oz, ox + flareW, oy + dyS, oz);
+          setRay(ox, oy, oz, ox - flareW, oy + dyS, oz);
+          // 3. Two vertical short flare rays (20% length)
+          setRay(ox, oy, oz, ox, oy + dyS, oz + flareW);
+          setRay(ox, oy, oz, ox, oy + dyS, oz - flareW);
+        } else if (axis === 'z') {
+          const dz = sign * len;
+          const dzS = sign * shortLen;
+          // 1. Central main jet ray (100% length)
+          setRay(ox, oy, oz, ox, oy, oz + dz);
+          // 2. Two horizontal short flare rays (20% length)
+          setRay(ox, oy, oz, ox + flareW, oy, oz + dzS);
+          setRay(ox, oy, oz, ox - flareW, oy, oz + dzS);
+          // 3. Two vertical short flare rays (20% length)
+          setRay(ox, oy, oz, ox, oy + flareW, oz + dzS);
+          setRay(ox, oy, oz, ox, oy - flareW, oz + dzS);
+        }
       };
 
       if (hasFuel) {
-        const isT5 = (healthMask & (1 << 5)) && ((thrustMask & (1 << 5)) || actualFy > 0.01 || actualTau > 0.02);
-        const isT7 = (healthMask & (1 << 7)) && ((thrustMask & (1 << 7)) || actualFy < -0.01 || actualTau < -0.02);
-        const isT4 = (healthMask & (1 << 4)) && ((thrustMask & (1 << 4)) || actualFy > 0.01 || actualTau < -0.02);
-        const isT6 = (healthMask & (1 << 6)) && ((thrustMask & (1 << 6)) || actualFy < -0.01 || actualTau > 0.02);
+        // Forward Braking Counter-Thrusters (T2, T3 at x = 0.8, y = +-0.65)
+        // Fire FORWARD (+X) to decelerate/brake when approaching dock or holding speed
+        const isBraking = isReverse || (thrustMask & (1 << 2)) || (thrustMask & (1 << 3));
+        if (isBraking && stageId !== 3) {
+          const brakeLen = (0.16 + Math.min(1.0, fxBrakeMag) * 0.75) * (0.90 + Math.random() * 0.20);
+          if (healthMask & (1 << 2)) addRcsSpray(0.8, -0.65, 0, 'x', 1.0, brakeLen);
+          if (healthMask & (1 << 3)) addRcsSpray(0.8,  0.65, 0, 'x', 1.0, brakeLen);
+        }
 
-        if (isT5) addJet(0.8, -0.65, 0, 0, -(0.5 + Math.random() * 0.35), 0);
-        if (isT7) addJet(0.8, 0.65, 0, 0, (0.5 + Math.random() * 0.35), 0);
-        if (isT4) addJet(-1.3, -1.8, 0, 0, -(0.5 + Math.random() * 0.35), 0);
-        if (isT6) addJet(-1.3, 1.8, 0, 0, (0.5 + Math.random() * 0.35), 0);
+        // Lateral Translation & Attitude RCS Jets (T4, T5, T6, T7)
+        // Dynamically scaled by lateral force (actualFy) and attitude torque (actualTau)
+        const d5 = Math.max(0, actualFy * 0.7 - actualTau * 0.7) + ((thrustMask & (1 << 5)) ? 0.6 : 0);
+        const d7 = Math.max(0, -actualFy * 0.7 + actualTau * 0.7) + ((thrustMask & (1 << 7)) ? 0.6 : 0);
+        const d4 = Math.max(0, actualFy * 0.7 + actualTau * 0.7) + ((thrustMask & (1 << 4)) ? 0.6 : 0);
+        const d6 = Math.max(0, -actualFy * 0.7 - actualTau * 0.7) + ((thrustMask & (1 << 6)) ? 0.6 : 0);
 
-        // Reverse braking T2, T3
-        if ((healthMask & (1 << 2)) && ((thrustMask & (1 << 2)) || (stageId === 5 && actualFx < -0.005))) addJet(0.8, -0.65, 0, 0.6, 0, 0);
-        if ((healthMask & (1 << 3)) && ((thrustMask & (1 << 3)) || (stageId === 5 && actualFx < -0.005))) addJet(0.8, 0.65, 0, 0.6, 0, 0);
+        const rcsLen = (demand) => (0.14 + Math.min(1.0, demand) * 0.55) * (0.90 + Math.random() * 0.20);
 
-        // Vertical T8..T11
-        if ((healthMask & (1 << 8)) && (thrustMask & (1 << 8))) addJet(1.2, 0, 0.4, 0, 0, 0.7);
-        if ((healthMask & (1 << 9)) && (thrustMask & (1 << 9))) addJet(1.2, 0, -0.4, 0, 0, -0.7);
-        if ((healthMask & (1 << 10)) && (thrustMask & (1 << 10))) addJet(-1.2, 0, 0.4, 0, 0, 0.7);
-        if ((healthMask & (1 << 11)) && (thrustMask & (1 << 11))) addJet(-1.2, 0, -0.4, 0, 0, -0.7);
+        if (d5 > 0.005 && (healthMask & (1 << 5))) {
+          addRcsSpray(0.8, -0.65, 0, 'y', -1.0, rcsLen(d5));
+        }
+        if (d7 > 0.005 && (healthMask & (1 << 7))) {
+          addRcsSpray(0.8,  0.65, 0, 'y', 1.0, rcsLen(d7));
+        }
+        if (d4 > 0.005 && (healthMask & (1 << 4))) {
+          addRcsSpray(-1.3, -1.8, 0, 'y', -1.0, rcsLen(d4));
+        }
+        if (d6 > 0.005 && (healthMask & (1 << 6))) {
+          addRcsSpray(-1.3,  1.8, 0, 'y', 1.0, rcsLen(d6));
+        }
+
+        // Vertical RCS (T8..T11)
+        if ((healthMask & (1 << 8)) && (thrustMask & (1 << 8))) addRcsSpray(1.2, 0, 0.4, 'z', 1.0, 0.45);
+        if ((healthMask & (1 << 9)) && (thrustMask & (1 << 9))) addRcsSpray(1.2, 0, -0.4, 'z', -1.0, 0.45);
+        if ((healthMask & (1 << 10)) && (thrustMask & (1 << 10))) addRcsSpray(-1.2, 0, 0.4, 'z', 1.0, 0.45);
+        if ((healthMask & (1 << 11)) && (thrustMask & (1 << 11))) addRcsSpray(-1.2, 0, -0.4, 'z', -1.0, 0.45);
       }
       rcsJetGeo.setDrawRange(0, rcsIdx * 2);
       rcsPos.needsUpdate = true;
@@ -1895,9 +2123,10 @@ export default function SpaceOrbitViewer3D() {
         }
       }
 
-      // Update Stage 4 Docking Crosshair Rotation
+      // Update Stage 4 Centrifugal Artificial Gravity Station Rotation (Driven by daemon SSOT target_angle)
       if (stageId === 4) {
-        crossLine.rotation.x = nowSec * 0.15;
+        const targetAng = tlm.target_angle !== undefined ? tlm.target_angle : (nowSec * 0.065);
+        issStationGroup.rotation.x = targetAng;
       }
 
       // Update Stage 5 Debris Shards & Impact Dynamics

@@ -22,6 +22,13 @@ struct SpacecraftState {
     double omega = 0.0;// Angular velocity (rad/s)
     double fuel = 100.0;// Fuel percentage / Delta-V budget (%)
     bool is_docked = false;
+    bool is_docking_crashed = false; // Stage 4: Docking collar collision flag
+    double contact_vel = 0.0;        // Stage 4: Impact velocity at docking collar (m/s)
+    double contact_align_err = 0.0;  // Stage 4: Lateral alignment error at docking collar (m)
+    double contact_rel_angle = 0.0;  // Stage 4: Relative orientation error at contact (rad)
+    double contact_rel_omega = 0.0;  // Stage 4: Relative angular rate error at contact (rad/s)
+    double target_angle = 0.0;       // Stage 4: Station docking collar angle (rad)
+    double station_spin_rate = 0.0;  // Stage 4: Station docking collar spin rate (rad/s)
     double wheel_rpm = 0.0; // Reaction Wheel spin speed (RPM)
     double cable_tension = 10000.0; // Stage 2: Cable tension (N)
     double cable_vibration = 0.0;   // Stage 2: Cable transverse vibration displacement (m)
@@ -110,6 +117,8 @@ public:
     double get_cable_vibration() const { return state_.cable_vibration; }
     double get_rail_load() const { return state_.rail_load; }
     void set_fdir_mode(uint32_t mode) { fdir_mode_ = mode; }
+    bool is_docked() const { return state_.is_docked; }
+    bool is_docking_crashed() const { return state_.is_docking_crashed; }
 
     // Stage 5 Getters & Setters
     uint32_t get_thruster_health() const { return state_.thruster_health_mask; }
@@ -132,6 +141,10 @@ public:
         scan_angle_deg_ = angle_deg;
         beam_width_deg_ = beam_width_deg;
     }
+    // Stage 4 Laser Docking
+    double get_target_angle() const { return target_angle_; }
+    double get_station_spin_rate() const { return station_spin_rate_; }
+    void calculate_stage4_docking_scenario(uint32_t seed);
 
 private:
     int stage_id_ = 1;
@@ -158,6 +171,8 @@ private:
 
     // Stage 4 Laser Docking target
     double target_angle_ = 0.0;
+    double station_spin_rate_ = 0.0;
+    uint32_t chaos_seed_ = 0x1337;
 
     // Stage 5 Panic Control dynamics & debris field
     std::vector<Vec3> floating_debris_;

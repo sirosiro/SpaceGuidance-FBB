@@ -26,15 +26,26 @@ struct SpaceGuidanceTelemetryExt {
     double detumble_time;
     double elapsed_time;
 
-    // 0x128: Debris Collision & Impact Geometry
-    double debris_azimuth;
-    double debris_elevation;
-    double debris_spawn_x;
-    double debris_spawn_y;
-    double debris_spawn_z;
-    double debris_impact_x;
-    double debris_impact_y;
-    double debris_impact_z;
+    // 0x128: Debris Collision (Stage 5) / Optical Target Telemetry (Stage 4) / Truss Defect Angles (Stage 3)
+    union {
+        struct {
+            double debris_azimuth;
+            double debris_elevation;
+            double debris_spawn_x;
+            double debris_spawn_y;
+            double debris_spawn_z;
+            double debris_impact_x;
+            double debris_impact_y;
+            double debris_impact_z;
+        };
+        struct {
+            double target_angle;    // Stage 4: Station docking collar angle (rad)
+            double target_omega;    // Stage 4: Station docking collar spin rate (rad/s)
+            double rel_angle;       // Stage 4: Relative orientation error (rad)
+            double rel_omega;       // Stage 4: Relative spin rate error (rad/s)
+            double reserved_opt[4];
+        };
+    };
 
     // 0x168: Scores, Status Codes & Damage Flags
     int32_t checkpoint_score;

@@ -80,7 +80,56 @@ void SpacePhysicsEngine::set_chaos_seed(uint32_t seed) {
         calculate_impact_scenario(seed);
     } else if (stage_id_ == 3) {
         calculate_truss_defects(seed);
+    } else if (stage_id_ == 4) {
+        calculate_stage4_docking_scenario(seed);
     }
+}
+
+void SpacePhysicsEngine::calculate_stage4_docking_scenario(uint32_t seed) {
+    chaos_seed_ = seed;
+    if (seed == 0x1337) {
+        // Calibrated baseline seed: +135.0 deg initial heading mismatch, 0.020 rad/s station spin
+        state_.angle = 2.35619449; // +135.0 deg (facing backward-left)
+        state_.yaw = state_.angle;
+        state_.roll = 0.0;
+        state_.omega = 0.0;
+        state_.omega_x = 0.0;
+        state_.omega_z = 0.0;
+        state_.pos = {0.0, 0.8}; // Initial 0.8m lateral offset
+        state_.vel = {0.0, 0.0};
+        station_spin_rate_ = 0.065; // ~3.72 deg/s (accelerated centrifugal gravity spin)
+        target_angle_ = 0.0;
+    } else {
+        // Deterministic PRNG from custom seed
+        uint64_t s = (static_cast<uint64_t>(seed) * 6364136223846793005ULL) + 1442695040888963407ULL;
+        auto next_double = [&s]() -> double {
+            s = (s * 6364136223846793005ULL) + 1442695040888963407ULL;
+            return static_cast<double>((s >> 32) & 0xFFFFFFFF) / 4294967296.0;
+        };
+        // Full 360-degree random starting orientation [-pi, +pi]
+        state_.angle = (next_double() * 2.0 - 1.0) * M_PI;
+        state_.yaw = state_.angle;
+        state_.roll = (next_double() * 2.0 - 1.0) * 0.4;
+        state_.omega = 0.0;
+        state_.omega_x = 0.0;
+        state_.omega_z = 0.0;
+        // Initial lateral offset in [0.5m, 1.0m] with random sign
+        double sign_y = (next_double() > 0.5) ? 1.0 : -1.0;
+        state_.pos = {0.0, sign_y * (0.5 + next_double() * 0.5)};
+        state_.vel = {0.0, 0.0};
+        // Station spin rate in [0.050, 0.085] rad/s (~2.9 to 4.9 deg/s)
+        station_spin_rate_ = 0.050 + next_double() * 0.035;
+        target_angle_ = next_double() * M_PI; // random initial station rotation phase
+    }
+    state_.target_angle = target_angle_;
+    state_.station_spin_rate = station_spin_rate_;
+    state_.laser_offset = state_.pos.y;
+    state_.is_docked = false;
+    state_.is_docking_crashed = false;
+    state_.contact_vel = 0.0;
+    state_.contact_align_err = 0.0;
+    state_.contact_rel_angle = 0.0;
+    state_.contact_rel_omega = 0.0;
 }
 
 void SpacePhysicsEngine::calculate_impact_scenario(uint32_t seed) {
@@ -302,14 +351,8 @@ void SpacePhysicsEngine::init_stage4_laser_docking() {
     for (double x = 0.0; x <= 50.0; x += 0.5) {
         track_.push_back({x, 0.0});
     }
-    state_.pos = {0.0, 0.8}; // Initial 0.8m lateral offset
-    state_.vel = {0.0, 0.0};
-    state_.angle = 0.01;
-    state_.omega = 0.0;
     state_.fuel = 100.0;
-    state_.laser_offset = 0.8;
-    state_.is_docked = false;
-    target_angle_ = 0.0;
+    calculate_stage4_docking_scenario(chaos_seed_);
 }
 
 void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, double rcs_torque, double wheel_torque,
@@ -493,6 +536,20 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         // -------------------------------------------------------------
         // Stage 4: 6-DoF Microgravity Laser Docking Corridor
         // -------------------------------------------------------------
+        if (state_.is_docked || state_.is_docking_crashed) {
+            // Spacecraft is immobilized at docking collar
+            state_.vel = {0.0, 0.0};
+            state_.omega = 0.0;
+            return;
+        }
+
+        // Station Docking Port Spin Integration
+        target_angle_ += station_spin_rate_ * dt;
+        while (target_angle_ > M_PI) target_angle_ -= 2.0 * M_PI;
+        while (target_angle_ < -M_PI) target_angle_ += 2.0 * M_PI;
+        state_.target_angle = target_angle_;
+        state_.station_spin_rate = station_spin_rate_;
+
         double cos_a = std::cos(state_.angle);
         double sin_a = std::sin(state_.angle);
 
@@ -509,21 +566,59 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         state_.pos.y += state_.vel.y * dt;
         if (state_.pos.x < 0.0) { state_.pos.x = 0.0; state_.vel.x = 0.0; }
 
-        double alpha = rcs_torque / inertia_;
-        state_.omega += alpha * dt;
+        // 1. Yaw dynamics (Heading orientation in X-Y plane)
+        double alpha_z = (rcs_torque + wheel_torque) / inertia_;
+        state_.omega += alpha_z * dt;
         state_.angle += state_.omega * dt;
-
         while (state_.angle > M_PI) state_.angle -= 2.0 * M_PI;
         while (state_.angle < -M_PI) state_.angle += 2.0 * M_PI;
+        state_.yaw = state_.angle;
+        state_.omega_z = state_.omega;
+
+        // 2. Roll dynamics (Rotation around X corridor axis matching station spin)
+        double eff_torque_x = torque_x;
+        if (std::abs(eff_torque_x) < 1e-4 && std::abs(rcs_torque) > 1e-4 && std::abs(state_.yaw) < 0.15) {
+            // Backward-compatibility: if torque_x not passed separately, use rcs_torque for roll once heading aligned
+            eff_torque_x = rcs_torque;
+        }
+        double alpha_x = (eff_torque_x + wheel_torque_x) / (inertia_ * 0.5);
+        state_.omega_x += alpha_x * dt;
+        state_.roll += state_.omega_x * dt;
+        while (state_.roll > M_PI) state_.roll -= 2.0 * M_PI;
+        while (state_.roll < -M_PI) state_.roll += 2.0 * M_PI;
 
         state_.laser_offset = state_.pos.y;
 
-        double fuel_burn = (std::abs(thrust_forward) + std::abs(thrust_lateral) + std::abs(rcs_torque)) * 0.0006;
+        double fuel_burn = (std::abs(thrust_forward) + std::abs(thrust_lateral) + std::abs(rcs_torque) + std::abs(eff_torque_x)) * 0.0006;
         state_.fuel -= fuel_burn * dt;
         if (state_.fuel < 0.0) state_.fuel = 0.0;
 
-        if (state_.pos.x >= 49.95 && std::abs(state_.pos.y) <= 0.05 && state_.vel.x <= 0.05) {
-            state_.is_docked = true;
+        if (state_.pos.x >= 49.95) {
+            state_.contact_vel = state_.vel.x;
+            state_.contact_align_err = state_.pos.y;
+            double rel_a = state_.roll - target_angle_;
+            while (rel_a > M_PI) rel_a -= 2.0 * M_PI;
+            while (rel_a < -M_PI) rel_a += 2.0 * M_PI;
+            state_.contact_rel_angle = rel_a;
+            state_.contact_rel_omega = state_.omega_x - station_spin_rate_;
+
+            bool is_crash = (state_.contact_vel > 0.08 ||
+                             std::abs(state_.contact_align_err) > 0.06 ||
+                             std::abs(state_.contact_rel_angle) > 0.08 ||
+                             std::abs(state_.contact_rel_omega) > 0.05 ||
+                             std::abs(state_.yaw) > 0.10);
+            if (is_crash) {
+                state_.is_docked = false;
+                state_.is_docking_crashed = true;
+            } else {
+                state_.is_docked = true;
+                state_.is_docking_crashed = false;
+            }
+            state_.pos.x = 50.0;
+            state_.vel.x = 0.0;
+            state_.vel.y = 0.0;
+            state_.omega = 0.0;
+            state_.omega_x = 0.0;
         }
         return;
     }

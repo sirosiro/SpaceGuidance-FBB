@@ -166,6 +166,11 @@ class SpaceGuidanceHardware:
                 res["debris_impact_x"] = doubles[20]
                 res["debris_impact_y"] = doubles[21]
                 res["debris_impact_z"] = doubles[22]
+                if res.get("stage_id") == 4:
+                    res["target_angle"] = doubles[15]
+                    res["target_omega"] = doubles[16]
+                    res["rel_angle"] = doubles[17]
+                    res["rel_omega"] = doubles[18]
 
                 ints = struct.unpack_from("=2i8I", data, 0x168)
                 res["checkpoint_score"] = ints[0]

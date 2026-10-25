@@ -42,7 +42,7 @@ graph LR
 | **Stage 1** | **小惑星パイプライン巡回**<br>(Asteroid Pipeline Inspector) | Level 1<br>(入門) | **2D微小重力・無摩擦**<br>小惑星表面50m S字誘導レール | 光センサ重心演算回路<br>(`line_sensor_filter.v`)、<br>ウォッチドッグ安全遮断 | PDライン追従誘導、<br>リアクションホイール脱飽和、<br>9ゲート通過航法 | [詳細ガイド](scenario/01_asteroid_pipeline/README.md) |
 | **Stage 2** | **宇宙テザークライマー**<br>(Orbital Tether Climber) | Level 2<br>(初中級) | **1D直線運動＋弾性弦振動**<br>軌道エレベータ超長大テザー | 高速光学マークカウンタ、<br>共振周波数遮断ノッチフィルタ | ケーブル断裂防止 S字加減速、<br>共振抑制フィードフォワード | [詳細ガイド](scenario/02_tether_climber/README.md) |
 | **Stage 3** | **ISSトラスレール点検機**<br>(ISS Truss Inspector) | Level 3<br>(中上級) | **3D立体曲面レール軌道**<br>急カーブ遠心力と反作用連成 | 3軸 IMU 慣性積分器、<br>電磁グリッパー把持力FBラッチ | 3次元レール曲率適応速度計画、<br>4箇所点検把持シーケンス | [詳細ガイド](scenario/03_iss_truss/README.md) |
-| **Stage 4** | **深宇宙光レーザードッキング**<br>(Optical Laser Docking) | Level 4<br>(エキスパート) | **6-DoF 完全摩擦ゼロ**<br>オイラー運動方程式、デルタV制限 | 4分割フォトダイオード(QPD)光軸、<br>最小インパルス PWM RCS | 6自由度 Line-of-Sight 誘導、<br>7段階レンジ接近整定 | [詳細ガイド](scenario/04_laser_docking/README.md) |
+| **Stage 4** | **深宇宙光レーザードッキング**<br>(Optical Laser Docking) | Level 4<br>(エキスパート) | **6-DoF 完全摩擦ゼロ**<br>初期360度ランダム方位、<br>遠心力自転ステーション同期 | 4分割フォトダイオード(QPD)光軸、<br>最小インパルス PWM RCS | 360度正対＆自転同期 FSM、<br>6自由度 LOS 光軸進入整定 | [詳細ガイド](scenario/04_laser_docking/README.md) |
 | **Stage EX**<br>*(最新)* | **パニックコントロール**<br>(Panic Control: Debris Recovery) | Level 5<br>(最難関 / Extra) | **3軸高速タンブリング＋12基スラスタ欠損**<br>スペースデブリ直撃、角速度140°/s、燃料自然漏洩 | 12ch RCS パルス変調、<br>3軸リアクションホイール、<br>カオスインジェクション | 3軸レートダンピング(デタンブル)、<br>12基オンラインSysID(損傷同定)、<br>非対称推力配分 & 3D脱出 | [詳細ガイド](scenario/05_panic_control/README.md) |
 
 ### 2.1 最新リリース：Stage EX「パニックコントロール」自律復旧シーケンス
@@ -276,17 +276,17 @@ flowchart LR
 * **高精度判定**: 100Hz の剛体力学ループ内でチェックポイント通過時の偏差や接触速度をミリ秒単位で正確に計測。
 * **全方位配信**: 共有メモリ（SHM: 496バイト）および `/tmp/space_guidance_telemetry.json` を通じて Web ダッシュボードとパイロットへリアルタイム配信。
 
-### 3.3 MMIO レジスタマップ仕様 (UIO 0x43C0_0000 / 共有メモリ 144バイト)
+### 3.3 MMIO レジスタマップ仕様 (UIO 0x43C0_0000 / 共有メモリ 496バイト: 基本144B + 拡張352B)
 | オフセット | レジスタ名 | 属性 | 説明 |
 | :--- | :--- | :---: | :--- |
-| `0x00` | `CR_CTRL` | R/W | システム制御（Bit 0: Enable, Bit 1: E-STOP, Bit 2: FDIR Reset） |
+| `0x00` | `CR_CTRL` | R/W | システム制御（Bit 0: Enable, Bit 1: E-STOP, Bit 2: FDIR Reset, Bit 3: Engage） |
 | `0x04` | `SR_STATUS` | R | ステータス（Bit 0: Active, Bit 1: Interlock, Bit 2: SEU Alert, Bit 3: LOS） |
 | `0x08` | `SENSOR_RAW` | R | センサ受光強度 ADC 生データ（Stage 1: 8ch 光学 / Stage 4: QPD） |
 | `0x0C` | `SENSOR_EDGE`| R | ハードウェア幾何重心偏差（符号付き Q16.16: -3.5〜+3.5 素子ピッチ単位、0.0が中心） |
 | `0x10` | `THRUST_CMD_X` | R/W | X軸（メイン推進 / 登坂）推力指令値（Q16.16: -50N〜+50N） |
 | `0x14` | `THRUST_CMD_Y` | R/W | Y軸（ラテラル横移動）推力指令値（Q16.16: -50N〜+50N） |
 | `0x18` | `THRUST_CMD_Z` | R/W | Z軸推力指令値 / Stage EX: 12ch スラスタパルス噴射マスク（Q16.16 / Bitmask） |
-| `0x1C` | `TORQUE_CMD` | R/W | RCS 姿勢回転トルク指令値（Q16.16: -20Nm〜+20Nm） |
+| `0x1C` | `TORQUE_CMD` | R/W | RCS 姿勢回転トルク指令値（Q16.16: -20Nm〜+20Nm、Yaw軸） |
 | `0x20` | `SAFETY_LIMIT` | R/W | ハードウェア最大推力・加速度リミッター設定値 |
 | `0x24` | `WATCHDOG_KICK` | W | ハードウェア監視タイマークリア（100ms 未更新で自動安全遮断） |
 | `0x28` | `CHAOS_FAULT_INJ` | R/W | F-BB カオス障害注入レジスタ（SEU, LOS, スラスタ固着, 衝突シード） |
@@ -303,6 +303,12 @@ flowchart LR
 | `0x98` | `WHEEL_TORQUE_X` | R/W | 拡張 6-DoF: リアクションホイール X軸（ロール制動）トルク指令 |
 | `0x9C` | `WHEEL_TORQUE_Y` | R/W | 拡張 6-DoF: リアクションホイール Y軸（ピッチ制動）トルク指令 |
 | `0xA0` | `THRUST_VERTICAL`| R/W | 拡張 6-DoF: 垂直推力 Z コマンド（Q16.16: -50N〜+50N） |
+| `0xA8` | `MAGIC_SPG1` | R | 6-DoF 拡張テレメトリ識別マジック（`0x53504731` 'SPG1'） |
+| `0xAC` | `SEQ_NUM` | R | シーケンス番号（Seqlock 整合性検証用カウンタ） |
+| `0xB0`〜`0x160` | `EXT_DOUBLES` | R | 6-DoF 姿勢・力学テレメトリ（`pos_z`, `vel_z`, `roll`, `pitch`, `yaw`, `omega_x,y,z`, `target_angle`, `target_omega`, `rel_angle`, `rel_omega` 等 計23項目） |
+| `0x168`〜`0x18C`| `EXT_INTS` | R | 拡張スコア・健全性（`checkpoint_score`, `bonus_score`, `thruster_health`, `is_detumbled`, `chaos_seed` 等 計10項目） |
+| `0x190`〜`0x1AF`| `OFFICIAL_GRADE` | R | 公式審判確定フライトランク文字列（ASCII 32B: `GRADE S` 等） |
+| `0x1B0`〜`0x1EF`| `LAST_EVENT` | R | 最新審判イベント・判定メッセージ（ASCII 64B） |
 
 ---
 
@@ -354,7 +360,7 @@ fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/05_panic_control
 > ```
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の分割画面が自動ロードされます：
-  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/TRACK/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の自転ドッキングポート、Stage EX のデブリ直撃ショックウェーブ＆12基スラスタ配置（破損ノズル赤色ブラケット）＆燃料蒸気リーク軌跡＆10個の浮遊デブリ群＆グリーン安全ゲートリングを完全3D描画。
+  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/TRACK/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の遠心力人工重力自転ステーション（ドッキングポート中心軸自転＆初期360度ランダム方位正対）、Stage EX のデブリ直撃ショックウェーブ＆12基スラスタ配置（破損ノズル赤色ブラケット）＆燃料蒸気リーク軌跡＆10個の浮遊デブリ群＆グリーン安全ゲートリングを完全3D描画。
   * **Official Referee Scorecard & Chaos FDIR**: リアルタイム公式スコア、確定フライトランク（Grade S/A/B/C）、チェックポイント通過進捗、審判イベントログを表示。カオス障害注入および `[Restart Scenario]` による即時再フライトが可能。
   * **SG Telemetry & C&W**: 推進剤残量バー、Master C&W 警報灯、姿勢角・速度計器。
   * **Registers & Tracer**: 全レジスタのリアルタイム16進数監視および時系列波形プロット。

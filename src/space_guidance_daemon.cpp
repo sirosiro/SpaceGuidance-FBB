@@ -277,11 +277,37 @@ public:
                     std::cout << "[Referee] " << last_event << std::endl;
                 }
             }
-            if (50.0 - state.pos.x <= 0.05) {
+            bool is_crash = state.is_docking_crashed ||
+                            (state.is_docked && (state.contact_vel > 0.08 ||
+                                                 std::abs(state.contact_align_err) > 0.06 ||
+                                                 std::abs(state.contact_rel_angle) > 0.08 ||
+                                                 std::abs(state.contact_rel_omega) > 0.05));
+            if (is_crash) {
+                is_failed = true;
+                is_completed = false;
+                bonus_score = 0;
+                total_score = 0;
+                official_grade = "DISQUALIFIED (DOCKING CRASH)";
+                char buf[192];
+                snprintf(buf, sizeof(buf), "[REFEREE FAILURE] Docking Collar Collision! v=%5.3fm/s | e_y=%4.1fcm | d_ang=%4.1fdeg | d_w=%5.3frad/s",
+                         state.contact_vel, std::abs(state.contact_align_err) * 100.0,
+                         std::abs(state.contact_rel_angle) * (180.0 / M_PI),
+                         std::abs(state.contact_rel_omega));
+                last_event = buf;
+                std::cout << "\n============================================================" << std::endl;
+                std::cout << "[Referee] " << last_event << std::endl;
+                std::cout << "============================================================\n" << std::endl;
+                return;
+            } else if (state.is_docked || (50.0 - state.pos.x <= 0.05)) {
                 is_completed = true;
-                bool speed_ok = (state.vel.x >= 0.005 && state.vel.x <= 0.035);
-                bool align_ok = (std::abs(cross_track_err) <= 0.02);
-                int contact_bonus = (speed_ok && align_ok) ? 3000 : (speed_ok ? 1500 : 500);
+                is_failed = false;
+                double v_contact = state.contact_vel;
+                double align_cm = std::abs(state.contact_align_err) * 100.0;
+                double d_ang_deg = std::abs(state.contact_rel_angle) * (180.0 / M_PI);
+                bool speed_ok = (v_contact >= 0.005 && v_contact <= 0.035);
+                bool align_ok = (std::abs(state.contact_align_err) <= 0.02);
+                bool att_ok = (std::abs(state.contact_rel_angle) <= 0.03 && std::abs(state.contact_rel_omega) <= 0.02);
+                int contact_bonus = (speed_ok && align_ok && att_ok) ? 3000 : ((speed_ok && align_ok) ? 2000 : (speed_ok ? 1500 : 500));
                 int fuel_bonus = static_cast<int>(state.fuel * 10.0);
                 bonus_score = contact_bonus + fuel_bonus;
                 total_score = checkpoint_score + bonus_score;
@@ -289,10 +315,14 @@ public:
                 else if (total_score >= 6500) official_grade = "GRADE A (Certified)";
                 else if (total_score >= 5000) official_grade = "GRADE B (Standard)";
                 else official_grade = "GRADE C (Pass)";
-                last_event = "[REFEREE COMPLETE] Port Latch Engaged! Speed=" + std::to_string(state.vel.x) + " | Total: " + std::to_string(total_score) + " pts (" + official_grade + ")";
+                char buf[192];
+                snprintf(buf, sizeof(buf), "[REFEREE COMPLETE] Port Latch Engaged! Speed=%5.3fm/s | Align=%4.1fcm | AttErr=%3.1fdeg | Total: %d pts (%s)",
+                         v_contact, align_cm, d_ang_deg, total_score, official_grade.c_str());
+                last_event = buf;
                 std::cout << "\n============================================================" << std::endl;
                 std::cout << "[Referee] " << last_event << std::endl;
                 std::cout << "============================================================\n" << std::endl;
+                return;
             }
         } else if (stage_id == 5) {
             // Stage 5: Panic Control (3 Checkpoints / Milestones)
@@ -420,7 +450,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (!explicit_seed && stage_id == 5) {
+    if (!explicit_seed && (stage_id == 5 || stage_id == 4)) {
         // True dynamic randomness on every launch!
         std::random_device rd;
         auto now_ns = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -472,7 +502,7 @@ int main(int argc, char** argv) {
     shm->seq_num = 0;
 
     SpacePhysicsEngine physics(100.0, 25.0, stage_id);
-    if (stage_id == 5) {
+    if (stage_id == 5 || stage_id == 4 || stage_id == 3) {
         physics.set_chaos_seed(chaos_seed);
     }
     std::cout << "[SpaceGuidance Daemon] Ready. Running physics for Stage " << stage_id 
@@ -524,7 +554,7 @@ int main(int argc, char** argv) {
         double tau_wheel = (stage_id == 3) ? 0.0 : (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0);
         uint32_t direct_thruster_mask = shm->thrust_cmd_z;
 
-        if (stage_id == 5 && shm->chaos_fault_inj != 0 && shm->chaos_fault_inj != current_seed) {
+        if ((stage_id == 5 || stage_id == 4 || stage_id == 3) && shm->chaos_fault_inj != 0 && shm->chaos_fault_inj != current_seed) {
             current_seed = shm->chaos_fault_inj;
             physics.set_chaos_seed(current_seed);
             std::cout << "[SpaceGuidance Daemon] Chaos seed dynamically updated to 0x" 
@@ -536,7 +566,7 @@ int main(int argc, char** argv) {
         double tau_w_x = 0.0;
         double tau_w_y = 0.0;
         double fz = 0.0;
-        if (stage_id == 5) {
+        if (stage_id == 5 || stage_id == 4) {
             int32_t* ext_cmd = reinterpret_cast<int32_t*>(reinterpret_cast<char*>(shm) + 0x90);
             tau_x   = ext_cmd[0] / 65536.0 * 20.0; // torque_x_cmd
             tau_y   = ext_cmd[1] / 65536.0 * 20.0; // torque_y_cmd
@@ -656,6 +686,21 @@ int main(int argc, char** argv) {
             shm->ext.debris_impact_z = (defs.size() > 2) ? static_cast<double>(defs[2].joint_id) : 0.0;
             shm->ext.debris_hits = physics.get_defects_detected_count();
             shm->ext.cable_vibration = physics.get_sensor_snr();
+            shm->ext.damaged_thruster_1 = 0;
+            shm->ext.damaged_thruster_2 = 0;
+        } else if (stage_id == 4) {
+            double rel_a = state.roll - state.target_angle;
+            while (rel_a > M_PI) rel_a -= 2.0 * M_PI;
+            while (rel_a < -M_PI) rel_a += 2.0 * M_PI;
+            shm->ext.target_angle = state.target_angle;
+            shm->ext.target_omega = state.station_spin_rate;
+            shm->ext.rel_angle = rel_a;
+            shm->ext.rel_omega = state.omega_x - state.station_spin_rate;
+            shm->ext.yaw = state.yaw;
+            shm->ext.roll = state.roll;
+            shm->ext.omega_x = state.omega_x;
+            shm->ext.omega_z = state.omega_z;
+            shm->ext.debris_hits = 0;
             shm->ext.damaged_thruster_1 = 0;
             shm->ext.damaged_thruster_2 = 0;
         } else {
