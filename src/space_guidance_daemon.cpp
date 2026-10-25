@@ -743,6 +743,10 @@ int main(int argc, char** argv) {
             std::string tmp_f = "/tmp/fbb_scenario_telemetry.json.tmp";
             std::string dst_f = "/tmp/fbb_scenario_telemetry.json";
             std::string legacy_f = "/tmp/space_guidance_telemetry.json";
+            double export_tau_x = (tau_x / 20.0);
+            if (stage_id == 4 && std::abs(export_tau_x) < 1e-4 && std::abs(tau_rcs) > 1e-4 && std::abs(state.yaw) < 0.15) {
+                export_tau_x = (tau_rcs / 20.0);
+            }
             std::ofstream jf(tmp_f);
             if (jf.is_open()) {
                 jf << "{"
@@ -775,9 +779,16 @@ int main(int argc, char** argv) {
                    << "\"thrust_y\":" << (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0) << ","
                    << "\"thrust_z\":" << shm->thrust_cmd_z << ","
                    << "\"torque\":" << (static_cast<int32_t>(shm->torque_cmd) / 65536.0) << ","
+                   << "\"torque_x\":" << export_tau_x << ","
                    << "\"wheel_torque\":" << (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0) << ","
+                   << "\"wheel_torque_x\":" << (tau_w_x / 20.0) << ","
                    << "\"cable_tension\":" << state.cable_tension << ","
-                   << "\"cable_vibration\":" << state.cable_vibration << ","
+                   << "\"cable_vibration\":" << (stage_id == 3 ? 0.0 : state.cable_vibration) << ","
+                   << "\"sensor_snr\":" << (stage_id == 3 ? shm->ext.cable_vibration : 0.0) << ","
+                   << "\"target_angle\":" << shm->ext.target_angle << ","
+                   << "\"target_omega\":" << shm->ext.target_omega << ","
+                   << "\"rel_angle\":" << shm->ext.rel_angle << ","
+                   << "\"rel_omega\":" << shm->ext.rel_omega << ","
                    << "\"cable_snapped\":" << shm->ext.cable_snapped << ","
                    << "\"detumble_time\":" << physics.get_detumble_time() << ","
                    << "\"elapsed_time\":" << referee.elapsed_time << ","

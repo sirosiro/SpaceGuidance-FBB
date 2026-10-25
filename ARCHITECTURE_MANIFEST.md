@@ -64,9 +64,11 @@
 
 ## 4. アーキテクチャ決定の記録 (ADR)
 
-- **2026-10-17: ADR #001 共有メモリ直結型テレメトリ（Zero Disk I/O）の導入**
-  - **Decision**: 毎秒 100 回のディスク一時ファイル書き込み（`/tmp/space_guidance_telemetry.json`）を完全撤廃し、`include/space_guidance_shm.h` で定義される 496 バイトの POSIX 共有メモリ構造体（Seqlock 制御）へと完全移行した。
-  - **Rationale**: 外部 PC（MacBook M4 等）からの接続時におけるマイクロスタッターやファイル I/O 詰まりを根絶し、シミュレーション全体の CPU 使用率・ディスク負荷を劇的に低減するため。
+- **2026-10-17: ADR #001 制御プレーン共有メモリ直結（Zero Disk I/O）と観測プレーン抽象契約の二層分離**
+  - **Decision**: 
+    1. **制御プレーン (Control Plane)**: 毎秒 100 回のディスク一時ファイル書き込み・ポーリングによる制御ループを完全撤廃し、`include/space_guidance_shm.h` で定義される 496 バイトの POSIX 共有メモリ構造体（Seqlock 制御、ゼロコピー）を Python/C++ 自律操縦クライアントとの排他的チャネルとした。
+    2. **観測プレーン (Observability / UI Plane)**: F-BB コアの「プラグイン完全隔離原則」に準拠し、F-BB Web ダッシュボード向けにはデーモンから 33Hz (30fps) で `/tmp/fbb_scenario_telemetry.json` をアトミック出力して WebSocket 経由でブラウザペインへ配信する。
+  - **Rationale**: 自律制御ループにおけるファイル I/O 詰まり・ジッター・CPU 浪費を根絶しつつ、F-BB プラットフォーム標準の Web UI 統合・テレメトリ監視との疎結合性を完全に両立するため。
 
 - **2026-10-18: ADR #002 初動トリガー方式（First Action Timing Protocol）とパイロットコードの完全ピュア化**
   - **Decision**:

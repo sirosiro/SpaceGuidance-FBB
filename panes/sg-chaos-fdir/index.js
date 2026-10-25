@@ -50,7 +50,8 @@ export default function ChaosFdirConsole() {
     } else {
       const t = setInterval(async () => {
         try {
-          const res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
+          let res = await fetch('/api/file?path=/tmp/fbb_scenario_telemetry.json');
+          if (!res.ok) res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
           if (res.ok) {
             const j = await res.json();
             handleTelemetry(j);

@@ -15,7 +15,7 @@ echo "============================================================"
 echo "  SpaceGuidance-FBB: Stage 3 ISS Truss Inspector Challenge"
 echo "============================================================"
 
-rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
+rm -f /dev/shm/fbb_space_guidance_shm /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json /tmp/fbb_scenario_telemetry.json
 
 echo "[Stage 3 Launcher] Launching physics daemon (Stage 3)..."
 export SPACE_GUIDANCE_STAGE=3

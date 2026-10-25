@@ -58,6 +58,7 @@ module space_guidance_top #(
     localparam ADDR_SAFETY_LIMIT    = 6'h20;
     localparam ADDR_WATCHDOG_KICK   = 6'h24;
     localparam ADDR_CHAOS_FAULT_INJ = 6'h28;
+    localparam ADDR_WHEEL_TORQUE_CMD = 6'h2C;
 
     // Registers
     reg [31:0] reg_cr_ctrl;
@@ -67,6 +68,7 @@ module space_guidance_top #(
     reg [31:0] reg_torque_cmd;
     reg [31:0] reg_safety_limit;
     reg [31:0] reg_chaos_fault_inj;
+    reg [31:0] reg_wheel_torque_cmd;
     reg        wdg_kick_pulse;
     reg        command_write_pulse;
 
@@ -157,6 +159,7 @@ module space_guidance_top #(
             reg_torque_cmd      <= 32'd0;
             reg_safety_limit    <= 32'h0000FFFF; // Default limit
             reg_chaos_fault_inj <= 32'd0;
+            reg_wheel_torque_cmd <= 32'd0;
             wdg_kick_pulse      <= 1'b0;
             command_write_pulse <= 1'b0;
         end else begin
@@ -174,14 +177,15 @@ module space_guidance_top #(
             if (awready_reg && s_axi_awvalid && wready_reg && s_axi_wvalid) begin
                 bvalid_reg <= 1'b1;
                 case (s_axi_awaddr[5:0])
-                    ADDR_CR_CTRL:         reg_cr_ctrl         <= s_axi_wdata;
-                    ADDR_THRUST_CMD_X:    begin reg_thrust_cmd_x <= s_axi_wdata; command_write_pulse <= 1'b1; end
-                    ADDR_THRUST_CMD_Y:    begin reg_thrust_cmd_y <= s_axi_wdata; command_write_pulse <= 1'b1; end
-                    ADDR_THRUST_CMD_Z:    reg_thrust_cmd_z    <= s_axi_wdata;
-                    ADDR_TORQUE_CMD:      begin reg_torque_cmd   <= s_axi_wdata; command_write_pulse <= 1'b1; end
-                    ADDR_SAFETY_LIMIT:    reg_safety_limit    <= s_axi_wdata;
-                    ADDR_WATCHDOG_KICK:   wdg_kick_pulse      <= 1'b1;
-                    ADDR_CHAOS_FAULT_INJ: reg_chaos_fault_inj <= s_axi_wdata;
+                    ADDR_CR_CTRL:          reg_cr_ctrl          <= s_axi_wdata;
+                    ADDR_THRUST_CMD_X:     begin reg_thrust_cmd_x <= s_axi_wdata; command_write_pulse <= 1'b1; end
+                    ADDR_THRUST_CMD_Y:     begin reg_thrust_cmd_y <= s_axi_wdata; command_write_pulse <= 1'b1; end
+                    ADDR_THRUST_CMD_Z:     reg_thrust_cmd_z     <= s_axi_wdata;
+                    ADDR_TORQUE_CMD:       begin reg_torque_cmd   <= s_axi_wdata; command_write_pulse <= 1'b1; end
+                    ADDR_SAFETY_LIMIT:     reg_safety_limit     <= s_axi_wdata;
+                    ADDR_WATCHDOG_KICK:    wdg_kick_pulse       <= 1'b1;
+                    ADDR_CHAOS_FAULT_INJ:  reg_chaos_fault_inj  <= s_axi_wdata;
+                    ADDR_WHEEL_TORQUE_CMD: reg_wheel_torque_cmd <= s_axi_wdata;
                     default: ;
                 endcase
             end else if (s_axi_bready && bvalid_reg) begin
@@ -206,17 +210,18 @@ module space_guidance_top #(
             if (arready_reg && s_axi_arvalid) begin
                 rvalid_reg <= 1'b1;
                 case (s_axi_araddr[5:0])
-                    ADDR_CR_CTRL:         rdata_reg <= reg_cr_ctrl;
-                    ADDR_SR_STATUS:       rdata_reg <= {28'd0, wdg_timeout, internal_seu_alert, estop_tripped, reg_cr_ctrl[0]};
-                    ADDR_SENSOR_RAW:      rdata_reg <= raw_sensor_adc_i;
-                    ADDR_SENSOR_EDGE:     rdata_reg <= line_centroid_q16;
-                    ADDR_THRUST_CMD_X:    rdata_reg <= reg_thrust_cmd_x;
-                    ADDR_THRUST_CMD_Y:    rdata_reg <= reg_thrust_cmd_y;
-                    ADDR_THRUST_CMD_Z:    rdata_reg <= reg_thrust_cmd_z;
-                    ADDR_TORQUE_CMD:      rdata_reg <= reg_torque_cmd;
-                    ADDR_SAFETY_LIMIT:    rdata_reg <= reg_safety_limit;
-                    ADDR_CHAOS_FAULT_INJ: rdata_reg <= reg_chaos_fault_inj;
-                    default:              rdata_reg <= 32'hDEADBEEF;
+                    ADDR_CR_CTRL:          rdata_reg <= reg_cr_ctrl;
+                    ADDR_SR_STATUS:        rdata_reg <= {28'd0, wdg_timeout, internal_seu_alert, estop_tripped, reg_cr_ctrl[0]};
+                    ADDR_SENSOR_RAW:       rdata_reg <= raw_sensor_adc_i;
+                    ADDR_SENSOR_EDGE:      rdata_reg <= line_centroid_q16;
+                    ADDR_THRUST_CMD_X:     rdata_reg <= reg_thrust_cmd_x;
+                    ADDR_THRUST_CMD_Y:     rdata_reg <= reg_thrust_cmd_y;
+                    ADDR_THRUST_CMD_Z:     rdata_reg <= reg_thrust_cmd_z;
+                    ADDR_TORQUE_CMD:       rdata_reg <= reg_torque_cmd;
+                    ADDR_SAFETY_LIMIT:     rdata_reg <= reg_safety_limit;
+                    ADDR_CHAOS_FAULT_INJ:  rdata_reg <= reg_chaos_fault_inj;
+                    ADDR_WHEEL_TORQUE_CMD: rdata_reg <= reg_wheel_torque_cmd;
+                    default:               rdata_reg <= 32'hDEADBEEF;
                 endcase
             end else if (s_axi_rready && rvalid_reg) begin
                 rvalid_reg <= 1'b0;

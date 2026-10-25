@@ -17,5 +17,22 @@
         "title": "Space Guidance Cockpit"
       }
     }
+  ],
+  "panes": [
+    {
+      "id": "sg-orbit-viewer",
+      "title": "SG 3D Cyber Orbit Viewer",
+      "entry": "panes/sg-orbit-viewer/index.js"
+    },
+    {
+      "id": "sg-telemetry-gauge",
+      "title": "SG Telemetry & C&W",
+      "entry": "panes/sg-telemetry-gauge/index.js"
+    },
+    {
+      "id": "sg-chaos-fdir",
+      "title": "SG Chaos FDIR & Scorecard",
+      "entry": "panes/sg-chaos-fdir/index.js"
+    }
   ]
 }

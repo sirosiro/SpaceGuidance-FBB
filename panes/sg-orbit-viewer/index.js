@@ -1839,6 +1839,7 @@ export default function SpaceOrbitViewer3D() {
       const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
       const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
       const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
+      const actualTauX = (tlm.torque_x !== undefined) ? tlm.torque_x : 0.0;
 
       // ------------------------------------------------------------------------
       // 1. Main Thrusters T0, T1 (Volumetric Vacuum Bell & Dual-Pass Neon Glow)
@@ -1857,6 +1858,10 @@ export default function SpaceOrbitViewer3D() {
         isCounterFiring = hasFuel && isReverse;
         isT0Firing = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || Math.abs(actualFx) > 0.005);
         isT1Firing = hasFuel && (healthMask & (1 << 1)) && ((thrustMask & (1 << 1)) || Math.abs(actualFx) > 0.005);
+      } else if (stageId === 2) {
+        isT0Firing = false;
+        isT1Firing = false;
+        isCounterFiring = false;
       } else {
         // Rear main thrusters ONLY fire when accelerating forward (+X)
         isT0Firing = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || actualFx > 0.005);
@@ -1911,7 +1916,9 @@ export default function SpaceOrbitViewer3D() {
       if (isT0Firing) {
         const posAttr = plumeGeo0.attributes.position;
         if (stageId === 3) {
-          writePlumeBell(posAttr, 0.38, -0.10, 0, isCounterFiring ? 1.0 : -1.0, pLen, plumeW, jx);
+          const originX = isCounterFiring ? 0.38 : -0.38;
+          const dirX = isCounterFiring ? 1.0 : -1.0;
+          writePlumeBell(posAttr, originX, -0.10, 0, dirX, pLen, plumeW, jx);
         } else {
           writePlumeBell(posAttr, -1.6, -0.4, 0, -1.0, pLen, plumeW, jx);
         }
@@ -1922,7 +1929,9 @@ export default function SpaceOrbitViewer3D() {
       if (isT1Firing) {
         const posAttr = plumeGeo1.attributes.position;
         if (stageId === 3) {
-          writePlumeBell(posAttr, 0.38, 0.10, 0, isCounterFiring ? 1.0 : -1.0, pLen, plumeW, jx);
+          const originX = isCounterFiring ? 0.38 : -0.38;
+          const dirX = isCounterFiring ? 1.0 : -1.0;
+          writePlumeBell(posAttr, originX, 0.10, 0, dirX, pLen, plumeW, jx);
         } else {
           writePlumeBell(posAttr, -1.6, 0.4, 0, -1.0, pLen, plumeW, jx);
         }
@@ -1981,11 +1990,11 @@ export default function SpaceOrbitViewer3D() {
         }
       };
 
-      if (hasFuel) {
+      if (hasFuel && stageId !== 2 && stageId !== 3) {
         // Forward Braking Counter-Thrusters (T2, T3 at x = 0.8, y = +-0.65)
         // Fire FORWARD (+X) to decelerate/brake when approaching dock or holding speed
         const isBraking = isReverse || (thrustMask & (1 << 2)) || (thrustMask & (1 << 3));
-        if (isBraking && stageId !== 3) {
+        if (isBraking) {
           const brakeLen = (0.16 + Math.min(1.0, fxBrakeMag) * 0.75) * (0.90 + Math.random() * 0.20);
           if (healthMask & (1 << 2)) addRcsSpray(0.8, -0.65, 0, 'x', 1.0, brakeLen);
           if (healthMask & (1 << 3)) addRcsSpray(0.8,  0.65, 0, 'x', 1.0, brakeLen);
@@ -1993,10 +2002,12 @@ export default function SpaceOrbitViewer3D() {
 
         // Lateral Translation & Attitude RCS Jets (T4, T5, T6, T7)
         // Dynamically scaled by lateral force (actualFy) and attitude torque (actualTau)
-        const d5 = Math.max(0, actualFy * 0.7 - actualTau * 0.7) + ((thrustMask & (1 << 5)) ? 0.6 : 0);
-        const d7 = Math.max(0, -actualFy * 0.7 + actualTau * 0.7) + ((thrustMask & (1 << 7)) ? 0.6 : 0);
-        const d4 = Math.max(0, actualFy * 0.7 + actualTau * 0.7) + ((thrustMask & (1 << 4)) ? 0.6 : 0);
-        const d6 = Math.max(0, -actualFy * 0.7 - actualTau * 0.7) + ((thrustMask & (1 << 6)) ? 0.6 : 0);
+        // T5 (Front-Port, Tz=+20), T6 (Aft-Stbd, Tz=+20): Fire for CCW (+Z) yaw torque (+actualTau)
+        // T4 (Aft-Port, Tz=-20), T7 (Front-Stbd, Tz=-20): Fire for CW (-Z) yaw torque (-actualTau)
+        const d4 = Math.max(0,  actualFy * 0.7 - actualTau * 0.7) + ((thrustMask & (1 << 4)) ? 0.6 : 0);
+        const d5 = Math.max(0,  actualFy * 0.7 + actualTau * 0.7) + ((thrustMask & (1 << 5)) ? 0.6 : 0);
+        const d6 = Math.max(0, -actualFy * 0.7 + actualTau * 0.7) + ((thrustMask & (1 << 6)) ? 0.6 : 0);
+        const d7 = Math.max(0, -actualFy * 0.7 - actualTau * 0.7) + ((thrustMask & (1 << 7)) ? 0.6 : 0);
 
         const rcsLen = (demand) => (0.14 + Math.min(1.0, demand) * 0.55) * (0.90 + Math.random() * 0.20);
 
@@ -2011,6 +2022,27 @@ export default function SpaceOrbitViewer3D() {
         }
         if (d6 > 0.005 && (healthMask & (1 << 6))) {
           addRcsSpray(-1.3,  1.8, 0, 'y', 1.0, rcsLen(d6));
+        }
+
+        // Roll Attitude RCS Jets (Wingtip Differential Z-Spray)
+        // TauX > 0 (Roll Right): Left wing pushed UP (spray -Z), Right wing pushed DOWN (spray +Z)
+        // TauX < 0 (Roll Left):  Left wing pushed DOWN (spray +Z), Right wing pushed UP (spray -Z)
+        let rollTauCmd = actualTauX;
+        if (stageId === 4 && Math.abs(rollTauCmd) < 0.005 && Math.abs(actualTau) > 0.005 && Math.abs(shipYaw) < 0.15) {
+          rollTauCmd = actualTau;
+        }
+
+        if (Math.abs(rollTauCmd) > 0.005) {
+          const rollLen = (0.14 + Math.min(1.0, Math.abs(rollTauCmd)) * 0.55) * (0.90 + Math.random() * 0.20);
+          if (rollTauCmd > 0.005) {
+            // Roll Right (+X): Left wing spray -Z (force +Z), Right wing spray +Z (force -Z)
+            if (healthMask & (1 << 6)) addRcsSpray(-1.3,  1.8, 0, 'z', -1.0, rollLen);
+            if (healthMask & (1 << 4)) addRcsSpray(-1.3, -1.8, 0, 'z',  1.0, rollLen);
+          } else {
+            // Roll Left (-X): Left wing spray +Z (force -Z), Right wing spray -Z (force +Z)
+            if (healthMask & (1 << 6)) addRcsSpray(-1.3,  1.8, 0, 'z',  1.0, rollLen);
+            if (healthMask & (1 << 4)) addRcsSpray(-1.3, -1.8, 0, 'z', -1.0, rollLen);
+          }
         }
 
         // Vertical RCS (T8..T11)

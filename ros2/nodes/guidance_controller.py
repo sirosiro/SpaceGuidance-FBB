@@ -103,91 +103,108 @@ class SpaceGuidanceHardware:
         self.mm.write(struct.pack("=I", cr))
 
     def read_registers(self):
-        self.mm.seek(0)
-        data = self.mm.read(self.SIZE)
-        unpacked = struct.unpack(self.SHM_LAYOUT, data[:struct.calcsize(self.SHM_LAYOUT)])
-        res = {
-            "cr_ctrl": unpacked[0],
-            "sr_status": unpacked[1],
-            "sensor_raw": unpacked[2],
-            "sensor_edge": unpacked[3],
-            "thrust_cmd_x": unpacked[4],
-            "thrust_cmd_y": unpacked[5],
-            "thrust_cmd_z": unpacked[6],
-            "torque_cmd": unpacked[7],
-            "chaos_fault_inj": unpacked[10],
-            "wheel_torque_cmd": unpacked[11],
-            "pos_x": unpacked[12],
-            "pos_y": unpacked[13],
-            "vel_x": unpacked[14],
-            "vel_y": unpacked[15],
-            "angle": unpacked[16],
-            "omega": unpacked[17],
-            "fuel": unpacked[18],
-            "cross_track_err": unpacked[19],
-            "wheel_rpm": unpacked[20],
-            "fdir_mode": unpacked[21],
-            "stage_id": unpacked[22],
-            "score": unpacked[23],
-            "official_score": unpacked[23],
-            "passed_checkpoints": unpacked[24],
-            "passed_gates": unpacked[24],
-            "mission_status": unpacked[25],
-            "total_checkpoints": unpacked[26],
-            "total_gates": unpacked[26]
-        }
+        # Seqlock lock-free retry loop (up to 5 attempts) to prevent torn reads
+        res = {}
+        for retry in range(5):
+            self.mm.seek(0)
+            data = self.mm.read(self.SIZE)
+            seq_start = 0
+            if len(data) >= 496:
+                magic_check, seq_start = struct.unpack_from("=2I", data, 0xA8)
+                if magic_check == 0x53504731 and (seq_start & 1):
+                    # Odd sequence number indicates daemon write in progress; retry
+                    continue
 
-        # Zero Disk I/O: Unpack extended 6-DoF telemetry directly from SHM if magic 'SPG1' matches
-        shm_ext_loaded = False
-        if len(data) >= 496:
-            magic, seq = struct.unpack_from("=2I", data, 0xA8)
-            if magic == 0x53504731: # 'SPG1'
-                doubles = struct.unpack_from("=23d", data, 0xB0)
-                res["pos_z"] = doubles[0]
-                res["vel_z"] = doubles[1]
-                res["roll"] = doubles[2]
-                res["pitch"] = doubles[3]
-                res["yaw"] = doubles[4]
-                res["omega_x"] = doubles[5]
-                res["omega_y"] = doubles[6]
-                res["omega_z"] = doubles[7]
-                res["wheel_rpm_x"] = doubles[8]
-                res["wheel_rpm_y"] = doubles[9]
-                res["wheel_rpm_z"] = doubles[10]
-                res["cable_tension"] = doubles[11]
-                res["cable_vibration"] = doubles[12]
-                res["detumble_time"] = doubles[13]
-                res["elapsed_time"] = doubles[14]
-                res["debris_azimuth"] = doubles[15]
-                res["debris_elevation"] = doubles[16]
-                res["debris_spawn_x"] = doubles[17]
-                res["debris_spawn_y"] = doubles[18]
-                res["debris_spawn_z"] = doubles[19]
-                res["debris_impact_x"] = doubles[20]
-                res["debris_impact_y"] = doubles[21]
-                res["debris_impact_z"] = doubles[22]
-                if res.get("stage_id") == 4:
-                    res["target_angle"] = doubles[15]
-                    res["target_omega"] = doubles[16]
-                    res["rel_angle"] = doubles[17]
-                    res["rel_omega"] = doubles[18]
+            unpacked = struct.unpack(self.SHM_LAYOUT, data[:struct.calcsize(self.SHM_LAYOUT)])
+            res = {
+                "cr_ctrl": unpacked[0],
+                "sr_status": unpacked[1],
+                "sensor_raw": unpacked[2],
+                "sensor_edge": unpacked[3],
+                "thrust_cmd_x": unpacked[4],
+                "thrust_cmd_y": unpacked[5],
+                "thrust_cmd_z": unpacked[6],
+                "torque_cmd": unpacked[7],
+                "chaos_fault_inj": unpacked[10],
+                "wheel_torque_cmd": unpacked[11],
+                "pos_x": unpacked[12],
+                "pos_y": unpacked[13],
+                "vel_x": unpacked[14],
+                "vel_y": unpacked[15],
+                "angle": unpacked[16],
+                "omega": unpacked[17],
+                "fuel": unpacked[18],
+                "cross_track_err": unpacked[19],
+                "wheel_rpm": unpacked[20],
+                "fdir_mode": unpacked[21],
+                "stage_id": unpacked[22],
+                "score": unpacked[23],
+                "official_score": unpacked[23],
+                "passed_checkpoints": unpacked[24],
+                "passed_gates": unpacked[24],
+                "mission_status": unpacked[25],
+                "total_checkpoints": unpacked[26],
+                "total_gates": unpacked[26]
+            }
 
-                ints = struct.unpack_from("=2i8I", data, 0x168)
-                res["checkpoint_score"] = ints[0]
-                res["bonus_score"] = ints[1]
-                res["cable_snapped"] = ints[2]
-                res["thruster_health"] = ints[3]
-                res["is_detumbled"] = ints[4]
-                res["debris_hits"] = ints[5]
-                res["chaos_seed"] = ints[6]
-                res["damaged_thruster_1"] = ints[7]
-                res["damaged_thruster_2"] = ints[8]
+            # Zero Disk I/O: Unpack extended 6-DoF telemetry directly from SHM if magic 'SPG1' matches
+            shm_ext_loaded = False
+            if len(data) >= 496:
+                magic, seq_end = struct.unpack_from("=2I", data, 0xA8)
+                if magic == 0x53504731: # 'SPG1'
+                    if seq_start != seq_end:
+                        # Sequence changed during unpack (torn read); retry
+                        continue
+                    doubles = struct.unpack_from("=23d", data, 0xB0)
+                    res["pos_z"] = doubles[0]
+                    res["vel_z"] = doubles[1]
+                    res["roll"] = doubles[2]
+                    res["pitch"] = doubles[3]
+                    res["yaw"] = doubles[4]
+                    res["omega_x"] = doubles[5]
+                    res["omega_y"] = doubles[6]
+                    res["omega_z"] = doubles[7]
+                    res["wheel_rpm_x"] = doubles[8]
+                    res["wheel_rpm_y"] = doubles[9]
+                    res["wheel_rpm_z"] = doubles[10]
+                    res["cable_tension"] = doubles[11]
+                    res["cable_vibration"] = doubles[12]
+                    res["detumble_time"] = doubles[13]
+                    res["elapsed_time"] = doubles[14]
+                    res["debris_azimuth"] = doubles[15]
+                    res["debris_elevation"] = doubles[16]
+                    res["debris_spawn_x"] = doubles[17]
+                    res["debris_spawn_y"] = doubles[18]
+                    res["debris_spawn_z"] = doubles[19]
+                    res["debris_impact_x"] = doubles[20]
+                    res["debris_impact_y"] = doubles[21]
+                    res["debris_impact_z"] = doubles[22]
+                    if res.get("stage_id") == 4:
+                        res["target_angle"] = doubles[15]
+                        res["target_omega"] = doubles[16]
+                        res["rel_angle"] = doubles[17]
+                        res["rel_omega"] = doubles[18]
 
-                grade_raw = data[0x190:0x1B0].split(b'\x00')[0]
-                event_raw = data[0x1B0:0x1F0].split(b'\x00')[0]
-                res["official_grade"] = grade_raw.decode('utf-8', errors='ignore')
-                res["last_event"] = event_raw.decode('utf-8', errors='ignore')
-                shm_ext_loaded = True
+                    ints = struct.unpack_from("=2i8I", data, 0x168)
+                    res["checkpoint_score"] = ints[0]
+                    res["bonus_score"] = ints[1]
+                    res["cable_snapped"] = ints[2]
+                    res["thruster_health"] = ints[3]
+                    res["is_detumbled"] = ints[4]
+                    res["debris_hits"] = ints[5]
+                    res["chaos_seed"] = ints[6]
+                    res["damaged_thruster_1"] = ints[7]
+                    res["damaged_thruster_2"] = ints[8]
+                    res["mission_status_code"] = ints[9]
+                    if ints[9] != 0:
+                        res["mission_status"] = ints[9]
+
+                    grade_raw = data[0x190:0x1B0].split(b'\x00')[0]
+                    event_raw = data[0x1B0:0x1F0].split(b'\x00')[0]
+                    res["official_grade"] = grade_raw.decode('utf-8', errors='ignore')
+                    res["last_event"] = event_raw.decode('utf-8', errors='ignore')
+                    shm_ext_loaded = True
+            break
 
         if not shm_ext_loaded and os.path.exists("/tmp/space_guidance_telemetry.json"):
             for _ in range(3):

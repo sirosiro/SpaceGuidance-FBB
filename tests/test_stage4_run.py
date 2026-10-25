@@ -19,11 +19,13 @@ from guidance_controller import SpaceGuidanceHardware
 
 def cleanup_daemon():
     subprocess.run(["pkill", "-9", "-f", "space_guidance_daemon"], stderr=subprocess.DEVNULL)
-    if os.path.exists(telemetry_file):
-        try:
-            os.remove(telemetry_file)
-        except OSError:
-            pass
+    for p in ["/dev/shm/fbb_space_guidance_shm", "/tmp/fbb_space_guidance_shm",
+              "/tmp/space_guidance_telemetry.json", "/tmp/fbb_scenario_telemetry.json"]:
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
     time.sleep(0.3)
 
 def test_stage4_nominal_mission():
@@ -58,7 +60,7 @@ def test_stage4_nominal_mission():
             pilot_proc.kill()
             raise AssertionError("Stage 4 pilot timed out (> 75s)!")
 
-        assert pilot_proc.returncode == 0, f"pilot.py exited with error code {pilot_proc.returncode}"
+        assert pilot_proc.returncode == 0, f"pilot.py exited with error code {pilot_proc.returncode}\nSTDERR:\n{p_err}"
 
         # Read official telemetry from SSOT daemon via POSIX SHM
         hw = SpaceGuidanceHardware()
@@ -283,10 +285,12 @@ def test_stage4_spin_mismatch_crash_disqualification():
                 break
 
             dist = 50.0 - px
-            if dist > 1.0:
-                target_vx = min(3.5, math.sqrt(dist * 1.5))
+            if dist > 5.0:
+                target_vx = 3.0
+            elif dist > 1.0:
+                target_vx = 1.0
             else:
-                target_vx = 0.05 # safe contact speed (< 0.08 m/s), so crash is purely due to attitude/spin!
+                target_vx = 0.04 # safe contact speed (< 0.08 m/s), so crash is purely due to attitude/spin!
 
             fx_world = (target_vx - vx) * 2.5
             fy_world = - py * 2.5 - tlm.get("vel_y", 0.0) * 1.5

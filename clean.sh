@@ -27,7 +27,7 @@ if [ -d "bin" ]; then
 fi
 
 # Verilator output directories
-rm -rf obj_dir obj_dir_physics
+rm -rf obj_dir obj_dir_rtl obj_dir_physics
 
 # Scenario & test binaries
 rm -f scenario/*/test_bin
@@ -44,7 +44,10 @@ find . -type f -name "*.pyc" -delete 2>/dev/null || true
 find . -type f -name "*.pyo" -delete 2>/dev/null || true
 
 # Temporary IPC / SHM / Telemetry files
-rm -f /tmp/space_guidance_telemetry.json 2>/dev/null || true
+rm -f /dev/shm/fbb_space_guidance_shm 2>/dev/null || true
 rm -f /tmp/fbb_space_guidance_shm 2>/dev/null || true
+rm -f /tmp/space_guidance_telemetry.json 2>/dev/null || true
+rm -f /tmp/fbb_scenario_telemetry.json 2>/dev/null || true
+rm -f /tmp/fbb_scenario_telemetry.json.tmp 2>/dev/null || true
 
 echo "[SpaceGuidance] Clean finished successfully."

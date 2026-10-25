@@ -166,9 +166,29 @@ int main(int argc, char** argv) {
     assert((status & 0x04) != 0 && "SEU bit not set in status!");
     std::cout << "  ✓ SEU Fault Injection Alert Triggered!" << std::endl;
 
+    std::cout << "[TEST] 8. Reaction Wheel Torque Command (0x2C) Read/Write Verification" << std::endl;
+    // Positive Q16.16 torque (+10.5 Nm = 0x000A8000)
+    axi_write(top, 0x2C, 0x000A8000);
+    tick(top);
+    uint32_t rw_val = axi_read(top, 0x2C);
+    assert(rw_val == 0x000A8000 && "Reaction wheel positive torque readback failed!");
+
+    // Negative Q16.16 torque (-15.25 Nm = 0xFFF0C000)
+    axi_write(top, 0x2C, 0xFFF0C000);
+    tick(top);
+    rw_val = axi_read(top, 0x2C);
+    assert(rw_val == 0xFFF0C000 && "Reaction wheel negative torque readback failed!");
+
+    // Zero torque (0x00000000)
+    axi_write(top, 0x2C, 0x00000000);
+    tick(top);
+    rw_val = axi_read(top, 0x2C);
+    assert(rw_val == 0x00000000 && "Reaction wheel zero torque readback failed!");
+    std::cout << "  ✓ Reaction Wheel Torque Command (0x2C) verified for bipolar Q16.16!" << std::endl;
+
     delete top;
     std::cout << "==========================================================" << std::endl;
-    std::cout << "✨ ALL 7 RTL TESTS (100% PWM / MULTI-AXIS CLAMP / SEU) PASSED" << std::endl;
+    std::cout << "✨ ALL 8 RTL TESTS (100% PWM / MULTI-AXIS CLAMP / SEU / RW 0x2C) PASSED" << std::endl;
     std::cout << "==========================================================" << std::endl;
     return 0;
 }

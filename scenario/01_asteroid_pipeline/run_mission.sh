@@ -18,7 +18,7 @@ echo "=========================================================="
 pkill -9 -f space_guidance_daemon 2>/dev/null || true
 pkill -9 -f "pilot.py" 2>/dev/null || true
 pkill -9 -f "mission01_baseline_pilot.py" 2>/dev/null || true
-rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
+rm -f /dev/shm/fbb_space_guidance_shm /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json /tmp/fbb_scenario_telemetry.json
 
 echo "[1/2] Starting Simulation Daemon..."
 "$ROOT/bin/space_guidance_daemon" &

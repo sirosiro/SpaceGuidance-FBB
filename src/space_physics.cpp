@@ -1030,11 +1030,9 @@ double SpacePhysicsEngine::get_cross_track_error() const {
     if (stage_id_ == 3) {
         return state_.rail_load;
     }
-    if (stage_id_ == 4) {
-        return state_.pos.y;
-    }
-    if (stage_id_ == 5) {
-        return state_.pos.y;
+    if (stage_id_ == 4 || stage_id_ == 5) {
+        double r = std::sqrt(state_.pos.y * state_.pos.y + state_.pos_z * state_.pos_z);
+        return (state_.pos.y >= 0.0) ? r : -r;
     }
     double d = get_distance_to_track(state_.pos.x, state_.pos.y);
     double nominal_y = 0.0;

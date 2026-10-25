@@ -15,7 +15,7 @@ echo "============================================================"
 echo "  SpaceGuidance-FBB: Stage 4 Laser Docking Challenge"
 echo "============================================================"
 
-rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
+rm -f /dev/shm/fbb_space_guidance_shm /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json /tmp/fbb_scenario_telemetry.json
 
 echo "[Stage 4 Launcher] Launching physics daemon (Stage 4)..."
 export SPACE_GUIDANCE_STAGE=4

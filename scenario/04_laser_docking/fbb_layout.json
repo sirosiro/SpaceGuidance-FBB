@@ -39,12 +39,13 @@
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "sg-orbit-viewer"
+                                    "sg-orbit-viewer",
+                                    "gpioPanel"
                                 ],
                                 "activeView": "sg-orbit-viewer",
-                                "id": "7"
+                                "id": "5"
                             },
-                            "size": 706
+                            "size": 580
                         },
                         {
                             "type": "leaf",
@@ -55,7 +56,7 @@
                                 "activeView": "uartTerminal_vfpga_uart_1",
                                 "id": "3"
                             },
-                            "size": 454
+                            "size": 580
                         }
                     ],
                     "size": 1035
@@ -137,14 +138,6 @@
             },
             "title": "Tracer"
         },
-        "sg-orbit-viewer": {
-            "id": "sg-orbit-viewer",
-            "contentComponent": "sg-orbit-viewer",
-            "params": {
-                "_componentName": "sg-orbit-viewer"
-            },
-            "title": "SG 3D Cyber Orbit Viewer"
-        },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
             "contentComponent": "uartTerminal",
@@ -177,7 +170,23 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
+        },
+        "sg-orbit-viewer": {
+            "id": "sg-orbit-viewer",
+            "contentComponent": "sg-orbit-viewer",
+            "params": {
+                "_componentName": "sg-orbit-viewer"
+            },
+            "title": "SG 3D Cyber Orbit Viewer"
+        },
+        "gpioPanel": {
+            "id": "gpioPanel",
+            "contentComponent": "gpioPanel",
+            "params": {
+                "_componentName": "gpioPanel"
+            },
+            "title": "GPIO / Pin Array"
         }
     },
-    "activeGroup": "7"
+    "activeGroup": "5"
 }

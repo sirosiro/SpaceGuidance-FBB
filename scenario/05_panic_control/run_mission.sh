@@ -17,7 +17,7 @@ echo "  SpaceGuidance-FBB: Stage EX Panic Control Challenge       "
 echo "  (Debris Collision, High Tumbling Spin & Thruster Damage)  "
 echo "============================================================"
 
-rm -f /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json
+rm -f /dev/shm/fbb_space_guidance_shm /tmp/fbb_space_guidance_shm /tmp/space_guidance_telemetry.json /tmp/fbb_scenario_telemetry.json
 
 echo "[Stage EX Launcher] Launching physics daemon (Stage 5)..."
 export SPACE_GUIDANCE_STAGE=5
