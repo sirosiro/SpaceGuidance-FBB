@@ -265,6 +265,9 @@ void SpacePhysicsEngine::init_stage1_asteroid_track() {
     state_.omega = 0.0;
     state_.fuel = 100.0;
     state_.wheel_rpm = 0.0;
+    state_.wheel_rpm_x = 0.0;
+    state_.wheel_rpm_y = 0.0;
+    state_.wheel_rpm_z = 0.0;
     state_.is_docked = false;
 }
 
@@ -924,6 +927,7 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
     current_wheel_rad_s += delta_wheel_rad_s;
     current_wheel_rad_s = std::clamp(current_wheel_rad_s, -max_wheel_rad_s, max_wheel_rad_s);
     state_.wheel_rpm = current_wheel_rad_s * (60.0 / (2.0 * M_PI));
+    state_.wheel_rpm_z = state_.wheel_rpm;
 
     double tau_net = rcs_torque - actual_wheel_torque;
     double alpha = tau_net / inertia_;

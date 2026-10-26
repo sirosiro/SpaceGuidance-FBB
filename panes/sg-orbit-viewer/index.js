@@ -1773,7 +1773,7 @@ export default function SpaceOrbitViewer3D() {
       // 3-Axis Reaction Wheel Cluster Dynamics & Visual Rotation
       const rpmX = Number(tlm.wheel_rpm_x || 0);
       const rpmY = Number(tlm.wheel_rpm_y || 0);
-      const rpmZ = Number(tlm.wheel_rpm_z !== undefined ? tlm.wheel_rpm_z : (tlm.wheel_rpm || 0));
+      const rpmZ = Number(tlm.wheel_rpm_z || tlm.wheel_rpm || 0);
 
       // Visual speed mapper: prevent stroboscopic Nyquist aliasing at 5000+ RPM
       const toVisualSpeed = (rpm) => {

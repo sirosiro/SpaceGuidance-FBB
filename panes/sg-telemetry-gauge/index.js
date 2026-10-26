@@ -10,6 +10,10 @@ export default function SpaceTelemetryGauge() {
     angle: 0.0,
     fuel: 100.0,
     cross_track_err: 0.0,
+    wheel_rpm: 0.0,
+    wheel_rpm_x: 0.0,
+    wheel_rpm_y: 0.0,
+    wheel_rpm_z: 0.0,
     carrier_lost: false,
     sensor_saturated: false
   });
@@ -49,8 +53,10 @@ export default function SpaceTelemetryGauge() {
     }
   }, []);
 
-  const isWarning = data.sensor_saturated || Math.abs(data.cross_track_err) > 0.4;
-  const isCaution = data.carrier_lost || Math.abs(data.cross_track_err) > 0.2;
+  const rwRpmZ = Number(data.wheel_rpm_z || data.wheel_rpm || 0);
+  const isWheelSaturated = Math.abs(rwRpmZ) >= 5000;
+  const isWarning = data.sensor_saturated || Math.abs(data.cross_track_err) > 0.4 || isWheelSaturated;
+  const isCaution = data.carrier_lost || Math.abs(data.cross_track_err) > 0.2 || (Math.abs(rwRpmZ) >= 4000 && !isWheelSaturated);
 
   return React.createElement('div', {
     style: {
@@ -83,7 +89,7 @@ export default function SpaceTelemetryGauge() {
           background: isWarning ? '#ef4444' : '#1e293b',
           color: isWarning ? '#ffffff' : '#64748b'
         }
-      }, 'WARN / RED ALERT'),
+      }, isWheelSaturated ? 'WARN / RW SAT' : 'WARN / RED ALERT'),
       React.createElement('div', {
         style: {
           flex: 1,
@@ -136,6 +142,54 @@ export default function SpaceTelemetryGauge() {
         })
       )
     ),
+
+    // Reaction Wheel RPM & Momentum Gauge
+    (() => {
+      const rwZ = Number(data.wheel_rpm_z || data.wheel_rpm || 0);
+      const rwX = Number(data.wheel_rpm_x || 0);
+      const rwY = Number(data.wheel_rpm_y || 0);
+      const absRpm = Math.abs(rwZ);
+      const maxRpm = 6000.0;
+      const pct = Math.min(100, (absRpm / maxRpm) * 100);
+      const isSat = absRpm >= 5000;
+      const isWarn = absRpm >= 4000;
+      const barColor = isSat ? '#ef4444' : (isWarn ? '#f59e0b' : '#ec4899');
+      const is3Axis = Math.abs(rwX) > 5 || Math.abs(rwY) > 5;
+
+      return React.createElement('div', { style: { marginBottom: '14px' } },
+        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '12px' } },
+          React.createElement('span', null, 'REACTION WHEEL (YAW / Z):'),
+          React.createElement('span', { style: { color: barColor, fontWeight: 'bold' } },
+            `${rwZ >= 0 ? '+' : ''}${rwZ.toFixed(0)} RPM ${isSat ? '[SATURATED]' : ''}`
+          )
+        ),
+        React.createElement('div', {
+          style: {
+            width: '100%',
+            height: '8px',
+            background: '#1e293b',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            marginTop: '4px'
+          }
+        },
+          React.createElement('div', {
+            style: {
+              width: `${pct}%`,
+              height: '100%',
+              background: barColor,
+              transition: 'width 0.1s linear'
+            }
+          })
+        ),
+        is3Axis ? React.createElement('div', {
+          style: { display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94a3b8', marginTop: '4px' }
+        },
+          React.createElement('span', null, `RW-X (Roll): ${rwX >= 0 ? '+' : ''}${rwX.toFixed(0)} RPM`),
+          React.createElement('span', null, `RW-Y (Pitch): ${rwY >= 0 ? '+' : ''}${rwY.toFixed(0)} RPM`)
+        ) : null
+      );
+    })(),
 
     // Optical Sensor Box with Crimson Pulse Bezel Glow
     React.createElement('div', {
