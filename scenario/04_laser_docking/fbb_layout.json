@@ -21,10 +21,9 @@
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "dtsVisualizer",
-                                    "registerTracer"
+                                    "dtsVisualizer"
                                 ],
-                                "activeView": "registerTracer",
+                                "activeView": "dtsVisualizer",
                                 "id": "2"
                             },
                             "size": 575
@@ -39,13 +38,24 @@
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "sg-orbit-viewer",
-                                    "gpioPanel"
+                                    "gpioPanel",
+                                    "sg-orbit-viewer"
                                 ],
                                 "activeView": "sg-orbit-viewer",
                                 "id": "5"
                             },
-                            "size": 580
+                            "size": 450
+                        },
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "registerTracer"
+                                ],
+                                "activeView": "registerTracer",
+                                "id": "7"
+                            },
+                            "size": 423
                         },
                         {
                             "type": "leaf",
@@ -56,7 +66,7 @@
                                 "activeView": "uartTerminal_vfpga_uart_1",
                                 "id": "3"
                             },
-                            "size": 580
+                            "size": 287
                         }
                     ],
                     "size": 1035
@@ -130,13 +140,21 @@
             },
             "title": "DTS Visualizer & AI"
         },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
+        "gpioPanel": {
+            "id": "gpioPanel",
+            "contentComponent": "gpioPanel",
             "params": {
-                "_componentName": "registerTracer"
+                "_componentName": "gpioPanel"
             },
-            "title": "Tracer"
+            "title": "GPIO / Pin Array"
+        },
+        "sg-orbit-viewer": {
+            "id": "sg-orbit-viewer",
+            "contentComponent": "sg-orbit-viewer",
+            "params": {
+                "_componentName": "sg-orbit-viewer"
+            },
+            "title": "SG 3D Cyber Orbit Viewer"
         },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
@@ -171,22 +189,14 @@
             },
             "title": "Chaos & Fault Injection"
         },
-        "sg-orbit-viewer": {
-            "id": "sg-orbit-viewer",
-            "contentComponent": "sg-orbit-viewer",
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
             "params": {
-                "_componentName": "sg-orbit-viewer"
+                "_componentName": "registerTracer"
             },
-            "title": "SG 3D Cyber Orbit Viewer"
-        },
-        "gpioPanel": {
-            "id": "gpioPanel",
-            "contentComponent": "gpioPanel",
-            "params": {
-                "_componentName": "gpioPanel"
-            },
-            "title": "GPIO / Pin Array"
+            "title": "Tracer"
         }
     },
-    "activeGroup": "5"
+    "activeGroup": "1"
 }
