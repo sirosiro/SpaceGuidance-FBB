@@ -566,7 +566,7 @@ int main(int argc, char** argv) {
         double tau_w_x = 0.0;
         double tau_w_y = 0.0;
         double fz = 0.0;
-        if (stage_id == 5 || stage_id == 4) {
+        if (stage_id == 5 || stage_id == 4 || stage_id == 1) {
             int32_t* ext_cmd = reinterpret_cast<int32_t*>(reinterpret_cast<char*>(shm) + 0x90);
             tau_x   = ext_cmd[0] / 65536.0 * 20.0; // torque_x_cmd
             tau_y   = ext_cmd[1] / 65536.0 * 20.0; // torque_y_cmd

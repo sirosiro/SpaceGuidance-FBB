@@ -153,6 +153,16 @@ export default function SpaceOrbitViewer3D() {
     return 0.0;
   };
 
+  // Compute Stage 1 Asteroid Pipeline 3D Vertical Undulation Z coordinate for given X
+  const getPipelineZ = (x) => {
+    if (x > 10.0 && x <= 25.0) {
+      return 1.5 * Math.sin((x - 10.0) / 15.0 * Math.PI);
+    } else if (x > 25.0 && x <= 40.0) {
+      return 1.5 * Math.sin((x - 25.0) / 15.0 * Math.PI);
+    }
+    return 0.0;
+  };
+
   // Compute Stage 3 ISS Truss Rail 3D Curve Y coordinate for given X
   const getTrussRailY = (x) => {
     if (x >= 20.0 && x <= 25.0) {
@@ -273,6 +283,7 @@ export default function SpaceOrbitViewer3D() {
     const ringMeshes = [];
     for (let rx = 0.0; rx <= 50.0; rx += ringSpacing) {
       const ry = getPipelineY(rx);
+      const rz = getPipelineZ(rx);
       const isTarget = rx >= 49.0;
       const isGate = rx > 0 && Math.abs(rx % 5.0) < 0.1 && rx < 49.0;
       const ringPts = [];
@@ -281,8 +292,8 @@ export default function SpaceOrbitViewer3D() {
 
       for (let i = 0; i <= 6; i++) {
         const a = hexAngles[i % 6];
-        ringPts.push(new THREE.Vector3(rx, ry + hexRadius * Math.sin(a), hexRadius * Math.cos(a)));
-        glowRingPts.push(new THREE.Vector3(rx, ry + glowRad * Math.sin(a), glowRad * Math.cos(a)));
+        ringPts.push(new THREE.Vector3(rx, ry + hexRadius * Math.sin(a), rz + hexRadius * Math.cos(a)));
+        glowRingPts.push(new THREE.Vector3(rx, ry + glowRad * Math.sin(a), rz + glowRad * Math.cos(a)));
       }
       const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPts);
       const glowGeo = new THREE.BufferGeometry().setFromPoints(glowRingPts);
@@ -309,7 +320,7 @@ export default function SpaceOrbitViewer3D() {
       stage1Group.add(glowLine);
     }
 
-    // Longitudinal Rails along S-curve
+    // Longitudinal Rails along 3D S-curve
     const railOffsets = [
       { dy: 0, dz: hexRadius },
       { dy: -hexRadius, dz: 0 },
@@ -318,7 +329,7 @@ export default function SpaceOrbitViewer3D() {
     for (const ro of railOffsets) {
       const railPts = [];
       for (let rx = 0.0; rx <= 50.0; rx += 0.5) {
-        railPts.push(new THREE.Vector3(rx, getPipelineY(rx) + ro.dy, ro.dz));
+        railPts.push(new THREE.Vector3(rx, getPipelineY(rx) + ro.dy, getPipelineZ(rx) + ro.dz));
       }
       const railGeo = new THREE.BufferGeometry().setFromPoints(railPts);
       const railMat = new THREE.LineBasicMaterial({ color: 0x0284c7, transparent: true, opacity: 0.6 });
@@ -1729,7 +1740,7 @@ export default function SpaceOrbitViewer3D() {
       sm.y += vy * dt;
       sm.z += vz * dt;
       sm.yaw += (stageId === 5 ? wz : (tlm.omega || 0.0)) * dt;
-      if (stageId === 5) {
+      if (stageId === 5 || stageId === 4 || stageId === 1) {
         sm.pitch += wy * dt;
         sm.roll += wx * dt;
       }
@@ -1762,7 +1773,7 @@ export default function SpaceOrbitViewer3D() {
       const shipZ = sm.z;
       const shipYaw = sm.yaw;
       const shipPitch = sm.pitch;
-      const shipRoll = (stageId === 5 || stageId === 4) ? sm.roll : sm.bank;
+      const shipRoll = (stageId === 5 || stageId === 4 || stageId === 1) ? sm.roll : sm.bank;
 
       // Position & Rotate Spacecraft in Three.js
       shipRoot.position.set(shipX, shipY, shipZ);
@@ -2275,7 +2286,7 @@ export default function SpaceOrbitViewer3D() {
             corridorY = Math.max(-1.5, Math.min(1.5, shipY * 0.4));
           }
 
-          let corridorZ = (stageId === 5 ? Math.max(0.0, shipZ * 0.5) : 0.0);
+          let corridorZ = (stageId === 5 ? Math.max(0.0, shipZ * 0.5) : (stageId === 1 ? getPipelineZ(targetStationX) : 0.0));
 
           // Four observation quadrants relative to flight corridor:
           // Top-Right (右上: -Y, +Z), Top-Left (左上: +Y, +Z),
@@ -2406,7 +2417,7 @@ export default function SpaceOrbitViewer3D() {
       };
 
       // 1. Tactical Crosshair ahead of ship
-      const aimP = toScreen(shipX + 10.0, getPipelineY(shipX + 10.0), 0.0);
+      const aimP = toScreen(shipX + 10.0, getPipelineY(shipX + 10.0), getPipelineZ(shipX + 10.0));
       if (aimP) {
         hudCtx.save();
         hudCtx.shadowBlur = 10;
@@ -2451,7 +2462,7 @@ export default function SpaceOrbitViewer3D() {
             rm.glowMat.opacity = rm.isGate ? 0.35 : 0.15;
           }
           if (rm.isGate) {
-            const p = toScreen(rm.rx, getPipelineY(rm.rx), hexRadius);
+            const p = toScreen(rm.rx, getPipelineY(rm.rx), getPipelineZ(rm.rx) + hexRadius);
             if (p) {
               hudCtx.save();
               hudCtx.shadowBlur = isNext ? 12 : 6;

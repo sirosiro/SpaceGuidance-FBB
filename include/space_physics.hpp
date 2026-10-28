@@ -56,8 +56,9 @@ struct SpacecraftState {
 };
 
 struct PipelinePoint {
-    double x;
-    double y;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
 };
 
 struct DebrisImpactScenario {
@@ -184,4 +185,5 @@ private:
     void calculate_impact_scenario(uint32_t seed);
     void calculate_truss_defects(uint32_t seed);
     double get_distance_to_track(double px, double py) const;
+    double get_distance_to_track_3d(double px, double py, double pz) const;
 };

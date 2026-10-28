@@ -249,20 +249,33 @@ void SpacePhysicsEngine::calculate_impact_scenario(uint32_t seed) {
 
 void SpacePhysicsEngine::init_stage1_asteroid_track() {
     track_.clear();
-    // Stage 1 Track: 50m pipeline along asteroid surface with smooth S-curves
+    // Stage 1 Track: 50m 3D pipeline along asteroid surface with undulating 3D S-curves (Bank-to-Translate corridor)
     for (double x = 0.0; x <= 50.0; x += 0.01) {
         double y = 0.0;
+        double z = 0.0;
         if (x > 10.0 && x <= 25.0) {
-            y = 2.5 * std::sin((x - 10.0) / 15.0 * M_PI);
+            double ph = (x - 10.0) / 15.0 * M_PI;
+            y = 2.5 * std::sin(ph);
+            z = 1.5 * std::sin(ph);
         } else if (x > 25.0 && x <= 40.0) {
-            y = -2.5 * std::sin((x - 25.0) / 15.0 * M_PI);
+            double ph = (x - 25.0) / 15.0 * M_PI;
+            y = -2.5 * std::sin(ph);
+            z = 1.5 * std::sin(ph);
         }
-        track_.push_back({x, y});
+        track_.push_back({x, y, z});
     }
     state_.pos = {0.0, 0.0};
+    state_.pos_z = 0.0;
     state_.vel = {0.0, 0.0};
+    state_.vel_z = 0.0;
     state_.angle = 0.0;
+    state_.yaw = 0.0;
+    state_.pitch = 0.0;
+    state_.roll = 0.0;
     state_.omega = 0.0;
+    state_.omega_x = 0.0;
+    state_.omega_y = 0.0;
+    state_.omega_z = 0.0;
     state_.fuel = 100.0;
     state_.wheel_rpm = 0.0;
     state_.wheel_rpm_x = 0.0;
@@ -894,24 +907,41 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
     }
 
     // -------------------------------------------------------------
-    // Stage 1: 2D Zero-Friction Rigid-Body Microgravity Motion
+    // Stage 1: 3D Bank-to-Translate Microgravity Motion
     // -------------------------------------------------------------
+    // Body Frame Forces:
+    // thrust_forward: Body +X
+    // thrust_lateral: Body +Y
+    // Bank angle: state_.roll (phi)
+    // Yaw angle: state_.angle / state_.yaw (psi)
     double cos_a = std::cos(state_.angle);
     double sin_a = std::sin(state_.angle);
+    double cos_p = std::cos(state_.roll);
+    double sin_p = std::sin(state_.roll);
 
-    double fx = thrust_forward * cos_a - thrust_lateral * sin_a;
-    double fy = thrust_forward * sin_a + thrust_lateral * cos_a;
+    // Forces after roll transformation around Body X:
+    double fx_bank = thrust_forward;
+    double fy_bank = thrust_lateral * cos_p;
+    double fz_bank = thrust_lateral * sin_p + thrust_vertical * cos_p;
 
-    double ax = fx / mass_;
-    double ay = fy / mass_;
+    // Forces after yaw transformation around World Z:
+    double world_fx = fx_bank * cos_a - fy_bank * sin_a;
+    double world_fy = fx_bank * sin_a + fy_bank * cos_a;
+    double world_fz = fz_bank;
+
+    double ax = world_fx / mass_;
+    double ay = world_fy / mass_;
+    double az = world_fz / mass_;
 
     state_.vel.x += ax * dt;
     state_.vel.y += ay * dt;
+    state_.vel_z += az * dt;
 
     state_.pos.x += state_.vel.x * dt;
     state_.pos.y += state_.vel.y * dt;
+    state_.pos_z += state_.vel_z * dt;
 
-    // Reaction Wheel Dynamics
+    // Yaw Reaction Wheel Dynamics (Z-Axis, rated 6000 RPM, Iz = 25.0)
     const double wheel_inertia = 0.02;
     const double max_wheel_rad_s = 6000.0 * (2.0 * M_PI / 60.0);
     double current_wheel_rad_s = state_.wheel_rpm * (2.0 * M_PI / 60.0);
@@ -936,8 +966,29 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
 
     while (state_.angle > M_PI) state_.angle -= 2.0 * M_PI;
     while (state_.angle < -M_PI) state_.angle += 2.0 * M_PI;
+    state_.yaw = state_.angle;
+    state_.omega_z = state_.omega;
 
-    double fuel_burn_rate = (std::abs(thrust_forward) + std::abs(thrust_lateral) + std::abs(rcs_torque)) * 0.0005;
+    // Roll Reaction Wheel Dynamics (X-Axis, Ix = 15.0)
+    double eff_torque_x = torque_x;
+    double actual_wheel_tx = wheel_torque_x;
+    double cur_rad_s_x = state_.wheel_rpm_x * (2.0 * M_PI / 60.0);
+    if (cur_rad_s_x >= max_wheel_rad_s && actual_wheel_tx > 0.0) actual_wheel_tx = 0.0;
+    else if (cur_rad_s_x <= -max_wheel_rad_s && actual_wheel_tx < 0.0) actual_wheel_tx = 0.0;
+
+    double delta_rad_s_x = (actual_wheel_tx / wheel_inertia) * dt;
+    cur_rad_s_x = std::clamp(cur_rad_s_x + delta_rad_s_x, -max_wheel_rad_s, max_wheel_rad_s);
+    state_.wheel_rpm_x = cur_rad_s_x * (60.0 / (2.0 * M_PI));
+
+    double tau_net_x = eff_torque_x - actual_wheel_tx;
+    const double Ix = 15.0;
+    double alpha_x = tau_net_x / Ix;
+    state_.omega_x += alpha_x * dt;
+    state_.roll += state_.omega_x * dt;
+    while (state_.roll > M_PI) state_.roll -= 2.0 * M_PI;
+    while (state_.roll < -M_PI) state_.roll += 2.0 * M_PI;
+
+    double fuel_burn_rate = (std::abs(thrust_forward) + std::abs(thrust_lateral) + std::abs(rcs_torque) + std::abs(eff_torque_x)) * 0.0005;
     state_.fuel -= fuel_burn_rate * dt;
     if (state_.fuel < 0.0) state_.fuel = 0.0;
 }
@@ -995,20 +1046,23 @@ uint32_t SpacePhysicsEngine::compute_sensor_adc() const {
         return health | (gyro_mag << 8) | (detumble_byte << 24);
     }
 
-    // Stage 1: 8-channel optical line sensor array on asteroid surface
+    // Stage 1: 8-channel optical line sensor array on asteroid surface (3D banked)
     double sensor_x = state_.pos.x + 0.5 * std::cos(state_.angle);
-    double sensor_y = state_.pos.y + 0.5 * std::sin(state_.angle);
-    double perp_x = -std::sin(state_.angle);
-    double perp_y =  std::cos(state_.angle);
+    double cos_a = std::cos(state_.angle);
+    double sin_a = std::sin(state_.angle);
+    double cos_p = std::cos(state_.roll);
+    double sin_p = std::sin(state_.roll);
 
     uint32_t adc_packed = 0;
     for (int i = 0; i < 8; ++i) {
         double offset = (i - 3.5) * 0.05;
-        double ch_x = sensor_x + offset * perp_x;
-        double ch_y = sensor_y + offset * perp_y;
-        double dist = get_distance_to_track(ch_x, ch_y);
+        // World coordinates of photodiode i
+        double ch_x = sensor_x - offset * cos_p * sin_a;
+        double ch_y = state_.pos.y + 0.5 * sin_a + offset * cos_p * cos_a;
+        double ch_z = state_.pos_z + offset * sin_p;
+        double dist = get_distance_to_track_3d(ch_x, ch_y, ch_z);
 
-        double intensity = std::exp(- (dist * dist) / (2.0 * 0.04 * 0.04));
+        double intensity = std::exp(- (dist * dist) / (2.0 * 0.05 * 0.05));
         uint32_t adc_val = std::clamp(static_cast<int>(intensity * 15.0), 0, 15);
         adc_packed |= (adc_val << (i * 4));
     }
@@ -1027,6 +1081,29 @@ double SpacePhysicsEngine::get_distance_to_track(double px, double py) const {
     return std::sqrt(min_dist_sq);
 }
 
+double SpacePhysicsEngine::get_distance_to_track_3d(double px, double py, double pz) const {
+    if (track_.empty()) return 0.0;
+    double min_dist_sq = 1e9;
+    for (const auto& pt : track_) {
+        if (std::abs(pt.x - px) > 2.0) continue;
+        double dx = px - pt.x;
+        double dy = py - pt.y;
+        double dz = pz - pt.z;
+        double d2 = dx*dx + dy*dy + dz*dz;
+        if (d2 < min_dist_sq) min_dist_sq = d2;
+    }
+    if (min_dist_sq > 1e8) {
+        for (const auto& pt : track_) {
+            double dx = px - pt.x;
+            double dy = py - pt.y;
+            double dz = pz - pt.z;
+            double d2 = dx*dx + dy*dy + dz*dz;
+            if (d2 < min_dist_sq) min_dist_sq = d2;
+        }
+    }
+    return std::sqrt(min_dist_sq);
+}
+
 double SpacePhysicsEngine::get_cross_track_error() const {
     if (stage_id_ == 2) {
         return state_.cable_vibration;
@@ -1038,13 +1115,21 @@ double SpacePhysicsEngine::get_cross_track_error() const {
         double r = std::sqrt(state_.pos.y * state_.pos.y + state_.pos_z * state_.pos_z);
         return (state_.pos.y >= 0.0) ? r : -r;
     }
-    double d = get_distance_to_track(state_.pos.x, state_.pos.y);
     double nominal_y = 0.0;
+    double nominal_z = 0.0;
     double x = state_.pos.x;
     if (x > 10.0 && x <= 25.0) {
-        nominal_y = 2.5 * std::sin((x - 10.0) / 15.0 * M_PI);
+        double ph = (x - 10.0) / 15.0 * M_PI;
+        nominal_y = 2.5 * std::sin(ph);
+        nominal_z = 1.5 * std::sin(ph);
     } else if (x > 25.0 && x <= 40.0) {
-        nominal_y = -2.5 * std::sin((x - 25.0) / 15.0 * M_PI);
+        double ph = (x - 25.0) / 15.0 * M_PI;
+        nominal_y = -2.5 * std::sin(ph);
+        nominal_z = 1.5 * std::sin(ph);
     }
-    return (state_.pos.y >= nominal_y) ? d : -d;
+    double dy = state_.pos.y - nominal_y;
+    double dz = state_.pos_z - nominal_z;
+    double d3d = std::sqrt(dy * dy + dz * dz);
+    return (dy >= 0.0) ? d3d : -d3d;
 }
+

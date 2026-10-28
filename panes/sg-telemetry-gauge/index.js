@@ -208,11 +208,19 @@ export default function SpaceTelemetryGauge() {
       )
     ),
 
-    // Attitude & Velocity Readouts
+    // Attitude & Velocity Readouts (4-cell grid)
     React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' } },
       React.createElement('div', { style: { background: '#0f172a', padding: '8px', borderRadius: '4px' } },
         React.createElement('span', { style: { color: '#64748b' } }, 'YAW ANGLE: '),
-        React.createElement('span', { style: { color: '#38bdf8' } }, `${(data.angle * 180 / Math.PI).toFixed(1)}°`)
+        React.createElement('span', { style: { color: '#38bdf8' } }, `${((data.yaw !== undefined ? data.yaw : data.angle) * 180 / Math.PI).toFixed(1)}°`)
+      ),
+      React.createElement('div', { style: { background: '#0f172a', padding: '8px', borderRadius: '4px' } },
+        React.createElement('span', { style: { color: '#64748b' } }, 'ROLL (BANK): '),
+        React.createElement('span', { style: { color: Math.abs(data.roll || 0) > 0.05 ? '#a855f7' : '#38bdf8' } }, `${((data.roll || 0) * 180 / Math.PI).toFixed(1)}°`)
+      ),
+      React.createElement('div', { style: { background: '#0f172a', padding: '8px', borderRadius: '4px' } },
+        React.createElement('span', { style: { color: '#64748b' } }, 'ALTITUDE Z: '),
+        React.createElement('span', { style: { color: '#38bdf8' } }, `${(data.pos_z || 0).toFixed(2)} m`)
       ),
       React.createElement('div', { style: { background: '#0f172a', padding: '8px', borderRadius: '4px' } },
         React.createElement('span', { style: { color: '#64748b' } }, 'FORWARD VEL: '),
