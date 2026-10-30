@@ -147,6 +147,14 @@
             },
             "title": "SG 3D Cyber Orbit Viewer"
         },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
+        },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
             "contentComponent": "uartTerminal",
@@ -179,15 +187,7 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
-        },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
-            "params": {
-                "_componentName": "registerTracer"
-            },
-            "title": "Tracer"
         }
     },
-    "activeGroup": "1"
+    "activeGroup": "5"
 }

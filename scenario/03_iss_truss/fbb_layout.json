@@ -21,10 +21,9 @@
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "dtsVisualizer",
-                                    "registerTracer"
+                                    "dtsVisualizer"
                                 ],
-                                "activeView": "registerTracer",
+                                "activeView": "dtsVisualizer",
                                 "id": "2"
                             },
                             "size": 575
@@ -45,7 +44,18 @@
                                 "activeView": "sg-orbit-viewer",
                                 "id": "7"
                             },
-                            "size": 706
+                            "size": 438
+                        },
+                        {
+                            "type": "leaf",
+                            "data": {
+                                "views": [
+                                    "registerTracer"
+                                ],
+                                "activeView": "registerTracer",
+                                "id": "5"
+                            },
+                            "size": 425
                         },
                         {
                             "type": "leaf",
@@ -56,7 +66,7 @@
                                 "activeView": "uartTerminal_vfpga_uart_1",
                                 "id": "3"
                             },
-                            "size": 454
+                            "size": 297
                         }
                     ],
                     "size": 959
@@ -130,14 +140,6 @@
             },
             "title": "DTS Visualizer & AI"
         },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
-            "params": {
-                "_componentName": "registerTracer"
-            },
-            "title": "Tracer"
-        },
         "gpioPanel": {
             "id": "gpioPanel",
             "contentComponent": "gpioPanel",
@@ -186,7 +188,15 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
+        },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
         }
     },
-    "activeGroup": "7"
+    "activeGroup": "5"
 }

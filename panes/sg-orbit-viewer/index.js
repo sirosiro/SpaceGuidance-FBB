@@ -84,13 +84,13 @@ export default function SpaceOrbitViewer3D() {
     basePitch: 0.0
   });
 
-  // Unified WebSocket Telemetry Bus (scenario:telemetry) with fallback
+  // Unified WebSocket Telemetry Bus (scenario:telemetry) with time-travel & fallback
   useEffect(() => {
-    const handleTelemetry = (data) => {
+    const handleTelemetry = (data, immediate = false) => {
       if (data && data.type && data.type !== 'space_guidance') return;
       telemetryRef.current = data;
       const now = Date.now();
-      if (now - lastUiUpdateRef.current >= 100) {
+      if (immediate || now - lastUiUpdateRef.current >= 100) {
         lastUiUpdateRef.current = now;
         setTelemetry(prev => ({ ...prev, ...data }));
       }
@@ -105,9 +105,35 @@ export default function SpaceOrbitViewer3D() {
 
     if (sock) {
       sock.on('scenario:telemetry', handleTelemetry);
-      return () => sock.off('scenario:telemetry', handleTelemetry);
-    } else {
-      const timer = setInterval(async () => {
+    }
+
+    // Historical Time-Travel scrubbing listener
+    const handleEffectiveTelemetry = (e) => {
+      if (e && e.detail) {
+        handleTelemetry(e.detail, true);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('fbb:telemetry:effective', handleEffectiveTelemetry);
+    }
+
+    // Cross-window BroadcastChannel sync listener
+    let syncChannel;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        syncChannel = new BroadcastChannel('fbb_dashboard_sync');
+        syncChannel.onmessage = (event) => {
+          const { type, payload } = event.data || {};
+          if (type === 'SYNC_TIME_TRAVEL' && payload?.snapshot?.telemetry) {
+            handleTelemetry(payload.snapshot.telemetry, true);
+          }
+        };
+      }
+    } catch {}
+
+    let fallbackTimer = null;
+    if (!sock) {
+      fallbackTimer = setInterval(async () => {
         try {
           let res = await fetch('/api/file?path=/tmp/fbb_scenario_telemetry.json');
           if (!res.ok) res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
@@ -117,8 +143,16 @@ export default function SpaceOrbitViewer3D() {
           }
         } catch (e) {}
       }, 100);
-      return () => clearInterval(timer);
     }
+
+    return () => {
+      if (sock) sock.off('scenario:telemetry', handleTelemetry);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('fbb:telemetry:effective', handleEffectiveTelemetry);
+      }
+      if (syncChannel) syncChannel.close();
+      if (fallbackTimer) clearInterval(fallbackTimer);
+    };
   }, []);
 
   // Cinema Mode: Auto-cycle camera angles with speed-adapted TRACK duration

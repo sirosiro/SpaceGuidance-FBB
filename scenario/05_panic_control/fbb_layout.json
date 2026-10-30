@@ -14,13 +14,23 @@
                                     "data": {
                                         "views": [
                                             "registerMonitor",
-                                            "dtsVisualizer",
-                                            "registerTracer"
+                                            "dtsVisualizer"
                                         ],
                                         "activeView": "registerMonitor",
                                         "id": "4"
                                     },
-                                    "size": 359
+                                    "size": 350
+                                },
+                                {
+                                    "type": "leaf",
+                                    "data": {
+                                        "views": [
+                                            "registerTracer"
+                                        ],
+                                        "activeView": "registerTracer",
+                                        "id": "2"
+                                    },
+                                    "size": 824
                                 },
                                 {
                                     "type": "leaf",
@@ -32,7 +42,7 @@
                                         "activeView": "sg-orbit-viewer",
                                         "id": "7"
                                     },
-                                    "size": 1403
+                                    "size": 588
                                 }
                             ],
                             "size": 590
@@ -120,14 +130,6 @@
             },
             "title": "DTS Visualizer & AI"
         },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
-            "params": {
-                "_componentName": "registerTracer"
-            },
-            "title": "Tracer"
-        },
         "sg-orbit-viewer": {
             "id": "sg-orbit-viewer",
             "contentComponent": "sg-orbit-viewer",
@@ -176,7 +178,15 @@
                 "_componentName": "sg-chaos-fdir"
             },
             "title": "SG Chaos FDIR & Scorecard"
+        },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
         }
     },
-    "activeGroup": "7"
+    "activeGroup": "4"
 }

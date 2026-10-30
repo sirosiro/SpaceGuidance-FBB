@@ -15,7 +15,7 @@
                                 "activeView": "registerMonitor",
                                 "id": "4"
                             },
-                            "size": 585
+                            "size": 495
                         },
                         {
                             "type": "leaf",
@@ -26,7 +26,7 @@
                                 "activeView": "dtsVisualizer",
                                 "id": "2"
                             },
-                            "size": 575
+                            "size": 665
                         }
                     ],
                     "size": 359
@@ -44,32 +44,22 @@
                                 "activeView": "sg-orbit-viewer",
                                 "id": "5"
                             },
-                            "size": 450
+                            "size": 650
                         },
                         {
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "registerTracer"
+                                    "registerTracer",
+                                    "uartTerminal_vfpga_uart_1"
                                 ],
                                 "activeView": "registerTracer",
                                 "id": "7"
                             },
-                            "size": 423
-                        },
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
-                                    "uartTerminal_vfpga_uart_1"
-                                ],
-                                "activeView": "uartTerminal_vfpga_uart_1",
-                                "id": "3"
-                            },
-                            "size": 287
+                            "size": 510
                         }
                     ],
-                    "size": 1035
+                    "size": 850
                 },
                 {
                     "type": "branch",
@@ -86,7 +76,7 @@
                                         "activeView": "sg-telemetry-gauge",
                                         "id": "6"
                                     },
-                                    "size": 360
+                                    "size": 452
                                 },
                                 {
                                     "type": "leaf",
@@ -97,10 +87,10 @@
                                         "activeView": "sg-chaos-fdir",
                                         "id": "8"
                                     },
-                                    "size": 364
+                                    "size": 457
                                 }
                             ],
-                            "size": 437
+                            "size": 426
                         },
                         {
                             "type": "leaf",
@@ -111,10 +101,10 @@
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 723
+                            "size": 734
                         }
                     ],
-                    "size": 724
+                    "size": 909
                 }
             ],
             "size": 1160
@@ -156,6 +146,14 @@
             },
             "title": "SG 3D Cyber Orbit Viewer"
         },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
+        },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
             "contentComponent": "uartTerminal",
@@ -188,15 +186,7 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
-        },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
-            "params": {
-                "_componentName": "registerTracer"
-            },
-            "title": "Tracer"
         }
     },
-    "activeGroup": "1"
+    "activeGroup": "7"
 }
