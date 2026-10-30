@@ -16,7 +16,8 @@
             "TORQUE_CMD      @ 0x1C",
             "SAFETY_LIMIT    @ 0x20",
             "WATCHDOG_KICK   @ 0x24",
-            "CHAOS_FAULT_INJ @ 0x28";
+            "CHAOS_FAULT_INJ @ 0x28",
+            "WHEEL_TORQUE_CMD @ 0x2C";
     };
 
     uart0: serial@e0001000 {

@@ -70,6 +70,11 @@ FBB_DEVICES = [
                 "name": "CHAOS_FAULT_INJ",
                 "offset": 40,
                 "direction": "RW"
+            },
+            {
+                "name": "WHEEL_TORQUE_CMD",
+                "offset": 44,
+                "direction": "RW"
             }
         ]
     },

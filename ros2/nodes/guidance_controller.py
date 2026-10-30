@@ -208,20 +208,26 @@ class SpaceGuidanceHardware:
                     shm_ext_loaded = True
             break
 
-        if not shm_ext_loaded and os.path.exists("/tmp/space_guidance_telemetry.json"):
-            for _ in range(3):
-                try:
-                    with open("/tmp/space_guidance_telemetry.json", "r") as jf:
-                        jdata = json.load(jf)
-                    for k in ["pos_z", "vel_z", "roll", "pitch", "yaw", "omega_x", "omega_y", "omega_z",
-                              "wheel_rpm_x", "wheel_rpm_y", "wheel_rpm_z", "thruster_health",
-                              "chaos_seed", "debris_azimuth", "debris_elevation",
-                              "damaged_thruster_1", "damaged_thruster_2"]:
-                        if k in jdata:
-                            res[k] = jdata[k]
+        if not shm_ext_loaded:
+            telem_path = None
+            for cand in ["/tmp/fbb_scenario_telemetry.json", "/tmp/space_guidance_telemetry.json"]:
+                if os.path.exists(cand):
+                    telem_path = cand
                     break
-                except Exception:
-                    time.sleep(0.001)
+            if telem_path:
+                for _ in range(3):
+                    try:
+                        with open(telem_path, "r") as jf:
+                            jdata = json.load(jf)
+                        for k in ["pos_z", "vel_z", "roll", "pitch", "yaw", "omega_x", "omega_y", "omega_z",
+                                  "wheel_rpm_x", "wheel_rpm_y", "wheel_rpm_z", "thruster_health",
+                                  "chaos_seed", "debris_azimuth", "debris_elevation",
+                                  "damaged_thruster_1", "damaged_thruster_2"]:
+                            if k in jdata:
+                                res[k] = jdata[k]
+                        break
+                    except Exception:
+                        time.sleep(0.001)
         return res
 
     def write_commands(self, thrust_x, thrust_y, torque=0.0, wheel_torque=0.0, fdir_mode=0, thrust_z=0.0,
