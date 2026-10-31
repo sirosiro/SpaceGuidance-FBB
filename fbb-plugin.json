@@ -4,6 +4,28 @@
   "vendor": "F-BB Community",
   "version": "1.0.0",
   "description": "Autonomous Space Guidance and Docking Challenge Plugin for FPGA-BoardlessBench",
+  "commands": [
+    {
+      "desc": "Stage 1: Asteroid Pipeline (2D Microgravity Line Tracking)",
+      "cmd": "fbb lab {PLUGIN_DIR}/scenario/01_asteroid_pipeline"
+    },
+    {
+      "desc": "Stage 2: Orbital Tether Climber (1D String Vibration Suppression)",
+      "cmd": "fbb lab {PLUGIN_DIR}/scenario/02_tether_climber"
+    },
+    {
+      "desc": "Stage 3: ISS Truss Inspector (3D Curved Rail Traverse)",
+      "cmd": "fbb lab {PLUGIN_DIR}/scenario/03_iss_truss"
+    },
+    {
+      "desc": "Stage 4: Deep Space Laser Docking (6-DoF Zero Friction Alignment)",
+      "cmd": "fbb lab {PLUGIN_DIR}/scenario/04_laser_docking"
+    },
+    {
+      "desc": "Stage EX: Panic Control (Debris Impact 3-Axis Autonomous Recovery)",
+      "cmd": "fbb lab {PLUGIN_DIR}/scenario/05_panic_control"
+    }
+  ],
   "peripherals": [
     {
       "bus": "axil",
