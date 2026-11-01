@@ -105,13 +105,54 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| + |\t
 
 ---
 
-## 3. ゲームプレイループとハッキングガイド
+## 3. シナリオフォルダ構成と各ファイルの役割 (Directory & File Structure)
+
+本シナリオフォルダ（`01_asteroid_pipeline/`）に含まれる各ファイルの役割と責務は以下の通りです：
+
+```text
+01_asteroid_pipeline/
+├── pilot.py                # 🎯【主要編集対象】自律飛行アルゴリズム・PD制御・姿勢誘導スクリプト (Python)
+├── main.c                  # 組み込みC言語ファームウェア（MMIO bridge / test_bin のソースコード）
+├── config.dts              # Device Tree 定義（UIO 0x43C00000 レジスタマップ・シリアル定義）
+├── fbb_layout.json         # Webダッシュボード画面レイアウト定義（3Dビューア、テレメトリゲージ等の配置）
+├── run_mission.sh          # 単体ミッション実行スクリプト（シミュレータデーモン + pilot.py の起動）
+├── run.sh                  # F-BB 連携用シナリオランナースクリプト（fbb lab / fbb test から自動呼出）
+├── test_chaos_fdir.py      # カオス・障害注入自動検証スクリプト（FDIR 異常系テスト）
+├── CMakeLists.txt          # main.c を test_bin へコンパイルするための CMake ビルド定義
+├── fbb_gdb.py              # GDB デバッグ支援スクリプト（fbb debug 実行時にレジスタマップを自動ロード）
+├── .gdbinit                # GDB 初期化スクリプト
+├── panes/ -> ../../panes   # DPPA UIペイン群へのシンボリックリンク（3D Cyber Orbit Viewer 等）
+├── images/                 # 機体レイアウト等のドキュメント用画像アセット
+├── vfpga_device_config.h   # [自動生成] config.dts から生成される C言語用レジスタマクロ定義
+└── README.md               # 本ドキュメント（ミッション仕様・機体緒元・制御理論解説）
+```
+
+### 各ファイルの役割と編集・利用ガイド
+
+| ファイル / ディレクトリ | 役割・用途 | ユーザー編集 | 概要と利用方法 |
+| :--- | :--- | :---: | :--- |
+| **`pilot.py`** | **自律航法パイロットスクリプト** | **◎ (主対象)** | **学習者・開発者が直接チューニングするメインスクリプト**。<br>50Hz（20ms）周期で動作し、光学センサ重心偏差に基づく PD 制御、3D バンク角計算、リアクションホイールおよび RCS の推力配分を自律実行します。 |
+| **`main.c`** | **組み込み C 言語ファームウェア** | ○ (任意) | UIO デバイス（`/dev/uio0`）経由で FPGA レジスタ空間（`0x43C00000`）へアクセスする C 言語ブリッジプログラムです。C 言語で自律制御器を実装したい場合や組み込みファームウェアの挙動を直接書き換える際に編集します。 |
+| **`config.dts`** | **デバイスツリー定義 (Device Tree Source)** | △ (上級者) | 探査機の制御レジスタマップ（`CR_CTRL`, `THRUST_CMD_X`, `TORQUE_CMD` 等）やシリアル通信（`/dev/ttyPS1`）のアドレス定義を記述したハードウェア仕様書です。レジスタ追加等のハードウェア拡張時に編集します。 |
+| **`fbb_layout.json`** | **ダッシュボード画面配置設定** | ○ (UI調整) | Web ダッシュボード（`http://localhost:8080`）で表示する DPPA ペイン（3D軌道ビューア、テレメトリゲージ、カオスFDIR等）の配置・グリッドサイズを定義しています。パネル配置をカスタマイズしたい場合に編集します。 |
+| **`run_mission.sh`** | **スタンドアロン実行スクリプト** | － (実行用) | 物理シミュレータデーモン（`space_guidance_daemon`）と `pilot.py` を順次起動し、ミッションを開始するシェルスクリプトです。ターミナルから直接 `./run_mission.sh` で実行できます。 |
+| **`run.sh`** | **F-BB 標準ランナースクリプト** | － (実行用) | F-BB の統合ランナー（`fbb lab` / `fbb test`）から自動的に呼び出され、デーモンと自律スクリプトのライフサイクル・終了処理を管理します。通常は直接編集不要です。 |
+| **`test_chaos_fdir.py`** | **カオス耐性・自動検証スクリプト** | ○ (テスト追加) | センサ断線、スラスタ推力低下、ジャイロバイアスドリフト等の擬似障害（Chaos Injection）を注入し、FDIR機動を自動テストするスクリプトです。フェイルセーフの堅牢性検証に活用します。 |
+| **`CMakeLists.txt`** | **CMake ビルドスクリプト** | － (ビルド用) | `main.c` をコンパイルして `test_bin` を生成するための CMake ビルド定義です。 |
+| **`fbb_gdb.py` / `.gdbinit`** | **GDB デバッグ支援スクリプト** | － (デバッグ用) | `fbb debug` 実行時に GDB 内から FPGA レジスタを名前付きで表示・追跡可能にする拡張スクリプト群です。 |
+| **`panes/`** | **DPPA UIペイン群（シンボリックリンク）** | ○ (UI開発) | Three.js を用いた 3D Cyber Orbit Viewer やテレメトリ計器、スコアボード等の Web UI 実装（プラグインルートの `panes/` への参照）です。 |
+| **`images/`** | **ドキュメントアセット** | － (閲覧用) | `spacecraft_hardware_layout.svg` などの機体配線図・座標系図面を格納しています。 |
+| **`vfpga_device_config.h`** | **自動生成 C ヘッダー** | × (自動生成) | `config.dts` から F-BB ビルドシステムによって自動生成されるレジスタオフセット定義マクロです（手動編集不可）。 |
+
+---
+
+## 4. ゲームプレイループとハッキングガイド
 
 ### (1) 編集対象ファイル
 プレイヤーがアルゴリズムやパラメータをチューニングする対象ファイル：
 ```text
-~/.fbb/plugins/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
-（※ローカル開発環境の場合は /workspaces/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py）
+plugins/SpaceGuidance-FBB/scenario/01_asteroid_pipeline/pilot.py
+（※VS Code の左サイドバーの plugins フォルダ、または Ctrl+P / Cmd+P から直接開けます）
 ```
 
 ### (2) 即時反映のやり方 (Rapid Re-flight Loop)
@@ -199,7 +240,7 @@ flowchart TD
 
 ---
 
-## 4. アーケード採点・公式審判システム (Official Referee SSOT)
+## 5. アーケード採点・公式審判システム (Official Referee SSOT)
 
 公平な競技性を保証するため、採点および合否判定は Python 側ではなく中央デーモン（`space_guidance_daemon.cpp`）の **`OfficialReferee` エンジン** が 100Hz 周期でオーソリテーティブに実施します。
 
@@ -227,7 +268,7 @@ $$\text{Final Score} = \text{Checkpoint Score} + \text{Fuel Bonus} + \text{Time 
 
 ---
 
-## 5. 攻略用 3大チューニングゾーン (Tune Zones)
+## 6. 攻略用 3大チューニングゾーン (Tune Zones)
 
 `pilot.py` 内のコメント領域 `=== TUNE ZONE ===` を書き換えてハイスコアを狙います：
 

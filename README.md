@@ -360,11 +360,16 @@ fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/05_panic_control
 > ```
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の分割画面が自動ロードされます：
-  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（自由視点回転、ズーム、カメラプリセット CHASE/FRONT/HERO/PATROL/TRACK/CINEMA）。Stage 1 の探査機、Stage 2 のピンチローラー式昇降ポッド＆GEOトーラスステーション＆小惑星基地、Stage 3 の立体トラス、Stage 4 の遠心力人工重力自転ステーション（ドッキングポート中心軸自転＆初期360度ランダム方位正対）、Stage EX のデブリ直撃ショックウェーブ＆12基スラスタ配置（破損ノズル赤色ブラケット）＆燃料蒸気リーク軌跡＆10個の浮遊デブリ群＆グリーン安全ゲートリングを完全3D描画。**F-BB の波形シーク（Time-Travel Co-Debugging）と完全連動**し、波形クリックやドラッグ、キーボード（`◄`/`►`, `Shift+◄/►`）操作に合わせて過去フレームの機体3D姿勢・位置・スラスタ噴射状態を瞬時に巻き戻し同期表示可能。
-  * **Official Referee Scorecard & Chaos FDIR**: リアルタイム公式スコア、確定フライトランク（Grade S/A/B/C）、チェックポイント通過進捗、審判イベントログを表示。カオス障害注入および `[Restart Scenario]` による即時再フライトが可能。
-  * **SG Telemetry & C&W**: 推進剤残量バー、Master C&W 警報灯、姿勢角・速度計器。
-  * **Registers & Tracer**: 全レジスタのリアルタイム16進数監視および時系列波形プロット。オシロスコープ波形シーク（Time-Travel Co-Debugging）対応により、波形上の任意の瞬間をクリックまたはキーボードで選択すると、過去のレジスタ値・GPIO状態・3D姿勢が完全同期して時間跳躍表示されます（`Esc` キーまたは `[LIVEへ復帰]` で即座に最新状態へ復帰）。
+  * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（CHASE/FRONT/HERO/PATROL/TRACK/CINEMA 視点切替）。F-BB の波形シーク（Time-Travel Co-Debugging）と完全連動し、過去フレームの機体姿勢・位置・スラスタ噴射状態を瞬時に巻き戻し同期表示可能。
+  * **SG Chaos FDIR & Scorecard**: 探査機の自律障害復旧（FDIR 4フェーズ遷移）、公式競技採点（`OfficialReferee` SSOT）、横偏差ベクトルゲージ、および Stage EX 破損スラスタ健全性マトリクスをリアルタイム表示。
+    > 👉 **詳細仕様・SVG画面図解**: [panes/README.md#1-sg-chaos-fdir--scorecard](panes/README.md#1-sg-chaos-fdir--scorecard)
+  * **SG Telemetry & C&W**: NASA 宇宙機規格の 3 色マスター警報盤（Caution & Warning）、推進剤デルタV燃料計、リアクションホイール飽和監視、光学センサ太陽グレア発光、および 2×2 姿勢・速度計器。
+    > 👉 **詳細仕様・SVG画面図解**: [panes/README.md#2-sg-telemetry--cw](panes/README.md#2-sg-telemetry--cw)
+  * **Registers & Tracer**: 全レジスタのリアルタイム 16 進数監視およびオシロスコープ波形プロット（Time-Travel シーク対応）。
   * **UART: serial**: 探査機がシリアル出力する航法テレメトリログ。
+
+> 💡 **各専用ペインの UI 仕様・グラフィック図解・インジケータ解説**:  
+> [panes/README.md](panes/README.md) にて SVG ビジュアル付きで完全詳解されています。
 
 ### ③ スタンドアローン直接実行 (CLI 高速モード)
 Web ダッシュボードを介さず、コンソールのみで物理シミュレーションと自律航法スクリプトを高速実行する場合：

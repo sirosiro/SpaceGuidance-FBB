@@ -1,0 +1,228 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 920" width="100%" height="100%" style="background:#060a12; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;">
+  <defs>
+    <!-- Background Grid -->
+    <pattern id="fdir-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#0e1726" stroke-width="0.8"/>
+    </pattern>
+
+    <!-- Glow Filters -->
+    <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-amber" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-red" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="card-shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="scoreBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="blueBanner" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#075985"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="100%" height="100%" fill="#060a12"/>
+  <rect width="100%" height="100%" fill="url(#fdir-grid)"/>
+
+  <!-- Outer Window Frame -->
+  <rect x="15" y="15" width="570" height="890" rx="10" fill="#090d16" stroke="#1e293b" stroke-width="1.5" filter="url(#card-shadow)"/>
+
+  <!-- Pane Header Bar -->
+  <rect x="15" y="15" width="570" height="40" rx="10" fill="#0f172a"/>
+  <path d="M 15 45 L 585 45" stroke="#1e293b" stroke-width="1"/>
+  <circle cx="35" cy="35" r="5" fill="#ef4444"/>
+  <circle cx="50" cy="35" r="5" fill="#f59e0b"/>
+  <circle cx="65" cy="35" r="5" fill="#10b981"/>
+  <text x="85" y="39" fill="#94a3b8" font-size="12" font-weight="bold" letter-spacing="1">SG CHAOS FDIR &amp; SCORECARD</text>
+  <rect x="440" y="25" width="130" height="20" rx="4" fill="#1e293b"/>
+  <text x="448" y="39" fill="#38bdf8" font-size="10" font-weight="bold">● LIVE TELEMETRY</text>
+
+  <!-- 1. FDIR Flight Mode Banner -->
+  <g transform="translate(35, 70)">
+    <rect width="530" height="38" rx="6" fill="url(#blueBanner)" stroke="#38bdf8" stroke-width="1" filter="url(#glow-cyan)"/>
+    <text x="265" y="24" fill="#e0f2fe" font-size="12" font-weight="bold" text-anchor="middle" letter-spacing="0.5">
+      FLIGHT MODE: [ PHASE 1: ACTIVE DETUMBLE (REACTION WHEEL ONLINE) ]
+    </text>
+  </g>
+
+  <!-- 2. Official Referee Scorecard (SSOT) -->
+  <g transform="translate(35, 122)">
+    <rect width="530" height="84" rx="8" fill="url(#scoreBg)" stroke="#3b82f6" stroke-width="1.2" stroke-opacity="0.6"/>
+    <!-- Left: Score & Event -->
+    <text x="18" y="22" fill="#94a3b8" font-size="10" font-weight="bold" letter-spacing="1">OFFICIAL REFEREE (SSOT)</text>
+    <text x="18" y="52" fill="#38bdf8" font-size="24" font-weight="900" filter="url(#glow-cyan)">4,850 <tspan font-size="14" fill="#7dd3fc">PTS</tspan></text>
+    <text x="18" y="72" fill="#86efac" font-size="11">✓ Gate PASS [PERFECT] (+1,000 pts)</text>
+
+    <!-- Right: Grade & Checkpoints -->
+    <rect x="420" y="16" width="92" height="28" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#22c55e" stroke-width="1"/>
+    <text x="466" y="35" fill="#4ade80" font-size="13" font-weight="bold" text-anchor="middle" filter="url(#glow-green)">GRADE S</text>
+    <text x="512" y="68" fill="#94a3b8" font-size="11" text-anchor="end">Checkpoints: <tspan fill="#f1f5f9" font-weight="bold">6</tspan> / 9</text>
+  </g>
+
+  <!-- 3. Cross-Track Error Vector (Δd) -->
+  <g transform="translate(35, 220)">
+    <rect width="530" height="66" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="16" y="20" fill="#94a3b8" font-size="10" font-weight="bold" letter-spacing="0.8">CROSS-TRACK ERROR VECTOR (Δd)</text>
+    <text x="16" y="46" fill="#22c55e" font-size="20" font-weight="bold" filter="url(#glow-green)">+0.038 m <tspan font-size="11" fill="#64748b">(Tolerance: ±0.500 m)</tspan></text>
+    <!-- Vector Bar Container -->
+    <rect x="16" y="54" width="498" height="6" rx="3" fill="#1e293b"/>
+    <!-- Center Line Indicator -->
+    <line x1="265" y1="52" x2="265" y2="62" stroke="#64748b" stroke-width="1.5"/>
+    <!-- Active Offset Bar -->
+    <rect x="265" y="54" width="38" height="6" rx="3" fill="#22c55e"/>
+  </g>
+
+  <!-- 4. Stage EX Panic Control Widget Container -->
+  <g transform="translate(35, 300)">
+    <rect width="530" height="470" rx="8" fill="#0c1220" stroke="#334155" stroke-width="1.2"/>
+    <rect x="0" y="0" width="530" height="28" rx="8" fill="#172554"/>
+    <path d="M 0 28 L 530 28" stroke="#1e3a8a" stroke-width="1"/>
+    <text x="14" y="19" fill="#93c5fd" font-size="10" font-weight="bold" letter-spacing="1">⚡ STAGE EX: PANIC CONTROL &amp; 3D COLLISION RESTORATION</text>
+
+    <!-- (A) 3-Axis Tumbling Rate (P, Q, R) -->
+    <g transform="translate(14, 38)">
+      <text x="0" y="12" fill="#94a3b8" font-size="10" font-weight="bold">3-AXIS TUMBLING RATE (P, Q, R)</text>
+      <text x="502" y="12" fill="#f87171" font-size="10" font-weight="bold" text-anchor="end">CRITICAL 3D TUMBLE</text>
+
+      <!-- 3 Axis Boxes -->
+      <g transform="translate(0, 20)">
+        <!-- Roll P -->
+        <rect x="0" y="0" width="160" height="42" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="#334155" stroke-width="1"/>
+        <text x="80" y="15" fill="#94a3b8" font-size="9" text-anchor="middle">ROLL (P)</text>
+        <text x="80" y="34" fill="#f87171" font-size="14" font-weight="bold" text-anchor="middle">+42.5°/s</text>
+
+        <!-- Pitch Q -->
+        <rect x="171" y="0" width="160" height="42" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="#334155" stroke-width="1"/>
+        <text x="251" y="15" fill="#94a3b8" font-size="9" text-anchor="middle">PITCH (Q)</text>
+        <text x="251" y="34" fill="#4ade80" font-size="14" font-weight="bold" text-anchor="middle">-1.8°/s</text>
+
+        <!-- Yaw R -->
+        <rect x="342" y="0" width="160" height="42" rx="4" fill="rgba(15, 23, 42, 0.9)" stroke="#334155" stroke-width="1"/>
+        <text x="422" y="15" fill="#94a3b8" font-size="9" text-anchor="middle">YAW (R)</text>
+        <text x="422" y="34" fill="#f87171" font-size="14" font-weight="bold" text-anchor="middle">+118.2°/s</text>
+      </g>
+    </g>
+
+    <!-- (B) 3-Axis Reaction Wheel Cluster RPM -->
+    <g transform="translate(14, 118)">
+      <text x="0" y="12" fill="#94a3b8" font-size="10" font-weight="bold">REACTION WHEEL CLUSTER (3-AXIS RPM)</text>
+      <g transform="translate(0, 20)">
+        <!-- RW-X -->
+        <rect x="0" y="0" width="160" height="38" rx="4" fill="rgba(15, 23, 42, 0.8)" stroke="#1e293b" stroke-width="1"/>
+        <text x="80" y="14" fill="#64748b" font-size="9" text-anchor="middle">RW-X (Roll)</text>
+        <text x="80" y="30" fill="#38bdf8" font-size="12" font-weight="bold" text-anchor="middle">+1,240 RPM</text>
+
+        <!-- RW-Y -->
+        <rect x="171" y="0" width="160" height="38" rx="4" fill="rgba(15, 23, 42, 0.8)" stroke="#1e293b" stroke-width="1"/>
+        <text x="251" y="14" fill="#64748b" font-size="9" text-anchor="middle">RW-Y (Pitch)</text>
+        <text x="251" y="30" fill="#38bdf8" font-size="12" font-weight="bold" text-anchor="middle">-850 RPM</text>
+
+        <!-- RW-Z -->
+        <rect x="342" y="0" width="160" height="38" rx="4" fill="rgba(15, 23, 42, 0.8)" stroke="#1e293b" stroke-width="1"/>
+        <text x="422" y="14" fill="#64748b" font-size="9" text-anchor="middle">RW-Z (Yaw)</text>
+        <text x="422" y="30" fill="#f59e0b" font-size="12" font-weight="bold" text-anchor="middle">+4,820 RPM</text>
+      </g>
+    </g>
+
+    <!-- (C) Chaos Seed & Kinetic Impact Vector -->
+    <g transform="translate(14, 190)">
+      <rect width="502" height="32" rx="4" fill="rgba(30, 41, 59, 0.7)" stroke="#334155" stroke-width="1"/>
+      <text x="14" y="20" fill="#94a3b8" font-size="10">CHAOS SEED: <tspan fill="#f59e0b" font-weight="bold">0x1337</tspan></text>
+      <text x="488" y="20" fill="#94a3b8" font-size="10" text-anchor="end">COLLISION: <tspan fill="#38bdf8" font-weight="bold">STBD UPPER (+Z) (-112°, +18°)</tspan></text>
+    </g>
+
+    <!-- (D) 12-Channel Thruster Topology Grid -->
+    <g transform="translate(14, 236)">
+      <text x="0" y="12" fill="#94a3b8" font-size="10" font-weight="bold">FULL 6-DOF RCS THRUSTER HEALTH (12-CH MATRIX)</text>
+      <g transform="translate(0, 20)">
+        <!-- Row 1: T0..T3 (Forward & Reverse) -->
+        <!-- T0: OK -->
+        <rect x="0" y="0" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="59" y="15" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T0:Fwd-L</text>
+        <text x="59" y="28" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+        <!-- T1: OK -->
+        <rect x="128" y="0" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="187" y="15" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T1:Fwd-R</text>
+        <text x="187" y="28" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+        <!-- T2: OK -->
+        <rect x="256" y="0" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="315" y="15" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T2:Rev-L</text>
+        <text x="315" y="28" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+        <!-- T3: DEAD -->
+        <rect x="384" y="0" width="118" height="34" rx="4" fill="rgba(239, 68, 68, 0.25)" stroke="#991b1b" stroke-width="1"/>
+        <text x="443" y="15" fill="#f87171" font-size="9" font-weight="bold" text-anchor="middle">T3:Rev-R</text>
+        <text x="443" y="28" fill="#f87171" font-size="8" text-anchor="middle">DEAD</text>
+
+        <!-- Row 2: T4..T7 (Lateral / Translation) -->
+        <!-- T4: OK -->
+        <rect x="0" y="42" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="59" y="57" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T4:Lat-P</text>
+        <text x="59" y="70" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+        <!-- T5: DEAD -->
+        <rect x="128" y="42" width="118" height="34" rx="4" fill="rgba(239, 68, 68, 0.25)" stroke="#991b1b" stroke-width="1"/>
+        <text x="187" y="57" fill="#f87171" font-size="9" font-weight="bold" text-anchor="middle">T5:Lat-P</text>
+        <text x="187" y="70" fill="#f87171" font-size="8" text-anchor="middle">DEAD</text>
+        <!-- T6: OK -->
+        <rect x="256" y="42" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="315" y="57" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T6:Lat-S</text>
+        <text x="315" y="70" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+        <!-- T7: OK -->
+        <rect x="384" y="42" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="443" y="57" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T7:Lat-S</text>
+        <text x="443" y="70" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+
+        <!-- Row 3: T8..T11 (Vertical Dorsal/Ventral) -->
+        <!-- T8: OK -->
+        <rect x="0" y="84" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="59" y="99" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T8:Dor-F</text>
+        <text x="59" y="112" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+        <!-- T9: OK -->
+        <rect x="128" y="84" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="187" y="99" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T9:Ven-F</text>
+        <text x="187" y="112" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+        <!-- T10: DEAD -->
+        <rect x="256" y="84" width="118" height="34" rx="4" fill="rgba(239, 68, 68, 0.25)" stroke="#991b1b" stroke-width="1"/>
+        <text x="315" y="99" fill="#f87171" font-size="9" font-weight="bold" text-anchor="middle">T10:Dor-A</text>
+        <text x="315" y="112" fill="#f87171" font-size="8" text-anchor="middle">DEAD</text>
+        <!-- T11: OK -->
+        <rect x="384" y="84" width="118" height="34" rx="4" fill="rgba(34, 197, 94, 0.15)" stroke="#166534" stroke-width="1"/>
+        <text x="443" y="99" fill="#4ade80" font-size="9" font-weight="bold" text-anchor="middle">T11:Ven-A</text>
+        <text x="443" y="112" fill="#4ade80" font-size="8" text-anchor="middle">OK</text>
+      </g>
+    </g>
+
+    <!-- Note on SysID recovery -->
+    <text x="14" y="398" fill="#64748b" font-size="9">※ Faulted nozzles isolated via Online SysID. Escape trajectory re-computed.</text>
+  </g>
+
+  <!-- 5. Hardware Defense Tally -->
+  <g transform="translate(35, 784)">
+    <rect width="530" height="74" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+    <text x="14" y="20" fill="#94a3b8" font-size="10" font-weight="bold" letter-spacing="1">HARDWARE DEFENSE TALLY</text>
+    <line x1="14" y1="26" x2="516" y2="26" stroke="#1e293b" stroke-width="1"/>
+    <!-- Line 1 -->
+    <text x="14" y="44" fill="#cbd5e1" font-size="11">ECC DISCARDED:</text>
+    <text x="516" y="44" fill="#38bdf8" font-size="11" font-weight="bold" text-anchor="end">0 pkts</text>
+    <!-- Line 2 -->
+    <text x="14" y="62" fill="#cbd5e1" font-size="11">WDG INTERLOCK:</text>
+    <text x="516" y="62" fill="#22c55e" font-size="11" font-weight="bold" text-anchor="end" filter="url(#glow-green)">ACTIVE (ARMED)</text>
+  </g>
+</svg>
+

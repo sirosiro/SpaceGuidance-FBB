@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 520" width="100%" height="100%" style="background:#060a12; font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;">
+  <defs>
+    <!-- Background Grid -->
+    <pattern id="telem-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#0e1726" stroke-width="0.8"/>
+    </pattern>
+
+    <!-- Glow Filters -->
+    <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-amber" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-red-pulse" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="glow-purple" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="panel-shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="100%" height="100%" fill="#060a12"/>
+  <rect width="100%" height="100%" fill="url(#telem-grid)"/>
+
+  <!-- Outer Window Frame -->
+  <rect x="15" y="15" width="570" height="490" rx="10" fill="#090d16" stroke="#1e293b" stroke-width="1.5" filter="url(#panel-shadow)"/>
+
+  <!-- Pane Header Bar -->
+  <rect x="15" y="15" width="570" height="40" rx="10" fill="#0f172a"/>
+  <path d="M 15 45 L 585 45" stroke="#1e293b" stroke-width="1"/>
+  <circle cx="35" cy="35" r="5" fill="#ef4444"/>
+  <circle cx="50" cy="35" r="5" fill="#f59e0b"/>
+  <circle cx="65" cy="35" r="5" fill="#10b981"/>
+  <text x="85" y="39" fill="#94a3b8" font-size="12" font-weight="bold" letter-spacing="1">SG TELEMETRY &amp; C&amp;W</text>
+  <rect x="440" y="25" width="130" height="20" rx="4" fill="#1e293b"/>
+  <text x="448" y="39" fill="#38bdf8" font-size="10" font-weight="bold">● LIVE TELEMETRY</text>
+
+  <!-- 1. Master C&W Annunciator Header (3-Color Grid) -->
+  <g transform="translate(35, 70)">
+    <!-- Box 1: WARN / RED ALERT (Inactive / Standby) -->
+    <rect x="0" y="0" width="168" height="34" rx="4" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="84" y="22" fill="#64748b" font-size="10" font-weight="bold" text-anchor="middle">WARN / RED ALERT</text>
+
+    <!-- Box 2: CAUTION (LOS) (Inactive / Standby) -->
+    <rect x="180" y="0" width="168" height="34" rx="4" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="264" y="22" fill="#64748b" font-size="10" font-weight="bold" text-anchor="middle">CAUTION (LOS)</text>
+
+    <!-- Box 3: NOMINAL (Active Green) -->
+    <rect x="360" y="0" width="170" height="34" rx="4" fill="#22c55e" stroke="#4ade80" stroke-width="1.2" filter="url(#glow-green)"/>
+    <text x="445" y="22" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="0.5">NOMINAL</text>
+
+    <!-- Sub-line separator -->
+    <line x1="0" y1="46" x2="530" y2="46" stroke="#1e293b" stroke-width="1"/>
+  </g>
+
+  <!-- 2. Propulsion Delta-V Fuel Bar -->
+  <g transform="translate(35, 134)">
+    <text x="0" y="14" fill="#cbd5e1" font-size="11" font-weight="bold">PROPULSION DELTA-V:</text>
+    <text x="530" y="14" fill="#38bdf8" font-size="13" font-weight="bold" text-anchor="end" filter="url(#glow-cyan)">84.5%</text>
+    <!-- Bar Container -->
+    <rect x="0" y="22" width="530" height="10" rx="5" fill="#1e293b"/>
+    <!-- Active Level (84.5%) -->
+    <rect x="0" y="22" width="448" height="10" rx="5" fill="#0284c7"/>
+  </g>
+
+  <!-- 3. Reaction Wheel (Yaw / Z) Momentum Gauge -->
+  <g transform="translate(35, 182)">
+    <text x="0" y="14" fill="#cbd5e1" font-size="11" font-weight="bold">REACTION WHEEL (YAW / Z):</text>
+    <text x="530" y="14" fill="#f59e0b" font-size="12" font-weight="bold" text-anchor="end" filter="url(#glow-amber)">+4,250 RPM <tspan font-size="10" fill="#fde68a">[WARNING ZONE]</tspan></text>
+    <!-- Bar Container -->
+    <rect x="0" y="22" width="530" height="10" rx="5" fill="#1e293b"/>
+    <!-- Active Level (4250 / 6000 = 70.8%) -->
+    <rect x="0" y="22" width="375" height="10" rx="5" fill="#f59e0b"/>
+    <!-- Sub-axis readouts -->
+    <g transform="translate(0, 42)">
+      <text x="0" y="0" fill="#94a3b8" font-size="10">RW-X (Roll): <tspan fill="#38bdf8" font-weight="bold">+320 RPM</tspan></text>
+      <text x="530" y="0" fill="#94a3b8" font-size="10" text-anchor="end">RW-Y (Pitch): <tspan fill="#38bdf8" font-weight="bold">-140 RPM</tspan></text>
+    </g>
+  </g>
+
+  <!-- 4. Optical Sensor Centroid Box (with Solar Glare Crimson Pulse Glow) -->
+  <g transform="translate(35, 246)">
+    <!-- Glowing Red Bezel -->
+    <rect x="0" y="0" width="530" height="78" rx="6" fill="#110d14" stroke="#ef4444" stroke-width="2" filter="url(#glow-red-pulse)"/>
+    <text x="16" y="22" fill="#fca5a5" font-size="10" font-weight="bold" letter-spacing="0.5">OPTICAL SENSOR CENTROID</text>
+    <text x="16" y="52" fill="#ef4444" font-size="20" font-weight="900" letter-spacing="0.8">[SATURATED: SOLAR GLARE]</text>
+    <text x="514" y="52" fill="#f87171" font-size="11" text-anchor="end">8/8 CH SATURATED</text>
+  </g>
+
+  <!-- 5. Spacecraft Attitude & Velocity Grid (2x2 Grid) -->
+  <g transform="translate(35, 342)">
+    <g transform="translate(0, 0)">
+      <!-- Cell 1: Yaw Angle -->
+      <g transform="translate(0, 0)">
+        <rect width="258" height="64" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+        <text x="14" y="22" fill="#64748b" font-size="10" font-weight="bold">YAW ANGLE: </text>
+        <text x="14" y="48" fill="#38bdf8" font-size="18" font-weight="bold" filter="url(#glow-cyan)">+14.2°</text>
+      </g>
+
+      <!-- Cell 2: Roll (Bank) - Emphasized in Purple for Bank-to-Translate -->
+      <g transform="translate(272, 0)">
+        <rect width="258" height="64" rx="6" fill="#160f26" stroke="#9333ea" stroke-width="1.2" stroke-opacity="0.8"/>
+        <text x="14" y="22" fill="#c084fc" font-size="10" font-weight="bold">ROLL (BANK): </text>
+        <text x="14" y="48" fill="#c084fc" font-size="18" font-weight="bold" filter="url(#glow-purple)">+31.4°</text>
+      </g>
+
+      <!-- Cell 3: Altitude Z -->
+      <g transform="translate(0, 74)">
+        <rect width="258" height="64" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+        <text x="14" y="22" fill="#64748b" font-size="10" font-weight="bold">ALTITUDE Z: </text>
+        <text x="14" y="48" fill="#38bdf8" font-size="18" font-weight="bold" filter="url(#glow-cyan)">+1.48 m</text>
+      </g>
+
+      <!-- Cell 4: Forward Velocity -->
+      <g transform="translate(272, 74)">
+        <rect width="258" height="64" rx="6" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+        <text x="14" y="22" fill="#64748b" font-size="10" font-weight="bold">FORWARD VEL: </text>
+        <text x="14" y="48" fill="#38bdf8" font-size="18" font-weight="bold" filter="url(#glow-cyan)">1.85 m/s</text>
+      </g>
+    </g>
+  </g>
+</svg>
