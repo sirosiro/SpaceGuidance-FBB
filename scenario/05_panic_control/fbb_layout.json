@@ -19,7 +19,7 @@
                                         "activeView": "registerMonitor",
                                         "id": "4"
                                     },
-                                    "size": 350
+                                    "size": 374
                                 },
                                 {
                                     "type": "leaf",
@@ -30,7 +30,7 @@
                                         "activeView": "registerTracer",
                                         "id": "2"
                                     },
-                                    "size": 824
+                                    "size": 680
                                 },
                                 {
                                     "type": "leaf",
@@ -42,10 +42,10 @@
                                         "activeView": "sg-orbit-viewer",
                                         "id": "7"
                                     },
-                                    "size": 588
+                                    "size": 708
                                 }
                             ],
-                            "size": 590
+                            "size": 567
                         },
                         {
                             "type": "branch",
@@ -54,12 +54,13 @@
                                     "type": "leaf",
                                     "data": {
                                         "views": [
-                                            "chaosEngine"
+                                            "chaosEngine",
+                                            "sg-pilot-editor"
                                         ],
-                                        "activeView": "chaosEngine",
+                                        "activeView": "sg-pilot-editor",
                                         "id": "1"
                                     },
-                                    "size": 1042
+                                    "size": 974
                                 },
                                 {
                                     "type": "leaf",
@@ -70,10 +71,10 @@
                                         "activeView": "uartTerminal_vfpga_uart_1",
                                         "id": "3"
                                     },
-                                    "size": 720
+                                    "size": 788
                                 }
                             ],
-                            "size": 570
+                            "size": 593
                         }
                     ],
                     "size": 1762
@@ -90,7 +91,7 @@
                                 "activeView": "sg-telemetry-gauge",
                                 "id": "6"
                             },
-                            "size": 303
+                            "size": 462
                         },
                         {
                             "type": "leaf",
@@ -101,7 +102,7 @@
                                 "activeView": "sg-chaos-fdir",
                                 "id": "8"
                             },
-                            "size": 857
+                            "size": 698
                         }
                     ],
                     "size": 356
@@ -130,6 +131,14 @@
             },
             "title": "DTS Visualizer & AI"
         },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
+        },
         "sg-orbit-viewer": {
             "id": "sg-orbit-viewer",
             "contentComponent": "sg-orbit-viewer",
@@ -153,6 +162,14 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
+        },
+        "sg-pilot-editor": {
+            "id": "sg-pilot-editor",
+            "contentComponent": "sg-pilot-editor",
+            "params": {
+                "_componentName": "sg-pilot-editor"
+            },
+            "title": "SG Pilot Code Editor"
         },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
@@ -178,15 +195,7 @@
                 "_componentName": "sg-chaos-fdir"
             },
             "title": "SG Chaos FDIR & Scorecard"
-        },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
-            "params": {
-                "_componentName": "registerTracer"
-            },
-            "title": "Tracer"
         }
     },
-    "activeGroup": "4"
+    "activeGroup": "1"
 }

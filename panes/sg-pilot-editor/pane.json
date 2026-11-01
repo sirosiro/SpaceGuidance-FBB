@@ -1,0 +1,8 @@
+{
+  "id": "sg-pilot-editor",
+  "title": "SG Pilot Code Editor",
+  "icon": "FileCode",
+  "category": "SpaceGuidance",
+  "entry": "index.js"
+}
+

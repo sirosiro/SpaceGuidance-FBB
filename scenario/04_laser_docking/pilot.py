@@ -21,10 +21,13 @@ def run_pilot():
     print("[Pilot] Range: 50m Approach Corridor. Target: Rotating Port #01.")
     print("[Pilot] Sensors: 4-Quadrant Photodiode (QPD) + Minimum-Impulse RCS.\n")
 
+    # === TUNE ZONE 1: 光軸追従・姿勢同期ゲイン ===
     kp_los = 1.60              # 光軸中心引き込みゲイン (横並進補正)
     kd_los = 0.95              # 光軸ドリフト速度ダンピング
     kp_att = 3.50              # 姿勢角・回転同期アライメントゲイン
     kd_att = 1.80              # 角速度ダンピング
+
+    # === TUNE ZONE 2: ドッキング接触速度 ===
     v_contact_target = 0.018   # 目標接触速度 (0.005 ~ 0.035 m/s)
 
     checkpoint_dist = [40.0, 30.0, 20.0, 10.0, 5.0, 2.0, 1.0]

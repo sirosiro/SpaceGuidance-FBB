@@ -365,6 +365,8 @@ fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/05_panic_control
     > 👉 **詳細仕様・SVG画面図解**: [panes/README.md#1-sg-chaos-fdir--scorecard](panes/README.md#1-sg-chaos-fdir--scorecard)
   * **SG Telemetry & C&W**: NASA 宇宙機規格の 3 色マスター警報盤（Caution & Warning）、推進剤デルタV燃料計、リアクションホイール飽和監視、光学センサ太陽グレア発光、および 2×2 姿勢・速度計器。
     > 👉 **詳細仕様・SVG画面図解**: [panes/README.md#2-sg-telemetry--cw](panes/README.md#2-sg-telemetry--cw)
+  * **SG Pilot Code Editor**: 外部エディタ不要でブラウザ上から `pilot.py` を直接チューニング・保存（`Ctrl+S`）できるゼロ依存の軽量 Python エディタ。TUNE ZONE クイックジャンプ、アイコン起動式 Find & Replace、および初期コードへの一括復元（`[↩ Revert Original]`）機能を搭載。
+    > 👉 **詳細仕様・操作方法**: [panes/README.md#4-sg-pilot-code-editor-ブラウザ内自律航法スクリプトエディタ](panes/README.md#4-sg-pilot-code-editor-ブラウザ内自律航法スクリプトエディタ)
   * **Registers & Tracer**: 全レジスタのリアルタイム 16 進数監視およびオシロスコープ波形プロット（Time-Travel シーク対応）。
   * **UART: serial**: 探査機がシリアル出力する航法テレメトリログ。
 
@@ -419,7 +421,8 @@ SpaceGuidance-FBB/
 └── panes/                        # DPPA Web ダッシュボード動的ペイン
     ├── sg-orbit-viewer/          # 3D サイバー・ワイヤーフレーム描画
     ├── sg-telemetry-gauge/       # テレメトリ＆C&W レッドアラート
-    └── sg-chaos-fdir/            # 公式審判スコアカード＆カオス FDIR コンソール
+    ├── sg-chaos-fdir/            # 公式審判スコアカード＆カオス FDIR コンソール
+    └── sg-pilot-editor/          # 軽量 Python スクリプトエディタ (pilot.py)
 ```
 
 ---
