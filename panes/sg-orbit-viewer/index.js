@@ -424,17 +424,23 @@ export default function SpaceOrbitViewer3D() {
     geoStationGroup.add(new THREE.LineSegments(solarGeo, new THREE.LineBasicMaterial({ color: 0x0369a1 })));
     stage2Group.add(geoStationGroup);
 
-    // Tether Dynamic Line (100 segments from X=0 to X=100)
+    // Tether Dynamic Line (100 segments from X=0 to X=100) with Vertex Color Tension Heatmap
     const tetherSegCount = 101;
     const tetherPositions = new Float32Array(tetherSegCount * 3);
+    const tetherColors = new Float32Array(tetherSegCount * 3);
     for (let i = 0; i < tetherSegCount; i++) {
       tetherPositions[i * 3 + 0] = i;
       tetherPositions[i * 3 + 1] = 0;
       tetherPositions[i * 3 + 2] = 0;
+      // Default nominal cyan: #38bdf8 (r=0.22, g=0.74, b=0.97)
+      tetherColors[i * 3 + 0] = 0.22;
+      tetherColors[i * 3 + 1] = 0.74;
+      tetherColors[i * 3 + 2] = 0.97;
     }
     const tetherGeo = new THREE.BufferGeometry();
     tetherGeo.setAttribute('position', new THREE.BufferAttribute(tetherPositions, 3));
-    const tetherMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+    tetherGeo.setAttribute('color', new THREE.BufferAttribute(tetherColors, 3));
+    const tetherMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 3 });
     const tetherLine = new THREE.Line(tetherGeo, tetherMat);
     stage2Group.add(tetherLine);
 
@@ -1363,6 +1369,58 @@ export default function SpaceOrbitViewer3D() {
     climberGeo.setAttribute('position', new THREE.Float32BufferAttribute(climberPts, 3));
     climberGroup.add(new THREE.LineSegments(climberGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 })));
 
+    // Heavy Towed Orbital Cargo Container (400kg Payload Module)
+    const cargoPts = [];
+    // 1. Dual Heavy Hydraulic Tow Coupling Arms & Dampers
+    for (const sy of [-0.40, 0.40]) {
+      // Direct tow struts from climber rear collar to cargo pod nose
+      cargoPts.push(-0.85, sy, 0, -1.50, sy, 0);
+      cargoPts.push(-0.85, sy, 0.15, -1.50, sy, 0.15);
+      // Telescopic cross-link dampers
+      cargoPts.push(-0.85, sy, 0, -1.50, -sy, 0);
+    }
+    // Central axial tether conduit / cable sleeve passing through coupling
+    cargoPts.push(-0.85, 0, 0, -1.50, 0, 0);
+
+    // 2. Heavy Octagonal Freight Container Hull (Length: X = -1.50 to -3.30, Radius 0.80m)
+    const podR = 0.80;
+    const podXStations = [-1.50, -2.40, -3.30];
+    for (const px of podXStations) {
+      for (let i = 0; i < 8; i++) {
+        const a1 = (i * Math.PI * 2) / 8;
+        const a2 = ((i + 1) * Math.PI * 2) / 8;
+        cargoPts.push(px, podR * Math.sin(a1), podR * Math.cos(a1));
+        cargoPts.push(px, podR * Math.sin(a2), podR * Math.cos(a2));
+      }
+    }
+    // 8 Longitudinal Structural Keel Beams
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI * 2) / 8;
+      cargoPts.push(-1.50, podR * Math.sin(a), podR * Math.cos(a), -3.30, podR * Math.sin(a), podR * Math.cos(a));
+    }
+    // Diagonal Cross-Bracing on freight facets
+    for (let i = 0; i < 8; i += 2) {
+      const a1 = (i * Math.PI * 2) / 8;
+      const a2 = ((i + 1) * Math.PI * 2) / 8;
+      cargoPts.push(-1.50, podR * Math.sin(a1), podR * Math.cos(a1), -2.40, podR * Math.sin(a2), podR * Math.cos(a2));
+      cargoPts.push(-2.40, podR * Math.sin(a1), podR * Math.cos(a1), -3.30, podR * Math.sin(a2), podR * Math.cos(a2));
+    }
+    // Central Cable Passage Sleeve & Pinch Rollers inside Container
+    for (const px of [-1.50, -3.30]) {
+      for (let i = 0; i < 6; i++) {
+        const a1 = (i * Math.PI * 2) / 6;
+        const a2 = ((i + 1) * Math.PI * 2) / 6;
+        cargoPts.push(px, 0.22 * Math.sin(a1), 0.22 * Math.cos(a1));
+        cargoPts.push(px, 0.22 * Math.sin(a2), 0.22 * Math.cos(a2));
+      }
+    }
+    cargoPts.push(-1.50, 0, 0.22, -3.30, 0, 0.22);
+    cargoPts.push(-1.50, 0, -0.22, -3.30, 0, -0.22);
+
+    const cargoGeo = new THREE.BufferGeometry();
+    cargoGeo.setAttribute('position', new THREE.Float32BufferAttribute(cargoPts, 3));
+    climberGroup.add(new THREE.LineSegments(cargoGeo, new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 2 })));
+
     // C. Mobile Transporter / ISS Truss Pipe Crawler Robot (Stage 3)
     const inspectorGroup = new THREE.Group();
     const chHalfX = 0.38, chHalfY = 0.18, chHalfZ = 0.10; // Compact 0.76m x 0.36m x 0.20m aerospace body
@@ -1906,9 +1964,10 @@ export default function SpaceOrbitViewer3D() {
         isT0Firing = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || Math.abs(actualFx) > 0.005);
         isT1Firing = hasFuel && (healthMask & (1 << 1)) && ((thrustMask & (1 << 1)) || Math.abs(actualFx) > 0.005);
       } else if (stageId === 2) {
-        isT0Firing = false;
-        isT1Firing = false;
-        isCounterFiring = false;
+        // Stage 2 (Climber): Accelerating forward fires rear climb thrusters; braking fires front counter-plumes!
+        isCounterFiring = hasFuel && isReverse;
+        isT0Firing = hasFuel && ((thrustMask & (1 << 0)) || Math.abs(actualFx) > 0.005);
+        isT1Firing = hasFuel && ((thrustMask & (1 << 1)) || Math.abs(actualFx) > 0.005);
       } else {
         // Rear main thrusters ONLY fire when accelerating forward (+X)
         isT0Firing = hasFuel && (healthMask & (1 << 0)) && ((thrustMask & (1 << 0)) || actualFx > 0.005);
@@ -1922,9 +1981,9 @@ export default function SpaceOrbitViewer3D() {
 
       // Visibility floor: 0.22m minimum visible bell ensures micro-trimming is clearly visible
       // Full throttle (1.0) -> expands to 1.55m roaring bell
-      const mainThrottle = (stageId === 3) ? Math.min(1.0, Math.abs(actualFx)) : fxForwardMag;
+      const mainThrottle = (stageId === 2 || stageId === 3) ? Math.min(1.0, Math.abs(actualFx)) : fxForwardMag;
       const minPlumeLen = 0.22;
-      const maxExtraLen = (stageId === 3) ? 0.65 : 1.35;
+      const maxExtraLen = (stageId === 3) ? 0.65 : (stageId === 2 ? 1.05 : 1.35);
       const pLen = (minPlumeLen + maxExtraLen * Math.min(1.0, mainThrottle)) * (0.90 + Math.random() * 0.20);
       const plumeW = Math.max(0.08, pLen * 0.28);
       const jx = (Math.random() - 0.5) * 0.05 * Math.max(0.3, mainThrottle);
@@ -1966,6 +2025,11 @@ export default function SpaceOrbitViewer3D() {
           const originX = isCounterFiring ? 0.38 : -0.38;
           const dirX = isCounterFiring ? 1.0 : -1.0;
           writePlumeBell(posAttr, originX, -0.10, 0, dirX, pLen, plumeW, jx);
+        } else if (stageId === 2) {
+          // Outrigger climb thrusters clear the towed cargo container (Y = +-1.05m)
+          const originX = isCounterFiring ? 0.85 : -0.85;
+          const dirX = isCounterFiring ? 1.0 : -1.0;
+          writePlumeBell(posAttr, originX, -1.05, 0, dirX, pLen, plumeW, jx);
         } else {
           writePlumeBell(posAttr, -1.6, -0.4, 0, -1.0, pLen, plumeW, jx);
         }
@@ -1979,6 +2043,11 @@ export default function SpaceOrbitViewer3D() {
           const originX = isCounterFiring ? 0.38 : -0.38;
           const dirX = isCounterFiring ? 1.0 : -1.0;
           writePlumeBell(posAttr, originX, 0.10, 0, dirX, pLen, plumeW, jx);
+        } else if (stageId === 2) {
+          // Outrigger climb thrusters clear the towed cargo container (Y = +-1.05m)
+          const originX = isCounterFiring ? 0.85 : -0.85;
+          const dirX = isCounterFiring ? 1.0 : -1.0;
+          writePlumeBell(posAttr, originX, 1.05, 0, dirX, pLen, plumeW, jx);
         } else {
           writePlumeBell(posAttr, -1.6, 0.4, 0, -1.0, pLen, plumeW, jx);
         }
@@ -2036,6 +2105,21 @@ export default function SpaceOrbitViewer3D() {
           setRay(ox, oy, oz, ox, oy - flareW, oz + dzS);
         }
       };
+
+      if (hasFuel && stageId === 2) {
+        // Lateral cable vibration damping micro-thrusters (mounted on climber flanks X=0, Y=+-0.95)
+        const vib = tlm.cable_vibration || 0.0;
+        const latMag = Math.max(Math.abs(actualFy), Math.abs(vib) * 4.0);
+        if (latMag > 0.008) {
+          const puffLen = (0.12 + Math.min(0.45, latMag * 0.6)) * (0.85 + Math.random() * 0.3);
+          if (vib > 0.004 || actualFy > 0.005) {
+            addRcsSpray(0.0, 0.95, 0, 'y', 1.0, puffLen);
+          }
+          if (vib < -0.004 || actualFy < -0.005) {
+            addRcsSpray(0.0, -0.95, 0, 'y', -1.0, puffLen);
+          }
+        }
+      }
 
       if (hasFuel && stageId !== 2 && stageId !== 3) {
         // Forward Braking Counter-Thrusters (T2, T3 at x = 0.8, y = +-0.65)
@@ -2118,16 +2202,88 @@ export default function SpaceOrbitViewer3D() {
       rcsJetGeo.setDrawRange(0, rcsIdx * 2);
       rcsPos.needsUpdate = true;
 
-      // Update Stage 2 Tether Wave Vibration
+      // Update Stage 2 Tether Dynamic Tension Heatmap & Rupture Dynamics
       if (stageId === 2) {
         const vib = tlm.cable_vibration || 0.0;
+        const globalTension = (tlm.cable_tension !== undefined) ? tlm.cable_tension : 10000.0;
+        const isSnapped = !!(tlm.cable_snapped || globalTension >= 15000.0);
+        const climberX = Math.max(0.0, Math.min(100.0, tlm.pos_x !== undefined ? tlm.pos_x : sm.x));
         const pos = tetherGeo.attributes.position;
-        for (let i = 0; i < tetherSegCount; i++) {
-          const v = vib * Math.sin((i / 100.0) * Math.PI);
-          pos.setY(i, v);
+        const col = tetherGeo.attributes.color;
+
+        if (isSnapped) {
+          // Severed cable recoil whip wave animation
+          for (let i = 0; i < tetherSegCount; i++) {
+            const xi = i;
+            if (xi < climberX) {
+              const distFromSnap = climberX - xi;
+              const whipAmp = Math.min(3.5, distFromSnap * 0.18);
+              const whipY = Math.sin((xi - nowSec * 14.0) * 0.8) * whipAmp;
+              const whipZ = Math.cos((xi - nowSec * 12.0) * 0.7) * (whipAmp * 0.6);
+              pos.setXYZ(i, xi, whipY, whipZ);
+            } else {
+              const distFromSnap = xi - climberX;
+              const whipAmp = Math.min(3.5, distFromSnap * 0.18);
+              const whipY = Math.sin((xi + nowSec * 14.0) * 0.8) * whipAmp;
+              const whipZ = Math.sin((xi + nowSec * 12.0) * 0.7) * (whipAmp * 0.6);
+              pos.setXYZ(i, xi, whipY, whipZ);
+            }
+            // Flashing severed hazard red (#ef4444)
+            const strobe = 0.7 + 0.3 * Math.sin(nowSec * 25.0 + i * 0.5);
+            col.setXYZ(i, 0.95 * strobe, 0.15 * (1.0 - strobe), 0.15 * (1.0 - strobe));
+          }
+        } else {
+          // Standing string wave + localized motor pinch deflection
+          const deltaTension = Math.max(0.0, globalTension - 10000.0);
+          for (let i = 0; i < tetherSegCount; i++) {
+            const xi = i;
+            // 1. Standing harmonic wave along the cable
+            const yStanding = vib * Math.sin((xi / 100.0) * Math.PI);
+            // 2. High-frequency motor drive traction ripple near the climber
+            const dist = xi - climberX;
+            const pinchWeight = Math.exp(-(dist * dist) / 18.0);
+            const yRipple = vib * 0.35 * Math.sin(dist * 2.0 - nowSec * 16.0) * pinchWeight;
+            pos.setXYZ(i, xi, yStanding + yRipple, 0);
+
+            // 3. Local Tension Distribution: peak stress concentrates around climber chassis
+            // Nominal baseline = 10,000 N, Rupture limit = 15,000 N
+            const localStress = 10000.0 + deltaTension * (0.30 + 0.70 * pinchWeight);
+            const normT = Math.max(0.0, Math.min(1.0, (localStress - 10000.0) / 5000.0));
+
+            // 4. Smooth multi-stage tension heatmap gradient
+            // [0.0 - 0.20]: Nominal Safe -> Cyber Cyan #38bdf8 (r=0.22, g=0.74, b=0.97)
+            // [0.20 - 0.55]: Moderate -> Transitions to Electric Yellow #facc15 (r=0.98, g=0.80, b=0.08)
+            // [0.55 - 0.80]: High Warning -> Transitions to Amber Orange #f97316 (r=0.98, g=0.45, b=0.09)
+            // [0.80 - 1.00]: Critical Danger -> Transitions to Pulsing Crimson #ef4444 (r=0.94, g=0.20, b=0.20)
+            let r, g, b;
+            if (normT < 0.20) {
+              const t = normT / 0.20;
+              r = 0.22 + t * 0.08;
+              g = 0.74 + t * 0.04;
+              b = 0.97 - t * 0.15;
+            } else if (normT < 0.55) {
+              const t = (normT - 0.20) / 0.35;
+              r = 0.30 + t * (0.98 - 0.30);
+              g = 0.78 + t * (0.80 - 0.78);
+              b = 0.82 - t * (0.82 - 0.08);
+            } else if (normT < 0.80) {
+              const t = (normT - 0.55) / 0.25;
+              r = 0.98;
+              g = 0.80 - t * (0.80 - 0.45);
+              b = 0.08 + t * 0.01;
+            } else {
+              const t = (normT - 0.80) / 0.20;
+              const pulse = 0.80 + 0.20 * Math.sin(nowSec * 18.0 + xi * 0.2);
+              r = (0.98 - t * 0.04) * pulse;
+              g = (0.45 - t * 0.25) * (2.0 - pulse);
+              b = 0.09 * (2.0 - pulse);
+            }
+            col.setXYZ(i, r, g, b);
+          }
         }
         pos.needsUpdate = true;
-        tetherMat.color.setHex(tlm.cable_snapped ? 0xef4444 : ((tlm.cable_tension || 10000) > 13000 ? 0xf97316 : 0x38bdf8));
+        col.needsUpdate = true;
+        tetherMat.color.setHex(0xffffff); // Ensure base tint is pure white so vertex colors shine
       }
 
       // Update Stage 3 360-deg Laser Scanner Fan & Defect Detection Markers
@@ -2550,6 +2706,61 @@ export default function SpaceOrbitViewer3D() {
           hudCtx.fillStyle = '#fde047';
           hudCtx.fillText('ASTEROID MINING BASE [TERMINAL PORT]', pAst.sx, pAst.sy - 10);
         }
+
+        // Tactical Climber Status Callout (Throttle & Cable Stress Floating HUD)
+        const pClimber = toScreen(shipX, sm.y || 0, 1.4);
+        if (pClimber) {
+          hudCtx.save();
+          hudCtx.textAlign = 'center';
+          hudCtx.font = 'bold 11px monospace';
+
+          // Cargo Train Header
+          hudCtx.fillStyle = '#fbbf24';
+          hudCtx.fillText('TRAIN: 500kg (CARGO: 400kg)', pClimber.sx, pClimber.sy - 34);
+
+          // Throttle / Drive readout (Scaled for 600N high-torque drive)
+          const fx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
+          let driveTag = 'COAST 0N';
+          let driveCol = '#94a3b8';
+          if (fx > 0.005) {
+            driveTag = `DRIVE +${(fx * 100).toFixed(0)}% (+${Math.round(fx * 600)}N) [ACCEL]`;
+            driveCol = '#38bdf8';
+          } else if (fx < -0.005) {
+            driveTag = `BRAKE ${(fx * 100).toFixed(0)}% (${Math.round(fx * 600)}N) [REVERSE]`;
+            driveCol = '#f97316';
+          }
+          hudCtx.shadowBlur = 8;
+          hudCtx.shadowColor = driveCol;
+          hudCtx.fillStyle = driveCol;
+          hudCtx.fillText(driveTag, pClimber.sx, pClimber.sy - 18);
+
+          // Cable Tension status badge
+          const tens = (tlm.cable_tension !== undefined) ? tlm.cable_tension : 10000.0;
+          if (tlm.cable_snapped || tens >= 15000.0) {
+            hudCtx.shadowColor = '#ef4444';
+            hudCtx.fillStyle = '#ef4444';
+            hudCtx.fillText('💥 CABLE SEVERED / RUPTURE!', pClimber.sx, pClimber.sy - 48);
+          } else if (shipX >= 75.0) {
+            // Docking approach radar tag when closing in on GEO dock
+            const v = tlm.vel_x || 0.0;
+            const safeCol = v <= 0.40 ? '#10b981' : (v <= 1.20 ? '#facc15' : '#ef4444');
+            const dockTag = v > 1.20 ? `🚨 CRASH SPEED: ${v.toFixed(2)}m/s (LIMIT 1.20m/s)` :
+                            v > 0.40 ? `⚠️ DOCK BRAKING: ${v.toFixed(2)}m/s (SOFT <=0.40)` :
+                                       `🎯 SOFT CAPTURE READY: ${v.toFixed(2)}m/s`;
+            hudCtx.shadowColor = safeCol;
+            hudCtx.fillStyle = safeCol;
+            hudCtx.fillText(dockTag, pClimber.sx, pClimber.sy - 48);
+          } else if (tens >= 14000.0) {
+            hudCtx.shadowColor = '#ef4444';
+            hudCtx.fillStyle = '#ef4444';
+            hudCtx.fillText(`🚨 CRITICAL STRESS: ${Math.round(tens)}N`, pClimber.sx, pClimber.sy - 48);
+          } else if (tens >= 12500.0) {
+            hudCtx.shadowColor = '#f59e0b';
+            hudCtx.fillStyle = '#f59e0b';
+            hudCtx.fillText(`⚠️ HIGH TENSION: ${Math.round(tens)}N`, pClimber.sx, pClimber.sy - 48);
+          }
+          hudCtx.restore();
+        }
       } else if (stageId === 3) {
         for (const jm of jointMeshes) {
           const jy = getTrussRailY(jm.x);
@@ -2860,15 +3071,37 @@ export default function SpaceOrbitViewer3D() {
       telemetry.stage_id === 2 ? (
         React.createElement(React.Fragment, null,
           React.createElement('span', { style: { color: '#38bdf8', fontWeight: 'bold' } }, 'STAGE 2: CLIMBER'),
+          React.createElement('span', { style: { color: '#fbbf24', fontWeight: 'bold' } }, 'PAYLOAD: 400kg (TRAIN: 500kg)'),
           React.createElement('span', null, `ALT: ${telemetry.pos_x.toFixed(1)}m / 100m`),
           React.createElement('span', null, `VEL: ${telemetry.vel_x.toFixed(2)} m/s`),
           React.createElement('span', {
-            style: { color: (telemetry.cable_tension || 10000) > 13000 ? '#ef4444' : '#10b981', fontWeight: 'bold' }
-          }, `TENSION: ${Math.round(telemetry.cable_tension || 10000)}N`),
+            style: {
+              color: (telemetry.thrust_x || 0) > 0.005 ? '#38bdf8' : (telemetry.thrust_x || 0) < -0.005 ? '#f97316' : '#94a3b8',
+              fontWeight: 'bold'
+            }
+          }, (telemetry.thrust_x || 0) > 0.005 ? `DRIVE: +${((telemetry.thrust_x || 0) * 100).toFixed(0)}% (+${Math.round((telemetry.thrust_x || 0) * 600)}N)` :
+             (telemetry.thrust_x || 0) < -0.005 ? `BRAKE: ${((telemetry.thrust_x || 0) * 100).toFixed(0)}% (${Math.round((telemetry.thrust_x || 0) * 600)}N)` : 'COAST: 0N'),
+          React.createElement('span', {
+            style: {
+              color: telemetry.cable_snapped ? '#ef4444' : (telemetry.cable_tension || 10000) >= 14000 ? '#ef4444' : (telemetry.cable_tension || 10000) >= 12500 ? '#f59e0b' : '#10b981',
+              fontWeight: 'bold'
+            }
+          }, `TENSION: ${Math.round(telemetry.cable_tension || 10000)}N / 15000N`),
           React.createElement('span', {
             style: { color: Math.abs(telemetry.cable_vibration || 0) > 0.05 ? '#f59e0b' : '#94a3b8' }
           }, `VIB: ${(Math.abs(telemetry.cable_vibration || 0) * 100).toFixed(1)}cm`),
-          telemetry.cable_snapped ? React.createElement('span', { style: { color: '#ef4444', fontWeight: 'bold' } }, '[RUPTURED]') : null
+          telemetry.cable_snapped ? React.createElement('span', { style: { color: '#ef4444', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.25)', padding: '1px 6px', borderRadius: '2px' } }, '💥 RUPTURED') :
+          (telemetry.cable_tension || 10000) >= 14000 ? React.createElement('span', { style: { color: '#ef4444', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.2)', padding: '1px 5px', borderRadius: '2px' } }, '🚨 NEAR RUPTURE') :
+          (telemetry.cable_tension || 10000) >= 12500 ? React.createElement('span', { style: { color: '#f59e0b', fontWeight: 'bold' } }, '⚠️ HIGH STRESS') :
+          (telemetry.pos_x || 0) >= 75.0 ? React.createElement('span', {
+            style: {
+              color: (telemetry.vel_x || 0) <= 0.40 ? '#10b981' : (telemetry.vel_x || 0) <= 1.20 ? '#facc15' : '#ef4444',
+              fontWeight: 'bold',
+              background: 'rgba(15, 23, 42, 0.6)',
+              padding: '1px 5px',
+              borderRadius: '2px'
+            }
+          }, (telemetry.vel_x || 0) > 1.20 ? '🚨 CRASH SPEED' : (telemetry.vel_x || 0) > 0.40 ? '⚠️ DOCK BRAKING' : '🎯 SOFT CAPTURE') : null
         )
       ) : telemetry.stage_id === 3 ? (
         React.createElement(React.Fragment, null,

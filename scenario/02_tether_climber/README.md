@@ -19,7 +19,7 @@
 本シナリオの物理エンジンは、100Hz（$\Delta t = 0.01\text{s}$）周期で昇降機の運動方程式とテザー弦振動方程式を連成数値積分しています。
 
 ### (1) クライマー機体 & テザー物理諸元
-* **昇降機乾燥質量 ($M$)**: $100.0\text{ kg}$（デュアルピンチモータ・回生バッテリー搭載）
+* **軌道貨物列車（トレイン）総質量 ($M$)**: $500.0\text{ kg}$（クライマー自重 $100.0\text{ kg}$ ＋ 牽引式軌道貨物コンテナ $400.0\text{ kg}$）
 * **テザー全長 ($L$)**: $100.0\text{ m}$（超高強度カーボンナノチューブ連続繊維）
 * **臨界共振周波数 ($f_0$)**: $5.0\text{ Hz}$（$\omega_0 = 2\pi f_0 \approx 31.416\text{ rad/s}$）
 * **真空空間減衰比 ($\zeta$)**: $0.03$（大気摩擦のない深宇宙微小減衰）
@@ -36,26 +36,27 @@ $$\ddot{y}_{\text{vib}} + 2\zeta \omega_0 \dot{y}_{\text{vib}} + \omega_0^2 y_{\
 
 $$T(t) = T_0 + M \cdot \max(0, \ddot{x}) + k_{\text{vib}} \cdot |y_{\text{vib}}(t)|$$
 
-* **ジャーク励起係数 ($K_{\text{jerk}}$)**: $0.0050\text{ m}/(\text{N/s})$
+* **ジャーク励起係数 ($K_{\text{jerk}}$)**: $0.0028\text{ m}/(\text{N/s})$（500kg 重貨物トレイン連成モデル）
 * 急激な推力ステップ（$\Delta F / \Delta t$ が大）を与えるほど、テザーに大きな横変位が励起され張力 $T(t)$ が跳ね上がります。
 
 ### (3) 推進・アクチュエータ出力仕様 & 制御換算式
 制御レジスタ（MMIO）は実機FPGA互換の 32-bit 符号付き Q16.16 固定小数点形式（$1.0 = \text{0x00010000} = 65,536$）です。
 
-#### ① デュアル・ピンチローラ駆動モータ (`thrust_cmd_x`)
+#### ① デュアル・高トルクピンチモータ (`thrust_cmd_x`)
 * **レジスタ換算式**:
-  $$F_{\text{drive}} = \frac{\text{thrust\_cmd\_x}}{65,536} \times 50.0\text{ N} \quad (-50.0\text{ N} \le F_{\text{drive}} \le +50.0\text{ N})$$
+  $$F_{\text{drive}} = \frac{\text{thrust\_cmd\_x}}{65,536} \times 600.0\text{ N} \quad (-600.0\text{ N} \le F_{\text{drive}} \le +600.0\text{ N})$$
 * **最大登坂加速度**:
-  $$a_{x,\max} = \frac{F_{\text{drive},\max}}{M} = \frac{50.0\text{ N}}{100.0\text{ kg}} = 0.50\text{ m/s}^2$$
+  $$a_{x,\max} = \frac{F_{\text{drive},\max} - F_{\text{drag}}}{M} \approx \frac{600.0\text{ N} - 25.0\text{ N}}{500.0\text{ kg}} = 1.15\text{ m/s}^2$$
 
 #### ② 電力量（バッテリー）消費モデル
-$$\frac{d(\text{Battery})}{dt} = - |F_{\text{drive}}| \times 0.0003 \quad [\%/\text{s}]$$
+$$\frac{d(\text{Battery})}{dt} = - |F_{\text{drive}}| \times 0.00008 \quad [\%/\text{s}]$$
 
 ### (4) 3D サイバーグラフィックモデル (Cyber Orbit Viewer)
 Web ダッシュボードの 3D ビューアでは、Stage 2 専用の立体モデルが自動ロードされます：
-1. **テザークライマー機体**: 中央観測ゴンドラポッド、ケーブルを上下から挟み込むデュアルピンチローラー駆動部、左右ソーラーアレイ翼、稼働状態インジケータ LED。
-2. **GEO 静止軌道ステーション**: 高度 100m 地点に配置された巨大回転式トーラスドッキングステーション。
-3. **小惑星採掘基地**: 高度 0m 起点に配置された 3D ワイヤーフレーム小惑星ロックおよびテザーアンカービーコン。
+1. **テザークライマー機体**: 中央観測ゴンドラポッド、ケーブルを上下から挟み込むデュアルピンチローラー駆動部、左右ソーラーアレイ翼、アウトリガー配置のツイン大推力スラスター噴煙。
+2. **大型軌道貨物コンテナ (400kg Payload Pod)**: クライマー直下にデュアル油圧ダンパーと牽引ロッドで連結された高輝度アンバーゴールドの八角柱貨物モジュール。テザーケーブルを貫通ガイドしながら追従走行。
+3. **GEO 静止軌道ステーション**: 高度 100m 地点に配置された巨大回転式トーラスドッキングステーション。
+4. **小惑星採掘基地**: 高度 0m 起点に配置された 3D ワイヤーフレーム小惑星ロックおよびテザーアンカービーコン。
 
 ---
 
@@ -117,12 +118,14 @@ Web ダッシュボードの 3D ビューアでは、Stage 2 専用の立体モ�
 ### (2) 攻略の核心
 1. **S字加減速 (Jerk Limiting)**: 推力変化幅 `max_accel_step` を制限し、テザーの 5.0Hz 共振モード励起を抑止。
 2. **逆位相ダンピング (Active Damping)**: 横振動変位 `vibration` を打ち消す逆位相フィードバック。
+3. **終端アプローチ制動 (GEO Docking Brake)**: 100m 地点到達時に $500\text{kg}$ の巨大な貨物慣性を滑らかに制動し、ソフトキャプチャ許容速度（$v_{\text{dock}} \le 0.40\text{m/s}$）で静止ドッキング。減速が遅れるとステーション大破失格、急ブレーキを乱暴に踏みすぎるとテザーが破断します。
 
 ### (3) TUNE ZONE チューニング
 ```python
-target_velocity = 2.4      # 目標登坂巡航速度 (m/s) [推奨: 2.0 〜 2.6]
+target_velocity = 2.5      # 目標登坂巡航速度 (m/s) [推奨: 2.2 〜 3.5]
 kp_speed = 0.85            # 速度追従比例ゲイン
 max_accel_step = 0.04      # S字加減速ジャーク制限 (1ステップあたりの最大推力変化幅)
+brake_dist = 22.0          # GEOドック終端アプローチ減速開始距離 (m) [推奨: 20.0 〜 30.0]
 kvib_damping = 0.40        # テザー横振動ダンピングゲイン [推奨: 0.30 〜 0.60]
 ```
 
@@ -132,7 +135,7 @@ kvib_damping = 0.40        # テザー横振動ダンピングゲイン [推奨:
 
 標高 100m 地点の GEO Orbital Platform 到達時に公式審判によって総合判定されます：
 
-$$\text{Final Score} = \text{Beacon Score} + \text{Time Bonus} + \text{Stability Bonus} + \text{Battery Bonus}$$
+$$\text{Final Score} = \text{Beacon Score} + \text{Time Bonus} + \text{Stability Bonus} + \text{Battery Bonus} + \text{Docking Bonus}$$
 
 ### (1) 配点内訳
 1. **ビーコン通過精度 (全9箇所: 10m 〜 90m)**:
@@ -140,20 +143,25 @@ $$\text{Final Score} = \text{Beacon Score} + \text{Time Bonus} + \text{Stability
    * 横変位 $|y_{\text{vib}}| \le 0.06\text{m}$: **GREAT (+800 pts)**
    * 横変位 $|y_{\text{vib}}| \le 0.12\text{m}$: **GOOD (+500 pts)**
    * 横変位 $> 0.12\text{m}$: **SHAKE (-200 pts)**
-2. **タイムボーナス**:
+2. **GEO ドック精密接触ボーナス (Docking Precision Bonus)**:
+   * 接触速度 $v_{\text{dock}} \le 0.40\text{ m/s}$: **PERFECT SOFT CAPTURE (+1,500 pts)**
+   * 接触速度 $0.40 < v_{\text{dock}} \le 0.80\text{ m/s}$: **STANDARD DOCK (+800 pts)**
+   * 接触速度 $0.80 < v_{\text{dock}} \le 1.20\text{ m/s}$: **HARD BUMP (-1,000 pts)**
+   * 接触速度 $v_{\text{dock}} > 1.20\text{ m/s}$: **`DISQUALIFIED (DOCKING CRASH)`**（ステーション激突大破・失格）
+3. **タイムボーナス**:
    $$\text{Time Bonus} = \max(0, (55.0 - \text{Clear Time}) \times 50.0)$$
-3. **張力安定性ボーナス**:
+4. **張力安定性ボーナス**:
    $$\text{Stability Bonus} = \max(0, (14,500.0 - T_{\text{peak}}) \times 0.35)$$
-   （※ピーク張力を低く抑えるほど高得点。通常運転で約 1,400〜1,500点）
-4. **バッテリー残量ボーナス**:
+   （※ピーク張力を低く抑えるほど高得点。通常運転で約 1,200〜1,400点）
+5. **バッテリー残量ボーナス**:
    $$\text{Battery Bonus} = \text{Battery}(\%) \times 10.0$$
-5. **ケーブル断裂失格**: 張力が $15,000\text{ N}$ を超えた瞬間に即座に失格・スコア 0 点。
+6. **ケーブル断裂失格**: 張力が $15,000\text{ N}$ を超えた瞬間に即座に `DISQUALIFIED (CABLE RUPTURE)` となり失格・スコア 0 点。
 
 ### (2) フライトランク認定基準
-* 🏆 **GRADE S (Master Climber)**: **8,000 pts 以上**（9ゲートほぼPERFECTかつ安定登坂）
-* 🥇 **GRADE A (Certified)**: 6,500 pts 以上
-* 🥈 **GRADE B (Standard)**: 5,000 pts 以上
-* 🥉 **GRADE C (Pass)**: 5,000 pts 未満
+* 🏆 **GRADE S (Master Climber)**: **12,000 pts 以上**（9ビーコンほぼPERFECT・低張力安定・精密ソフトキャプチャ必須）
+* 🥇 **GRADE A (Certified)**: 9,500 pts 以上
+* 🥈 **GRADE B (Standard)**: 7,000 pts 以上
+* 🥉 **GRADE C (Pass)**: 7,000 pts 未満
 
 ---
 

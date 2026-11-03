@@ -290,6 +290,8 @@ void SpacePhysicsEngine::init_stage2_tether() {
     for (double x = 0.0; x <= 100.0; x += 0.5) {
         track_.push_back({x, 0.0});
     }
+    // Heavy Freight Configuration: 100kg Climber Gondola + 400kg Towed Orbital Cargo Pod
+    mass_ = 500.0;
     state_.pos = {0.0, 0.0};
     state_.vel = {0.0, 0.0};
     state_.angle = 0.0;
@@ -389,7 +391,7 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         }
 
         double drive_force = thrust_forward;
-        double friction_and_gravity = 5.0;
+        double friction_and_gravity = 25.0; // Scaled for 500kg heavy cargo train (gravity & roller drag)
         double net_force = drive_force - friction_and_gravity;
         if (state_.pos.x <= 0.0 && net_force < 0.0) net_force = 0.0;
 
@@ -402,8 +404,8 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
         double jerk = (thrust_forward - prev_thrust_x_) / dt;
         prev_thrust_x_ = thrust_forward;
 
-        // Transverse cable vibration excited by motor jerk
-        double jerk_excitation = 0.0050 * jerk;
+        // Transverse cable vibration excited by heavy train motor jerk
+        double jerk_excitation = 0.0028 * jerk;
         double vib_acc = -2.0 * cable_damping_ * cable_omega_0_ * cable_vib_vel_ 
                          - (cable_omega_0_ * cable_omega_0_) * state_.cable_vibration 
                          + jerk_excitation;
@@ -420,7 +422,7 @@ void SpacePhysicsEngine::step(double thrust_forward, double thrust_lateral, doub
                       << state_.cable_tension << " N > " << cable_max_tension_ << " N)!\033[0m\n";
         }
 
-        state_.fuel -= (std::abs(drive_force) * 0.0003) * dt;
+        state_.fuel -= (std::abs(drive_force) * 0.00008) * dt;
         if (state_.fuel < 0.0) state_.fuel = 0.0;
         return;
     }

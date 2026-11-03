@@ -82,7 +82,7 @@ def test_stage2_mission():
         assert tlm.get("passed_checkpoints") == 9, f"Failed beacons: {tlm.get('passed_checkpoints')} / 9"
         assert tlm.get("cable_snapped", 0) == 0, "Tether cable snapped during climb!"
         assert tlm.get("mission_status") == 1, f"Mission status is {tlm.get('mission_status')}, expected 1 (COMPLETE)"
-        assert tlm.get("score") >= 6500, f"Score {tlm.get('score')} < 6500 (GRADE A threshold)"
+        assert tlm.get("score") >= 9500, f"Score {tlm.get('score')} < 9500 (GRADE A threshold)"
         assert ("GRADE S" in tlm.get("official_grade", "")) or ("GRADE A" in tlm.get("official_grade", "")), \
             f"Grade is {tlm.get('official_grade')}, expected GRADE S or A"
 

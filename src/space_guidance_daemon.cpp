@@ -158,17 +158,45 @@ public:
                 }
             }
             if (state.pos.x >= 99.8) {
+                double dock_vel = state.vel.x;
+                // 1. GEO Orbital Station Docking Impact Velocity Check
+                if (dock_vel > 1.20) {
+                    is_failed = true;
+                    total_score = 0;
+                    official_grade = "DISQUALIFIED (DOCKING CRASH)";
+                    char buf[160];
+                    snprintf(buf, sizeof(buf), "[REFEREE FAILURE] GEO Dock Crash! Impact speed %.2f m/s exceeded 1.20 m/s structural limit!", dock_vel);
+                    last_event = buf;
+                    std::cout << "[Referee] " << last_event << std::endl;
+                    return;
+                }
+
                 is_completed = true;
                 int time_bonus = std::max(0, static_cast<int>((55.0 - elapsed_time) * 50.0));
                 int stab_bonus = std::max(0, static_cast<int>((14500.0 - peak_metric) * 0.35));
                 int batt_bonus = static_cast<int>(state.fuel * 10.0);
-                bonus_score = time_bonus + stab_bonus + batt_bonus;
+
+                // 2. Docking Precision Capture Bonus
+                int dock_bonus = 0;
+                if (dock_vel <= 0.40) {
+                    dock_bonus = 1500; // Perfect Soft Capture
+                } else if (dock_vel <= 0.80) {
+                    dock_bonus = 800;  // Standard Docking
+                } else {
+                    dock_bonus = -1000; // Hard Impact / Structural Strain
+                }
+
+                bonus_score = time_bonus + stab_bonus + batt_bonus + dock_bonus;
                 total_score = checkpoint_score + bonus_score;
-                if (total_score >= 8000) official_grade = "GRADE S (Master Climber)";
-                else if (total_score >= 6500) official_grade = "GRADE A (Certified)";
-                else if (total_score >= 5000) official_grade = "GRADE B (Standard)";
+                if (total_score >= 12000) official_grade = "GRADE S (Master Climber)";
+                else if (total_score >= 9500) official_grade = "GRADE A (Certified)";
+                else if (total_score >= 7000) official_grade = "GRADE B (Standard)";
                 else official_grade = "GRADE C (Pass)";
-                last_event = "[REFEREE COMPLETE] GEO Dock Reached! Clear: " + std::to_string(static_cast<int>(elapsed_time)) + "s | Total: " + std::to_string(total_score) + " pts (" + official_grade + ")";
+
+                char buf[180];
+                snprintf(buf, sizeof(buf), "[REFEREE COMPLETE] GEO Dock Captured (v=%.2fm/s)! Clear: %ds | Total: %d pts (%s)",
+                         dock_vel, static_cast<int>(elapsed_time), total_score, official_grade.c_str());
+                last_event = buf;
                 std::cout << "\n============================================================" << std::endl;
                 std::cout << "[Referee] " << last_event << std::endl;
                 std::cout << "============================================================\n" << std::endl;
@@ -548,7 +576,8 @@ int main(int argc, char** argv) {
                                 (shm->wheel_torque_cmd != 0) ||
                                 (shm->fdir_mode != 0);
 
-        double fx = static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0 * 50.0;
+        double fx = (stage_id == 2) ? (static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0 * 600.0)
+                                    : (static_cast<int32_t>(shm->thrust_cmd_x) / 65536.0 * 50.0);
         double fy = (stage_id == 3) ? 0.0 : (static_cast<int32_t>(shm->thrust_cmd_y) / 65536.0 * 50.0);
         double tau_rcs = (stage_id == 3) ? 0.0 : (static_cast<int32_t>(shm->torque_cmd) / 65536.0 * 20.0);
         double tau_wheel = (stage_id == 3) ? 0.0 : (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0 * 20.0);

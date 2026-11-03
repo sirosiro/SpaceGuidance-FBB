@@ -105,9 +105,10 @@
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "chaosEngine"
+                                    "chaosEngine",
+                                    "sg-pilot-editor"
                                 ],
-                                "activeView": "chaosEngine",
+                                "activeView": "sg-pilot-editor",
                                 "id": "1"
                             },
                             "size": 695
@@ -147,6 +148,14 @@
             },
             "title": "SG 3D Cyber Orbit Viewer"
         },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
+        },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
             "contentComponent": "uartTerminal",
@@ -180,14 +189,14 @@
             },
             "title": "Chaos & Fault Injection"
         },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
+        "sg-pilot-editor": {
+            "id": "sg-pilot-editor",
+            "contentComponent": "sg-pilot-editor",
             "params": {
-                "_componentName": "registerTracer"
+                "_componentName": "sg-pilot-editor"
             },
-            "title": "Tracer"
+            "title": "SG Pilot Code Editor"
         }
     },
-    "activeGroup": "3"
+    "activeGroup": "1"
 }

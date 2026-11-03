@@ -24,9 +24,10 @@ def run_pilot():
     # =========================================================================
     # 🎯 TUNE ZONE 1: 目標昇降速度と加減速ゲイン
     # =========================================================================
-    target_velocity = 2.2      # 目標登坂速度 (m/s)
+    target_velocity = 2.5      # 目標登坂巡航速度 (m/s)
     kp_speed = 0.85            # 速度追従比例ゲイン
     max_accel_step = 0.04      # S字加減速ジャーク制限 (1ステップあたりの最大推力変化量)
+    brake_dist = 22.0          # GEOドック終端アプローチ減速開始距離 (m)
 
     # =========================================================================
     # ⚡ TUNE ZONE 2: テザー振動アクティブ抑制ゲイン
@@ -58,7 +59,7 @@ def run_pilot():
                 break
 
             # 4. ゴール到達判定 (100m GEO Dock)
-            if altitude >= 100.0:
+            if altitude >= 99.8:
                 time.sleep(0.15)
                 hw.print_summary("STAGE 2: TETHER CLIMBER")
                 break
@@ -71,9 +72,16 @@ def run_pilot():
                     dev = abs(vibration)
                     print(f"[NAV BEACON {b_idx+1:02d}] Alt={target_alt:4.1f}m | Vib={dev*100:4.1f}cm | Tension={tension:5.0f}N")
 
-            # 6. 昇降モータ制御 (S字ジャーク制限付き)
-            target_force = (target_velocity - velocity) * kp_speed + 0.10
-            target_force = max(-0.2, min(0.95, target_force))
+            # 6. 昇降モータ制御 (S字ジャーク制限 ＆ GEO Dock 終端アプローチ減速)
+            # 100m GEOドック手前で目標速度をソフトキャプチャ許容値 (<= 0.40m/s) へ滑らかに制動
+            remaining_dist = max(0.0, 100.0 - altitude)
+            if remaining_dist < brake_dist:
+                eff_target_vel = max(0.25, min(target_velocity, 0.25 + (target_velocity - 0.25) * (remaining_dist / brake_dist)))
+            else:
+                eff_target_vel = target_velocity
+
+            target_force = (eff_target_vel - velocity) * kp_speed + 0.04
+            target_force = max(-0.45, min(0.95, target_force))
 
             # ジャーク制限 (急激な推力変化をクランプして共振防止)
             delta = target_force - current_drive_cmd
