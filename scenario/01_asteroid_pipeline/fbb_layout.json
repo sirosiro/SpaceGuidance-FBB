@@ -38,12 +38,13 @@
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "sg-orbit-viewer"
+                                    "sg-orbit-viewer",
+                                    "gpioPanel"
                                 ],
                                 "activeView": "sg-orbit-viewer",
                                 "id": "7"
                             },
-                            "size": 386
+                            "size": 404
                         },
                         {
                             "type": "leaf",
@@ -54,7 +55,7 @@
                                 "activeView": "registerTracer",
                                 "id": "5"
                             },
-                            "size": 386
+                            "size": 460
                         },
                         {
                             "type": "leaf",
@@ -65,10 +66,10 @@
                                 "activeView": "uartTerminal_vfpga_uart_1",
                                 "id": "3"
                             },
-                            "size": 388
+                            "size": 296
                         }
                     ],
-                    "size": 1035
+                    "size": 738.1571868108585
                 },
                 {
                     "type": "branch",
@@ -85,7 +86,7 @@
                                         "activeView": "sg-telemetry-gauge",
                                         "id": "6"
                                     },
-                                    "size": 360
+                                    "size": 508
                                 },
                                 {
                                     "type": "leaf",
@@ -96,24 +97,25 @@
                                         "activeView": "sg-chaos-fdir",
                                         "id": "8"
                                     },
-                                    "size": 364
+                                    "size": 512.8428131891415
                                 }
                             ],
-                            "size": 411
+                            "size": 497
                         },
                         {
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "chaosEngine"
+                                    "chaosEngine",
+                                    "sg-pilot-editor"
                                 ],
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 749
+                            "size": 663
                         }
                     ],
-                    "size": 724
+                    "size": 1020.8428131891415
                 }
             ],
             "size": 1160
@@ -146,6 +148,14 @@
                 "_componentName": "sg-orbit-viewer"
             },
             "title": "SG 3D Cyber Orbit Viewer"
+        },
+        "gpioPanel": {
+            "id": "gpioPanel",
+            "contentComponent": "gpioPanel",
+            "params": {
+                "_componentName": "gpioPanel"
+            },
+            "title": "GPIO / Pin Array"
         },
         "registerTracer": {
             "id": "registerTracer",
@@ -187,7 +197,15 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
+        },
+        "sg-pilot-editor": {
+            "id": "sg-pilot-editor",
+            "contentComponent": "sg-pilot-editor",
+            "params": {
+                "_componentName": "sg-pilot-editor"
+            },
+            "title": "SG Pilot Code Editor"
         }
     },
-    "activeGroup": "5"
+    "activeGroup": "7"
 }

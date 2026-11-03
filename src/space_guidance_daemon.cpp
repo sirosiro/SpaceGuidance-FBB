@@ -747,6 +747,7 @@ int main(int argc, char** argv) {
             if (stage_id == 4 && std::abs(export_tau_x) < 1e-4 && std::abs(tau_rcs) > 1e-4 && std::abs(state.yaw) < 0.15) {
                 export_tau_x = (tau_rcs / 20.0);
             }
+            double export_tau_y = (tau_y / 20.0);
             std::ofstream jf(tmp_f);
             if (jf.is_open()) {
                 jf << "{"
@@ -780,8 +781,11 @@ int main(int argc, char** argv) {
                    << "\"thrust_z\":" << shm->thrust_cmd_z << ","
                    << "\"torque\":" << (static_cast<int32_t>(shm->torque_cmd) / 65536.0) << ","
                    << "\"torque_x\":" << export_tau_x << ","
+                   << "\"torque_y\":" << export_tau_y << ","
+                   << "\"thrust_vertical\":" << (fz / 50.0) << ","
                    << "\"wheel_torque\":" << (static_cast<int32_t>(shm->wheel_torque_cmd) / 65536.0) << ","
                    << "\"wheel_torque_x\":" << (tau_w_x / 20.0) << ","
+                   << "\"wheel_torque_y\":" << (tau_w_y / 20.0) << ","
                    << "\"cable_tension\":" << state.cable_tension << ","
                    << "\"cable_vibration\":" << (stage_id == 3 ? 0.0 : state.cable_vibration) << ","
                    << "\"sensor_snr\":" << (stage_id == 3 ? shm->ext.cable_vibration : 0.0) << ","

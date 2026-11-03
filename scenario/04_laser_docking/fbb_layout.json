@@ -29,7 +29,7 @@
                             "size": 665
                         }
                     ],
-                    "size": 407.46966622862965
+                    "size": 407
                 },
                 {
                     "type": "branch",
@@ -59,7 +59,7 @@
                             "size": 510
                         }
                     ],
-                    "size": 801.5303337713704
+                    "size": 802
                 },
                 {
                     "type": "branch",
@@ -90,18 +90,19 @@
                                     "size": 457
                                 }
                             ],
-                            "size": 426
+                            "size": 449
                         },
                         {
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "chaosEngine"
+                                    "chaosEngine",
+                                    "sg-pilot-editor"
                                 ],
-                                "activeView": "chaosEngine",
+                                "activeView": "sg-pilot-editor",
                                 "id": "1"
                             },
-                            "size": 734
+                            "size": 711
                         }
                     ],
                     "size": 909
@@ -186,6 +187,14 @@
                 "_componentName": "chaosEngine"
             },
             "title": "Chaos & Fault Injection"
+        },
+        "sg-pilot-editor": {
+            "id": "sg-pilot-editor",
+            "contentComponent": "sg-pilot-editor",
+            "params": {
+                "_componentName": "sg-pilot-editor"
+            },
+            "title": "SG Pilot Code Editor"
         }
     },
     "activeGroup": "1"

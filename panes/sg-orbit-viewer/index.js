@@ -1883,8 +1883,10 @@ export default function SpaceOrbitViewer3D() {
       const thrustMask = (tlm.thrust_z !== undefined) ? (tlm.thrust_z & 0xFFF) : 0;
       const actualFx = (tlm.thrust_x !== undefined) ? tlm.thrust_x : 0.0;
       const actualFy = (tlm.thrust_y !== undefined) ? tlm.thrust_y : 0.0;
+      const actualFz = (tlm.thrust_vertical !== undefined) ? tlm.thrust_vertical : 0.0;
       const actualTau = (tlm.torque !== undefined) ? tlm.torque : 0.0;
       const actualTauX = (tlm.torque_x !== undefined) ? tlm.torque_x : 0.0;
+      const actualTauY = (tlm.torque_y !== undefined) ? tlm.torque_y : 0.0;
 
       // ------------------------------------------------------------------------
       // 1. Main Thrusters T0, T1 (Volumetric Vacuum Bell & Dual-Pass Neon Glow)
@@ -2090,11 +2092,28 @@ export default function SpaceOrbitViewer3D() {
           }
         }
 
-        // Vertical RCS (T8..T11)
-        if ((healthMask & (1 << 8)) && (thrustMask & (1 << 8))) addRcsSpray(1.2, 0, 0.4, 'z', 1.0, 0.45);
-        if ((healthMask & (1 << 9)) && (thrustMask & (1 << 9))) addRcsSpray(1.2, 0, -0.4, 'z', -1.0, 0.45);
-        if ((healthMask & (1 << 10)) && (thrustMask & (1 << 10))) addRcsSpray(-1.2, 0, 0.4, 'z', 1.0, 0.45);
-        if ((healthMask & (1 << 11)) && (thrustMask & (1 << 11))) addRcsSpray(-1.2, 0, -0.4, 'z', -1.0, 0.45);
+        // Vertical / Pitch Attitude RCS (T8..T11)
+        // Body Frame: +X Forward, +Y Port, +Z Dorsal (Up)
+        // Pitch Down (TauY < 0): Nose pushes Down, Tail pushes Up
+        //   -> T8  (Forward Dorsal, +Z): sprays UP (+Z) to push nose down
+        //   -> T11 (Aft Ventral, -Z):    sprays DOWN (-Z) to push tail up
+        // Pitch Up (TauY > 0): Nose pushes Up, Tail pushes Down
+        //   -> T9  (Forward Ventral, -Z): sprays DOWN (-Z) to push nose up
+        //   -> T10 (Aft Dorsal, +Z):     sprays UP (+Z) to push tail down
+        const pitchDownDemand = Math.max(0, -actualTauY);
+        const pitchUpDemand   = Math.max(0,  actualTauY);
+        const vertUpDemand    = Math.max(0,  actualFz);
+        const vertDownDemand  = Math.max(0, -actualFz);
+
+        const d8  = Math.max(0, pitchDownDemand + vertUpDemand)   + ((thrustMask & (1 << 8))  ? 0.6 : 0);
+        const d9  = Math.max(0, pitchUpDemand   + vertDownDemand) + ((thrustMask & (1 << 9))  ? 0.6 : 0);
+        const d10 = Math.max(0, pitchUpDemand   + vertUpDemand)   + ((thrustMask & (1 << 10)) ? 0.6 : 0);
+        const d11 = Math.max(0, pitchDownDemand + vertDownDemand) + ((thrustMask & (1 << 11)) ? 0.6 : 0);
+
+        if (d8  > 0.005 && (healthMask & (1 << 8)))  addRcsSpray( 1.2, 0,  0.4, 'z',  1.0, rcsLen(d8));
+        if (d9  > 0.005 && (healthMask & (1 << 9)))  addRcsSpray( 1.2, 0, -0.4, 'z', -1.0, rcsLen(d9));
+        if (d10 > 0.005 && (healthMask & (1 << 10))) addRcsSpray(-1.2, 0,  0.4, 'z',  1.0, rcsLen(d10));
+        if (d11 > 0.005 && (healthMask & (1 << 11))) addRcsSpray(-1.2, 0, -0.4, 'z', -1.0, rcsLen(d11));
       }
       rcsJetGeo.setDrawRange(0, rcsIdx * 2);
       rcsPos.needsUpdate = true;

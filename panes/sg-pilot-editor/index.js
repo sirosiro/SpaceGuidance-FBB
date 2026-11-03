@@ -13,6 +13,7 @@ export default function PilotCodeEditor() {
   const [statusMsg, setStatusMsg] = useState('');
   const [statusType, setStatusType] = useState('info'); // info, success, error
   const [tuneZones, setTuneZones] = useState([]);
+  const [syntaxError, setSyntaxError] = useState(null);
 
   // Search & Replace state
   const [searchOpen, setSearchOpen] = useState(false);
@@ -22,11 +23,16 @@ export default function PilotCodeEditor() {
   const [matchCase, setMatchCase] = useState(false);
   const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
 
+  // Jump to Zone & Line state
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [targetLineInput, setTargetLineInput] = useState('');
+
   const textareaRef = useRef(null);
   const preRef = useRef(null);
   const gutterRef = useRef(null);
   const searchInputRef = useRef(null);
   const replaceInputRef = useRef(null);
+  const jumpLineInputRef = useRef(null);
 
   // Discover tune zones in code (e.g. "# === TUNE ZONE 1: ... ===", "# 🎯 TUNE ZONE 1: ...")
   const parseTuneZones = (src) => {
@@ -70,6 +76,7 @@ export default function PilotCodeEditor() {
         setSavedCode(data.content || '');
         if (data.scenario) setScenarioName(data.scenario);
         parseTuneZones(data.content || '');
+        setSyntaxError(null);
         setStatusMsg('Loaded');
         setStatusType('info');
       } else {
@@ -214,6 +221,7 @@ export default function PilotCodeEditor() {
   // Open search / replace UI with text pre-selection
   const openSearch = (withReplace = false) => {
     setSearchOpen(true);
+    setJumpOpen(false);
     if (withReplace) setReplaceOpen(true);
     const ta = textareaRef.current;
     if (ta && ta.selectionStart !== ta.selectionEnd) {
@@ -261,8 +269,16 @@ export default function PilotCodeEditor() {
         if (data.scenario) setScenarioName(data.scenario);
         parseTuneZones(code);
         const now = new Date().toLocaleTimeString();
-        setStatusMsg(`Saved ✓ (${now})`);
-        setStatusType('success');
+        if (data.syntaxError) {
+          setSyntaxError(data.syntaxError);
+          const errLine = data.syntaxError.line ? ` (Line ${data.syntaxError.line})` : '';
+          setStatusMsg(`⚠️ Syntax Error${errLine}: ${data.syntaxError.message}`);
+          setStatusType('error');
+        } else {
+          setSyntaxError(null);
+          setStatusMsg(`Saved ✓ (${now})`);
+          setStatusType('success');
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         setStatusMsg(`Save error: ${err.error || res.statusText}`);
@@ -301,6 +317,7 @@ export default function PilotCodeEditor() {
           setCode(defaultContent);
           setSavedCode(defaultContent);
           parseTuneZones(defaultContent);
+          setSyntaxError(null);
           setStatusMsg('Reverted to original ✓');
           setStatusType('success');
         } else {
@@ -342,11 +359,34 @@ export default function PilotCodeEditor() {
       return;
     }
 
-    // Escape: Close search bar if open and clear selection range
-    if (e.key === 'Escape' && searchOpen) {
+    // Ctrl+G / Cmd+G: Toggle Go to line / Jump drawer
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
       e.preventDefault();
-      closeSearch();
+      setJumpOpen(prev => {
+        const next = !prev;
+        if (next) {
+          setSearchOpen(false);
+          setTimeout(() => {
+            if (jumpLineInputRef.current) jumpLineInputRef.current.focus();
+          }, 50);
+        }
+        return next;
+      });
       return;
+    }
+
+    // Escape: Close search bar or jump bar
+    if (e.key === 'Escape') {
+      if (jumpOpen) {
+        e.preventDefault();
+        setJumpOpen(false);
+        return;
+      }
+      if (searchOpen) {
+        e.preventDefault();
+        closeSearch();
+        return;
+      }
     }
 
     // Tab: 4 spaces indent
@@ -389,6 +429,22 @@ export default function PilotCodeEditor() {
     if (gutterRef.current) gutterRef.current.scrollTop = targetScroll;
 
     setStatusMsg(`Jumped to line ${lineIdx + 1}`);
+    setStatusType('info');
+  };
+
+  // Go to Line Number
+  const handleGoToLine = (customLine) => {
+    const rawVal = customLine !== undefined ? customLine : targetLineInput;
+    const lineNum = parseInt(rawVal, 10);
+    const lines = code.split('\n');
+    if (isNaN(lineNum) || lineNum < 1) {
+      setStatusMsg('Please enter a valid line number');
+      setStatusType('error');
+      return;
+    }
+    const clampedLine = Math.min(lines.length, Math.max(1, lineNum));
+    handleJumpToZone(clampedLine - 1);
+    setStatusMsg(`Jumped to line ${clampedLine} of ${lines.length}`);
     setStatusType('info');
   };
 
@@ -510,10 +566,14 @@ export default function PilotCodeEditor() {
               }
             }, '✓ Synced'),
         statusMsg && React.createElement('span', {
+          onClick: (syntaxError && syntaxError.line) ? () => handleJumpToZone(syntaxError.line - 1) : undefined,
+          title: (syntaxError && syntaxError.line) ? `Click to jump to line ${syntaxError.line}` : undefined,
           style: {
             fontSize: '11px',
             color: statusType === 'success' ? '#4ade80' : statusType === 'error' ? '#ef4444' : '#94a3b8',
-            marginLeft: '6px'
+            marginLeft: '6px',
+            cursor: (syntaxError && syntaxError.line) ? 'pointer' : 'default',
+            textDecoration: (syntaxError && syntaxError.line) ? 'underline' : 'none'
           }
         }, statusMsg)
       ),
@@ -565,26 +625,32 @@ export default function PilotCodeEditor() {
           }
         }, '⇄ Replace'),
 
-        // Tune Zone Jump Dropdown
-        tuneZones.length > 0 && React.createElement('select', {
-          onChange: (e) => {
-            const idx = parseInt(e.target.value, 10);
-            if (!isNaN(idx)) handleJumpToZone(idx);
+        // Jump Menu Toggle Button (Opens expanded bottom drawer)
+        React.createElement('button', {
+          onClick: () => {
+            const next = !jumpOpen;
+            setJumpOpen(next);
+            if (next) {
+              setSearchOpen(false);
+              setTimeout(() => {
+                if (jumpLineInputRef.current) jumpLineInputRef.current.focus();
+              }, 50);
+            }
           },
-          value: '',
+          title: 'Jump to Tune Zone or Line Number (Ctrl+G)',
           style: {
-            background: '#1e293b',
-            color: '#cbd5e1',
-            border: '1px solid #334155',
+            background: jumpOpen ? '#0284c7' : '#1e293b',
+            color: jumpOpen ? '#ffffff' : '#cbd5e1',
+            border: jumpOpen ? '1px solid #38bdf8' : '1px solid #334155',
             borderRadius: '4px',
             padding: '3px 8px',
             fontSize: '11px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
           }
-        },
-          React.createElement('option', { value: '', disabled: true }, '🎯 Jump to Zone...'),
-          tuneZones.map((z, i) => React.createElement('option', { key: i, value: z.line }, z.label))
-        ),
+        }, '🎯 Jump / Line'),
 
         // Revert Original Button
         React.createElement('button', {
@@ -641,6 +707,120 @@ export default function PilotCodeEditor() {
           }
         }, saving ? 'Saving...' : '💾 Save (Ctrl+S)')
       )
+    ),
+
+    // Jump to Zone & Line Number Dock Panel
+    jumpOpen && React.createElement('div', {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        background: '#0b1324',
+        borderBottom: '1px solid #1e293b',
+        padding: '6px 12px',
+        gap: '12px',
+        flexShrink: 0,
+        flexWrap: 'wrap'
+      }
+    },
+      // Left: Tune Zone Selector (takes full horizontal width)
+      tuneZones.length > 0 && React.createElement('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: '220px' }
+      },
+        React.createElement('span', {
+          style: { fontSize: '11px', color: '#38bdf8', whiteSpace: 'nowrap', fontWeight: 'bold' }
+        }, '🎯 Tune Zone:'),
+        React.createElement('select', {
+          onChange: (e) => {
+            const idx = parseInt(e.target.value, 10);
+            if (!isNaN(idx)) {
+              handleJumpToZone(idx);
+            }
+          },
+          value: '',
+          style: {
+            flex: 1,
+            background: '#1e293b',
+            color: '#f8fafc',
+            border: '1px solid #334155',
+            borderRadius: '4px',
+            padding: '4px 8px',
+            fontSize: '11px',
+            cursor: 'pointer',
+            outline: 'none',
+            maxWidth: '520px'
+          }
+        },
+          React.createElement('option', { value: '', disabled: true }, '-- Select Tune Zone to Jump --'),
+          tuneZones.map((z, i) => React.createElement('option', { key: i, value: z.line }, `Line ${z.line + 1}: ${z.label}`))
+        )
+      ),
+
+      // Right: Go to Line Number Input
+      React.createElement('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '6px' }
+      },
+        React.createElement('span', {
+          style: { fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap', fontWeight: 'bold' }
+        }, 'Go to Line:'),
+        React.createElement('input', {
+          ref: jumpLineInputRef,
+          type: 'number',
+          min: 1,
+          max: (code.split('\n').length || 1),
+          value: targetLineInput,
+          placeholder: `1 - ${code.split('\n').length || 1}`,
+          onChange: (e) => setTargetLineInput(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleGoToLine();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              setJumpOpen(false);
+            }
+          },
+          style: {
+            width: '72px',
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '4px',
+            padding: '3px 8px',
+            color: '#f8fafc',
+            fontSize: '11px',
+            outline: 'none',
+            fontFamily: 'inherit'
+          }
+        }),
+        React.createElement('button', {
+          onClick: () => handleGoToLine(),
+          title: 'Jump to specified line number (Enter)',
+          style: {
+            background: '#0284c7',
+            color: '#ffffff',
+            border: '1px solid #38bdf8',
+            borderRadius: '4px',
+            padding: '3px 10px',
+            fontSize: '11px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }
+        }, 'Go')
+      ),
+
+      // Close Jump Bar Button [✕]
+      React.createElement('button', {
+        onClick: () => setJumpOpen(false),
+        title: 'Close Jump Panel (Esc)',
+        style: {
+          background: 'transparent',
+          border: 'none',
+          color: '#94a3b8',
+          cursor: 'pointer',
+          fontSize: '12px',
+          padding: '2px 6px',
+          marginLeft: 'auto'
+        }
+      }, '✕')
     ),
 
     // Search & Replace Dock Panel
@@ -871,7 +1051,14 @@ export default function PilotCodeEditor() {
           flexShrink: 0
         }
       },
-        lineNumbers.map(n => React.createElement('div', { key: n }, n))
+        lineNumbers.map(n => {
+          const isErr = syntaxError && syntaxError.line === n;
+          return React.createElement('div', {
+            key: n,
+            title: isErr ? `Syntax Error: ${syntaxError.message}` : undefined,
+            style: isErr ? { color: '#f87171', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.25)' } : undefined
+          }, isErr ? `● ${n}` : n);
+        })
       ),
 
       // (2) Code Area Wrapper (Stacking Container)

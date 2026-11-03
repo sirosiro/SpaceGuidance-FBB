@@ -5,6 +5,43 @@ import time
 import os
 import sys
 import json
+import difflib
+from typing import Optional, Dict, Any, Union
+
+class Telemetry(dict):
+    """
+    Intelligent Sim-to-Real Telemetry Container.
+    - 100% Backward-compatible dictionary: tlm["yaw"], tlm.get("yaw", 0.0)
+    - Intuitive direct attribute access: tlm.yaw, tlm.pos_x, tlm.cross_track_err
+    - Intelligent Typo Guard: On KeyError or AttributeError, provides 'Did you mean ...?' suggestions.
+    """
+    def __getattr__(self, name: str) -> Any:
+        if name in self:
+            return self[name]
+        matches = difflib.get_close_matches(name, self.keys(), n=2, cutoff=0.55)
+        hint = f" Did you mean: '{matches[0]}'?" if matches else ""
+        sample_keys = ", ".join(sorted([k for k in self.keys() if not k.startswith("_")])[:8])
+        raise AttributeError(f"[Telemetry] Unknown attribute '{name}'.{hint} Available keys: {sample_keys}...")
+
+    def __getitem__(self, key: str) -> Any:
+        try:
+            return super().__getitem__(key)
+        except KeyError:
+            matches = difflib.get_close_matches(str(key), self.keys(), n=2, cutoff=0.55)
+            hint = f" Did you mean: '{matches[0]}'?" if matches else ""
+            sample_keys = ", ".join(sorted([k for k in self.keys() if not k.startswith("_")])[:8])
+            raise KeyError(f"[Telemetry] Invalid key '{key}'.{hint} Available keys: {sample_keys}...")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key not in self:
+            matches = difflib.get_close_matches(str(key), self.keys(), n=1, cutoff=0.6)
+            if matches:
+                sys.stderr.write(f"\n⚠️  [Telemetry Warning] tlm.get('{key}') not found! Did you mean '{matches[0]}'? (Falling back to default: {default})\n")
+                sys.stderr.flush()
+        return super().get(key, default)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
 
 class UartTee:
     """
@@ -228,16 +265,22 @@ class SpaceGuidanceHardware:
                         break
                     except Exception:
                         time.sleep(0.001)
-        return res
+        return Telemetry(res)
 
-    def write_commands(self, thrust_x, thrust_y, torque=0.0, wheel_torque=0.0, fdir_mode=0, thrust_z=0.0,
-                       torque_x=0.0, torque_y=0.0, wheel_torque_x=0.0, wheel_torque_y=0.0, thrust_vertical=0.0):
-        # Convert floats to Q16.16 integers
-        tx_int = int(thrust_x * 65536.0) & 0xFFFFFFFF
-        ty_int = int(thrust_y * 65536.0) & 0xFFFFFFFF
-        tz_int = int(thrust_z) if isinstance(thrust_z, int) else (int(thrust_z * 65536.0) & 0xFFFFFFFF)
-        tq_int = int(torque * 65536.0) & 0xFFFFFFFF
-        tw_int = int(wheel_torque * 65536.0) & 0xFFFFFFFF
+    def write_commands(self, thrust_x: float, thrust_y: float, torque: float = 0.0, wheel_torque: float = 0.0,
+                       fdir_mode: int = 0, thrust_z: Union[float, int] = 0.0,
+                       torque_x: float = 0.0, torque_y: float = 0.0,
+                       wheel_torque_x: float = 0.0, wheel_torque_y: float = 0.0,
+                       thrust_vertical: float = 0.0) -> None:
+        # Convert floats to Q16.16 integers with friendly numeric validation
+        try:
+            tx_int = int(float(thrust_x) * 65536.0) & 0xFFFFFFFF
+            ty_int = int(float(thrust_y) * 65536.0) & 0xFFFFFFFF
+            tz_int = int(thrust_z) if isinstance(thrust_z, int) else (int(float(thrust_z) * 65536.0) & 0xFFFFFFFF)
+            tq_int = int(float(torque) * 65536.0) & 0xFFFFFFFF
+            tw_int = int(float(wheel_torque) * 65536.0) & 0xFFFFFFFF
+        except (ValueError, TypeError) as e:
+            raise TypeError(f"[SpaceGuidanceHardware] write_commands arguments must be numeric floats/ints: {e}") from e
 
         # Offset for thrust_cmd_x is 0x10 (16 bytes = 4 uint32s)
         self.mm.seek(16)
