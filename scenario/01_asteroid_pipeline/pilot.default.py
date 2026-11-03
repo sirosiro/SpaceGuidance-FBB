@@ -39,7 +39,6 @@ def run_pilot():
 
     # 制御周期: 50Hz (20ms)
     dt = 0.02
-    prev_error = 0.0
 
     # === TUNE ZONE 1: 制御ゲインのチューニング (3D Bank-to-Translate 最適化) ===
     kp = 1.20      # 機首方位 (Yaw) 安定化比例ゲイン
@@ -84,7 +83,19 @@ def run_pilot():
 
     # 脱飽和ステータス管理
     in_desat = False
-    desat_count = 0
+
+    # === スラスタ変化率制限 (Slew Rate Limiter) ===
+    # 急峻な推力変化による配管サージや機体振動を抑え、滑らかなアクチュエータ駆動を実現
+    # 最大変化率: 8.0/s (0.0 から 1.0 まで約 125ms で滑らかに遷移)
+    MAX_SLEW_RATE = 8.0
+    prev_thrust_x = 0.0
+    prev_lat_thrust = 0.0
+    prev_vert_thrust = 0.0
+    prev_rcs_torque = 0.0
+
+    def apply_slew_rate(cmd: float, prev_cmd: float, max_rate: float, step_dt: float) -> float:
+        max_delta = max_rate * step_dt
+        return max(prev_cmd - max_delta, min(prev_cmd + max_delta, cmd))
 
     try:
         while True:
@@ -139,12 +150,10 @@ def run_pilot():
                 if raw_edge >= 0x80000000:
                     raw_edge -= 0x100000000
                 error = raw_edge / 65536.0
-                prev_error = error
             else:
                 dy = pos_y - nom_y
                 dz = pos_z - nom_z
                 error = - (dy * math.cos(roll) + dz * math.sin(roll))
-                prev_error = error
 
             # 3. 機上ナビゲーション（オンボード航法によるゲート接近・通過把握）
             for gate_x in gate_x_list:
@@ -193,12 +202,11 @@ def run_pilot():
 
             if not in_desat:
                 wheel_torque_cmd = -target_torque
-                rcs_torque_cmd = 0.0
+                raw_rcs_torque = 0.0
             else:
-                desat_count += 1
                 wheel_brake = -0.15 if wheel_rpm > 0 else +0.15
                 wheel_torque_cmd = wheel_brake
-                rcs_torque_cmd = target_torque + wheel_brake
+                raw_rcs_torque = target_torque + wheel_brake
 
             # 10. 3D Bank-to-Translate 向心力フィードフォワード + 横移動スラスタ
             cos_p = math.cos(roll)
@@ -206,18 +214,29 @@ def run_pilot():
             ff_thrust_lat = (100.0 * (ff_ay * cos_p + ff_az * sin_p)) / 50.0
 
             lat_cmd = ff_thrust_lat + (klat * error) - kvlat * (v_lat - v_lat_nom)
-            lat_thrust = max(-1.0, min(1.0, lat_cmd))
+            raw_lat_thrust = max(-1.0, min(1.0, lat_cmd))
 
             # 垂直 RCS サーボトリム (高度補正)
             z_err = nom_z - pos_z
             ff_thrust_vert = (100.0 * (-ff_ay * sin_p + ff_az * cos_p)) / 50.0
             vert_cmd = ff_thrust_vert + 2.50 * z_err - 2.50 * (vel_z - v_z_nom)
-            vert_thrust = max(-1.0, min(1.0, vert_cmd))
+            raw_vert_thrust = max(-1.0, min(1.0, vert_cmd))
 
             # 11. 進行方向の速度レギュレータ
-            thrust_x = max(-0.25, min(0.35, 0.35 * (target_vx - v_fwd)))
+            raw_thrust_x = max(-0.25, min(0.35, 0.35 * (target_vx - v_fwd)))
 
-            # 12. ハードウェアへ推進コマンドを出力 (3D Bank-to-Translate)
+            # 12. スラスタ変化率制限 (Slew Rate Limiter: 急峻な推力変化・配管サージ・機体振動の抑制)
+            thrust_x = apply_slew_rate(raw_thrust_x, prev_thrust_x, MAX_SLEW_RATE, dt)
+            lat_thrust = apply_slew_rate(raw_lat_thrust, prev_lat_thrust, MAX_SLEW_RATE, dt)
+            vert_thrust = apply_slew_rate(raw_vert_thrust, prev_vert_thrust, MAX_SLEW_RATE, dt)
+            rcs_torque_cmd = apply_slew_rate(raw_rcs_torque, prev_rcs_torque, MAX_SLEW_RATE, dt)
+
+            prev_thrust_x = thrust_x
+            prev_lat_thrust = lat_thrust
+            prev_vert_thrust = vert_thrust
+            prev_rcs_torque = rcs_torque_cmd
+
+            # 13. ハードウェアへ推進コマンドを出力 (3D Bank-to-Translate)
             hw.write_commands(
                 thrust_x=thrust_x,
                 thrust_y=lat_thrust,

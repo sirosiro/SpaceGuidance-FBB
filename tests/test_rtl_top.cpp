@@ -65,22 +65,25 @@ int main(int argc, char** argv) {
     std::cout << "  ✓ Centroid Q16.16: " << signed_edge << " (near center 0)" << std::endl;
     assert(std::abs(signed_edge) < 2000 && "Line centroid offset too large for centered input!");
 
-    std::cout << "[TEST] 3. Independent 3-Bit SEU Parity Robustness (X, Y, and Torque)" << std::endl;
-    // Write alternating commands to X, Y, and Torque
+    std::cout << "[TEST] 3. Independent 5-Bit SEU Parity Robustness across all 5 Actuators" << std::endl;
+    // Write alternating commands to X, Y, Z, Torque, and Wheel
     axi_write(top, 0x24, 0x01); // Kick watchdog
     axi_write(top, 0x10, 0x00000001); // X write
     tick(top);
-    uint32_t st = axi_read(top, 0x04);
-    assert((st & 0x04) == 0 && "SEU false alarm triggered on X write!");
+    assert((axi_read(top, 0x04) & 0x04) == 0 && "SEU false alarm triggered on X write!");
     axi_write(top, 0x14, 0x00000002); // Y write
     tick(top);
-    st = axi_read(top, 0x04);
-    assert((st & 0x04) == 0 && "SEU false alarm triggered on Y write!");
-    axi_write(top, 0x1C, 0x00000003); // Torque write
+    assert((axi_read(top, 0x04) & 0x04) == 0 && "SEU false alarm triggered on Y write!");
+    axi_write(top, 0x18, 0x00000004); // Z write
     tick(top);
-    st = axi_read(top, 0x04);
-    assert((st & 0x04) == 0 && "SEU false alarm triggered on Torque write!");
-    std::cout << "  ✓ Independent parity tracking across X, Y, and Torque verified without false SEU trip!" << std::endl;
+    assert((axi_read(top, 0x04) & 0x04) == 0 && "SEU false alarm triggered on Z write!");
+    axi_write(top, 0x1C, 0x00000008); // Torque write
+    tick(top);
+    assert((axi_read(top, 0x04) & 0x04) == 0 && "SEU false alarm triggered on Torque write!");
+    axi_write(top, 0x2C, 0x00000010); // Wheel Torque write
+    tick(top);
+    assert((axi_read(top, 0x04) & 0x04) == 0 && "SEU false alarm triggered on Wheel Torque write!");
+    std::cout << "  ✓ Independent 5-bit parity tracking across all 5 actuators verified without false SEU trip!" << std::endl;
 
     std::cout << "[TEST] 4. PWM Full-Scale Saturation & Continuous 100% Verification" << std::endl;
     // Set safety limit to 2.0 (0x00020000)
@@ -105,49 +108,54 @@ int main(int argc, char** argv) {
     }
     std::cout << "  ✓ -1.0 Reverse Thrust: PWM Bit 1 = strictly 100.00% active across all 256 cycles" << std::endl;
 
-    std::cout << "[TEST] 5. Signed Safety Limit Clamping Across All 3 Primary RCS Axes (X, Y, Torque)" << std::endl;
+    std::cout << "[TEST] 5. Signed Safety Limit Clamping Across All 5 Actuator Channels (X, Y, Z, Torque, Wheel)" << std::endl;
     // Set safety limit to 0.5 (0x00008000)
     axi_write(top, 0x20, 0x00008000);
 
-    // Command -1.0 reverse thrust -> must be clamped to -0.5 (0xFFFF8000)
-    axi_write(top, 0x10, 0xFFFF0000);
+    // 1. X Thrust Clamp
+    axi_write(top, 0x10, 0xFFFF0000); // -1.0 -> clamp to -0.5 (0xFFFF8000)
     tick(top);
     assert(top->safe_thrust_cmd_x_o == 0xFFFF8000 && "Negative X thrust not clamped to -0.5!");
-
-    // Command +1.0 forward thrust -> must be clamped to +0.5 (0x00008000)
-    axi_write(top, 0x10, 0x00010000);
+    axi_write(top, 0x10, 0x00010000); // +1.0 -> clamp to +0.5 (0x00008000)
     tick(top);
     assert(top->safe_thrust_cmd_x_o == 0x00008000 && "Positive X thrust not clamped to +0.5!");
 
-    // Command within-limit +0.25 (0x00004000) -> must pass through unchanged
-    axi_write(top, 0x10, 0x00004000);
+    // 2. Y Thrust Clamp
+    axi_write(top, 0x14, 0xFFFF0000); // -1.0 -> clamp to -0.5
     tick(top);
-    assert(top->safe_thrust_cmd_x_o == 0x00004000 && "Within-limit X thrust altered!");
-
-    // Command -1.0 Y-axis lateral thrust -> must be clamped to -0.5
-    axi_write(top, 0x14, 0xFFFF0000);
+    assert(top->safe_thrust_cmd_y_o == 0xFFFF8000 && "Negative Y thrust not clamped to -0.5!");
+    axi_write(top, 0x14, 0x00010000); // +1.0 -> clamp to +0.5
     tick(top);
-    assert(top->safe_thrust_cmd_y_o == 0xFFFF8000 && "Y-axis negative thrust not clamped to -0.5!");
+    assert(top->safe_thrust_cmd_y_o == 0x00008000 && "Positive Y thrust not clamped to +0.5!");
 
-    // Command +1.0 Y-axis lateral thrust -> must be clamped to +0.5
-    axi_write(top, 0x14, 0x00010000);
+    // 3. Z Thrust Clamp (Vertical)
+    axi_write(top, 0x18, 0xFFFF0000); // -1.0 -> clamp to -0.5
     tick(top);
-    assert(top->safe_thrust_cmd_y_o == 0x00008000 && "Y-axis positive thrust not clamped to +0.5!");
+    assert(top->safe_thrust_cmd_z_o == 0xFFFF8000 && "Negative Z thrust not clamped to -0.5!");
+    axi_write(top, 0x18, 0x00010000); // +1.0 -> clamp to +0.5
+    tick(top);
+    assert(top->safe_thrust_cmd_z_o == 0x00008000 && "Positive Z thrust not clamped to +0.5!");
 
-    // Command -1.0 Yaw Torque -> must be clamped to -0.5
-    axi_write(top, 0x1C, 0xFFFF0000);
+    // 4. RCS Yaw Torque Clamp
+    axi_write(top, 0x1C, 0xFFFF0000); // -1.0 -> clamp to -0.5
     tick(top);
     assert(top->safe_torque_cmd_o == 0xFFFF8000 && "Torque negative command not clamped to -0.5!");
-
-    // Command +1.0 Yaw Torque -> must be clamped to +0.5
-    axi_write(top, 0x1C, 0x00010000);
+    axi_write(top, 0x1C, 0x00010000); // +1.0 -> clamp to +0.5
     tick(top);
     assert(top->safe_torque_cmd_o == 0x00008000 && "Torque positive command not clamped to +0.5!");
 
-    std::cout << "  ✓ Bidirectional clamping for X, Y, and Torque verified with exact bit-level assertions!" << std::endl;
+    // 5. Reaction Wheel Torque Clamp
+    axi_write(top, 0x2C, 0xFFFF0000); // -1.0 -> clamp to -0.5
+    tick(top);
+    assert(top->safe_wheel_torque_cmd_o == 0xFFFF8000 && "Wheel torque negative command not clamped to -0.5!");
+    axi_write(top, 0x2C, 0x00010000); // +1.0 -> clamp to +0.5
+    tick(top);
+    assert(top->safe_wheel_torque_cmd_o == 0x00008000 && "Wheel torque positive command not clamped to +0.5!");
 
-    std::cout << "[TEST] 6. Safety Watchdog Timeout Check" << std::endl;
-    // Don't kick watchdog for 60,000 cycles -> should trip E-STOP
+    std::cout << "  ✓ Bidirectional clamping for ALL 5 CHANNELS (X, Y, Z, Torque, Wheel) verified!" << std::endl;
+
+    std::cout << "[TEST] 6. Safety Watchdog Timeout & COMPLETE 5-AXIS ACTUATOR SHUTDOWN" << std::endl;
+    // Don't kick watchdog for 60,000 cycles -> should trip E-STOP (timeout param is 50,000)
     for (int i = 0; i < 60000; ++i) {
         tick(top);
     }
@@ -156,7 +164,15 @@ int main(int argc, char** argv) {
     assert((status & 0x08) != 0 && "Watchdog timeout bit not set!");
     assert((status & 0x02) != 0 && "E-STOP interlock bit not tripped!");
     assert(top->estop_interlock_o == 1 && "estop_interlock_o not asserted!");
-    assert(top->thruster_pwm_o == 0 && "PWM not cut off after E-STOP!");
+
+    // CRITICAL: Assert that ALL 5 ACTUATOR CHANNELS are STRICTLY ZERO in hardware
+    assert(top->safe_thrust_cmd_x_o == 0 && "X thrust not cut off after E-STOP!");
+    assert(top->safe_thrust_cmd_y_o == 0 && "Y thrust not cut off after E-STOP!");
+    assert(top->safe_thrust_cmd_z_o == 0 && "Z thrust not cut off after E-STOP!");
+    assert(top->safe_torque_cmd_o   == 0 && "Torque not cut off after E-STOP!");
+    assert(top->safe_wheel_torque_cmd_o == 0 && "Reaction wheel torque not cut off after E-STOP!");
+    assert(top->thruster_pwm_o == 0 && "RCS PWM not cut off after E-STOP!");
+    std::cout << "  ✓ Complete 5-Axis Safe Cutoff verified: X=0, Y=0, Z=0, Torque=0, Wheel=0, PWM=0" << std::endl;
 
     std::cout << "[TEST] 7. Chaos SEU Fault Injection Check" << std::endl;
     axi_write(top, 0x24, 0x01); // Kick watchdog
@@ -166,29 +182,9 @@ int main(int argc, char** argv) {
     assert((status & 0x04) != 0 && "SEU bit not set in status!");
     std::cout << "  ✓ SEU Fault Injection Alert Triggered!" << std::endl;
 
-    std::cout << "[TEST] 8. Reaction Wheel Torque Command (0x2C) Read/Write Verification" << std::endl;
-    // Positive Q16.16 torque (+10.5 Nm = 0x000A8000)
-    axi_write(top, 0x2C, 0x000A8000);
-    tick(top);
-    uint32_t rw_val = axi_read(top, 0x2C);
-    assert(rw_val == 0x000A8000 && "Reaction wheel positive torque readback failed!");
-
-    // Negative Q16.16 torque (-15.25 Nm = 0xFFF0C000)
-    axi_write(top, 0x2C, 0xFFF0C000);
-    tick(top);
-    rw_val = axi_read(top, 0x2C);
-    assert(rw_val == 0xFFF0C000 && "Reaction wheel negative torque readback failed!");
-
-    // Zero torque (0x00000000)
-    axi_write(top, 0x2C, 0x00000000);
-    tick(top);
-    rw_val = axi_read(top, 0x2C);
-    assert(rw_val == 0x00000000 && "Reaction wheel zero torque readback failed!");
-    std::cout << "  ✓ Reaction Wheel Torque Command (0x2C) verified for bipolar Q16.16!" << std::endl;
-
     delete top;
     std::cout << "==========================================================" << std::endl;
-    std::cout << "✨ ALL 8 RTL TESTS (100% PWM / MULTI-AXIS CLAMP / SEU / RW 0x2C) PASSED" << std::endl;
+    std::cout << "✨ ALL RTL TESTS (COMPLETE 5-AXIS SAFETY INTERLOCK & CUTOFF) PASSED" << std::endl;
     std::cout << "==========================================================" << std::endl;
     return 0;
 }

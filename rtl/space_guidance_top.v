@@ -3,8 +3,9 @@
 `timescale 1ns / 1ps
 
 module space_guidance_top #(
-    parameter integer C_S_AXI_DATA_WIDTH = 32,
-    parameter integer C_S_AXI_ADDR_WIDTH = 6
+    parameter integer C_S_AXI_DATA_WIDTH     = 32,
+    parameter integer C_S_AXI_ADDR_WIDTH     = 6,
+    parameter integer WATCHDOG_TIMEOUT_CYCLES = 32'd1000000 // Real HW default: 10ms @ 100MHz (overridable in test/sim)
 )(
     // AXI4-Lite Clock & Reset
     input  wire                                  s_axi_aclk,
@@ -40,24 +41,26 @@ module space_guidance_top #(
     output wire                                  estop_interlock_o,
     output wire                                  seu_alert_o,
     output wire                                  irq_o,
-    // Direct test probe outputs for hardware verifier & ILA (All 3 primary axes)
+    // Direct test probe outputs for hardware verifier & ILA (All 5 actuator channels)
     output wire [31:0]                           safe_thrust_cmd_x_o,
     output wire [31:0]                           safe_thrust_cmd_y_o,
-    output wire [31:0]                           safe_torque_cmd_o
+    output wire [31:0]                           safe_thrust_cmd_z_o,
+    output wire [31:0]                           safe_torque_cmd_o,
+    output wire [31:0]                           safe_wheel_torque_cmd_o
 );
 
     // Register Offsets
-    localparam ADDR_CR_CTRL         = 6'h00;
-    localparam ADDR_SR_STATUS       = 6'h04;
-    localparam ADDR_SENSOR_RAW      = 6'h08;
-    localparam ADDR_SENSOR_EDGE     = 6'h0C;
-    localparam ADDR_THRUST_CMD_X    = 6'h10;
-    localparam ADDR_THRUST_CMD_Y    = 6'h14;
-    localparam ADDR_THRUST_CMD_Z    = 6'h18;
-    localparam ADDR_TORQUE_CMD      = 6'h1C;
-    localparam ADDR_SAFETY_LIMIT    = 6'h20;
-    localparam ADDR_WATCHDOG_KICK   = 6'h24;
-    localparam ADDR_CHAOS_FAULT_INJ = 6'h28;
+    localparam ADDR_CR_CTRL          = 6'h00;
+    localparam ADDR_SR_STATUS        = 6'h04;
+    localparam ADDR_SENSOR_RAW       = 6'h08;
+    localparam ADDR_SENSOR_EDGE      = 6'h0C;
+    localparam ADDR_THRUST_CMD_X     = 6'h10;
+    localparam ADDR_THRUST_CMD_Y     = 6'h14;
+    localparam ADDR_THRUST_CMD_Z     = 6'h18;
+    localparam ADDR_TORQUE_CMD       = 6'h1C;
+    localparam ADDR_SAFETY_LIMIT     = 6'h20;
+    localparam ADDR_WATCHDOG_KICK    = 6'h24;
+    localparam ADDR_CHAOS_FAULT_INJ  = 6'h28;
     localparam ADDR_WHEEL_TORQUE_CMD = 6'h2C;
 
     // Registers
@@ -97,14 +100,18 @@ module space_guidance_top #(
     wire        internal_seu_alert;
     wire [31:0] safe_thrust_x;
     wire [31:0] safe_thrust_y;
+    wire [31:0] safe_thrust_z;
     wire [31:0] safe_torque;
+    wire [31:0] safe_wheel_torque;
 
-    assign estop_interlock_o   = estop_tripped;
-    assign seu_alert_o         = internal_seu_alert;
-    assign irq_o               = estop_tripped || internal_seu_alert || sensor_saturated;
-    assign safe_thrust_cmd_x_o = safe_thrust_x;
-    assign safe_thrust_cmd_y_o = safe_thrust_y;
-    assign safe_torque_cmd_o   = safe_torque;
+    assign estop_interlock_o       = estop_tripped;
+    assign seu_alert_o             = internal_seu_alert;
+    assign irq_o                   = estop_tripped || internal_seu_alert || sensor_saturated;
+    assign safe_thrust_cmd_x_o     = safe_thrust_x;
+    assign safe_thrust_cmd_y_o     = safe_thrust_y;
+    assign safe_thrust_cmd_z_o     = safe_thrust_z;
+    assign safe_torque_cmd_o       = safe_torque;
+    assign safe_wheel_torque_cmd_o = safe_wheel_torque;
 
     line_sensor_filter u_filter (
         .clk(s_axi_aclk),
@@ -115,7 +122,7 @@ module space_guidance_top #(
     );
 
     safety_interlock #(
-        .WATCHDOG_TIMEOUT_CYCLES(32'd50000)
+        .WATCHDOG_TIMEOUT_CYCLES(WATCHDOG_TIMEOUT_CYCLES)
     ) u_interlock (
         .clk(s_axi_aclk),
         .rst_n(s_axi_aresetn),
@@ -126,14 +133,18 @@ module space_guidance_top #(
         .command_write_strobe_i(command_write_pulse),
         .thrust_x_cmd_i(reg_thrust_cmd_x),
         .thrust_y_cmd_i(reg_thrust_cmd_y),
+        .thrust_z_cmd_i(reg_thrust_cmd_z),
         .torque_cmd_i(reg_torque_cmd),
+        .wheel_torque_cmd_i(reg_wheel_torque_cmd),
         .safety_limit_i(reg_safety_limit),
         .estop_tripped_o(estop_tripped),
         .wdg_timeout_o(wdg_timeout),
         .seu_alert_o(internal_seu_alert),
         .safe_thrust_x_o(safe_thrust_x),
         .safe_thrust_y_o(safe_thrust_y),
-        .safe_torque_o(safe_torque)
+        .safe_thrust_z_o(safe_thrust_z),
+        .safe_torque_o(safe_torque),
+        .safe_wheel_torque_o(safe_wheel_torque)
     );
 
     rcs_thruster_pwm u_pwm (
@@ -149,19 +160,19 @@ module space_guidance_top #(
     // AXI Write logic
     always @(posedge s_axi_aclk or negedge s_axi_aresetn) begin
         if (!s_axi_aresetn) begin
-            awready_reg         <= 1'b0;
-            wready_reg          <= 1'b0;
-            bvalid_reg          <= 1'b0;
-            reg_cr_ctrl         <= 32'd0;
-            reg_thrust_cmd_x    <= 32'd0;
-            reg_thrust_cmd_y    <= 32'd0;
-            reg_thrust_cmd_z    <= 32'd0;
-            reg_torque_cmd      <= 32'd0;
-            reg_safety_limit    <= 32'h0000FFFF; // Default limit
-            reg_chaos_fault_inj <= 32'd0;
+            awready_reg          <= 1'b0;
+            wready_reg           <= 1'b0;
+            bvalid_reg           <= 1'b0;
+            reg_cr_ctrl          <= 32'd0;
+            reg_thrust_cmd_x     <= 32'd0;
+            reg_thrust_cmd_y     <= 32'd0;
+            reg_thrust_cmd_z     <= 32'd0;
+            reg_torque_cmd       <= 32'd0;
+            reg_safety_limit     <= 32'h0000FFFF; // Default limit
+            reg_chaos_fault_inj  <= 32'd0;
             reg_wheel_torque_cmd <= 32'd0;
-            wdg_kick_pulse      <= 1'b0;
-            command_write_pulse <= 1'b0;
+            wdg_kick_pulse       <= 1'b0;
+            command_write_pulse  <= 1'b0;
         end else begin
             wdg_kick_pulse      <= 1'b0;
             command_write_pulse <= 1'b0;
@@ -178,14 +189,14 @@ module space_guidance_top #(
                 bvalid_reg <= 1'b1;
                 case (s_axi_awaddr[5:0])
                     ADDR_CR_CTRL:          reg_cr_ctrl          <= s_axi_wdata;
-                    ADDR_THRUST_CMD_X:     begin reg_thrust_cmd_x <= s_axi_wdata; command_write_pulse <= 1'b1; end
-                    ADDR_THRUST_CMD_Y:     begin reg_thrust_cmd_y <= s_axi_wdata; command_write_pulse <= 1'b1; end
-                    ADDR_THRUST_CMD_Z:     reg_thrust_cmd_z     <= s_axi_wdata;
-                    ADDR_TORQUE_CMD:       begin reg_torque_cmd   <= s_axi_wdata; command_write_pulse <= 1'b1; end
+                    ADDR_THRUST_CMD_X:     begin reg_thrust_cmd_x     <= s_axi_wdata; command_write_pulse <= 1'b1; end
+                    ADDR_THRUST_CMD_Y:     begin reg_thrust_cmd_y     <= s_axi_wdata; command_write_pulse <= 1'b1; end
+                    ADDR_THRUST_CMD_Z:     begin reg_thrust_cmd_z     <= s_axi_wdata; command_write_pulse <= 1'b1; end
+                    ADDR_TORQUE_CMD:       begin reg_torque_cmd       <= s_axi_wdata; command_write_pulse <= 1'b1; end
                     ADDR_SAFETY_LIMIT:     reg_safety_limit     <= s_axi_wdata;
                     ADDR_WATCHDOG_KICK:    wdg_kick_pulse       <= 1'b1;
                     ADDR_CHAOS_FAULT_INJ:  reg_chaos_fault_inj  <= s_axi_wdata;
-                    ADDR_WHEEL_TORQUE_CMD: reg_wheel_torque_cmd <= s_axi_wdata;
+                    ADDR_WHEEL_TORQUE_CMD: begin reg_wheel_torque_cmd <= s_axi_wdata; command_write_pulse <= 1'b1; end
                     default: ;
                 endcase
             end else if (s_axi_bready && bvalid_reg) begin
@@ -214,14 +225,14 @@ module space_guidance_top #(
                     ADDR_SR_STATUS:        rdata_reg <= {28'd0, wdg_timeout, internal_seu_alert, estop_tripped, reg_cr_ctrl[0]};
                     ADDR_SENSOR_RAW:       rdata_reg <= raw_sensor_adc_i;
                     ADDR_SENSOR_EDGE:      rdata_reg <= line_centroid_q16;
-                    ADDR_THRUST_CMD_X:     rdata_reg <= reg_thrust_cmd_x;
-                    ADDR_THRUST_CMD_Y:     rdata_reg <= reg_thrust_cmd_y;
-                    ADDR_THRUST_CMD_Z:     rdata_reg <= reg_thrust_cmd_z;
-                    ADDR_TORQUE_CMD:       rdata_reg <= reg_torque_cmd;
+                    ADDR_THRUST_CMD_X:     rdata_reg <= safe_thrust_x;
+                    ADDR_THRUST_CMD_Y:     rdata_reg <= safe_thrust_y;
+                    ADDR_THRUST_CMD_Z:     rdata_reg <= safe_thrust_z;
+                    ADDR_TORQUE_CMD:       rdata_reg <= safe_torque;
                     ADDR_SAFETY_LIMIT:     rdata_reg <= reg_safety_limit;
                     ADDR_CHAOS_FAULT_INJ:  rdata_reg <= reg_chaos_fault_inj;
-                    ADDR_WHEEL_TORQUE_CMD: rdata_reg <= reg_wheel_torque_cmd;
-                    default:               rdata_reg <= 32'hDEADBEEF;
+                    ADDR_WHEEL_TORQUE_CMD: rdata_reg <= safe_wheel_torque;
+                    default:               rdata_reg <= 32'd0;
                 endcase
             end else if (s_axi_rready && rvalid_reg) begin
                 rvalid_reg <= 1'b0;

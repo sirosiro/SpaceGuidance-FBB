@@ -44,6 +44,7 @@ cmake --build "${PROJECT_ROOT}/build" >/dev/null 2>&1
 # 2. Build and run Verilator RTL test
 echo "[Build] Building Verilator RTL Test..."
 verilator -Wall -Wno-fatal --cc \
+    -GWATCHDOG_TIMEOUT_CYCLES=50000 \
     rtl/space_guidance_top.v \
     rtl/line_sensor_filter.v \
     rtl/rcs_thruster_pwm.v \
@@ -51,11 +52,12 @@ verilator -Wall -Wno-fatal --cc \
     --exe tests/test_rtl_top.cpp \
     -Mdir obj_dir_rtl --build -o test_rtl_top >/dev/null 2>&1
 
-run_step "Verilator RTL 8-Point Unit Test" "${PROJECT_ROOT}/obj_dir_rtl/test_rtl_top"
+run_step "Verilator RTL 5-Axis Safety Interlock Test" "${PROJECT_ROOT}/obj_dir_rtl/test_rtl_top"
 
 # 3. Build and run Verilator Physics Co-Sim test
 echo "[Build] Building Verilator Physics Co-Sim Test..."
 verilator -Wall -Wno-fatal --cc \
+    -GWATCHDOG_TIMEOUT_CYCLES=50000 \
     rtl/space_guidance_top.v \
     rtl/line_sensor_filter.v \
     rtl/rcs_thruster_pwm.v \
@@ -65,7 +67,7 @@ verilator -Wall -Wno-fatal --cc \
     -CFLAGS "-I../include" \
     -Mdir obj_dir_physics --build -o test_physics_sim >/dev/null 2>&1
 
-run_step "Physics & RTL Co-Sim Closed-Loop Test" "${PROJECT_ROOT}/obj_dir_physics/test_physics_sim"
+run_step "Physics Conservation Laws & RTL Co-Sim Closed-Loop Test" "${PROJECT_ROOT}/obj_dir_physics/test_physics_sim"
 
 # 4. Stage 1 Asteroid Pipeline Integration Test
 run_step "Stage 1: Asteroid Pipeline Integration Test" python3 "${PROJECT_ROOT}/tests/test_stage1_run.py"
