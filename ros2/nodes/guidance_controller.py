@@ -127,6 +127,7 @@ class SpaceGuidanceHardware:
             file_size = self.SIZE
         self.mm = mmap.mmap(self.f.fileno(), file_size)
         self.uart_tee = UartTee(telemetry_uart) if telemetry_uart else None
+        self._last_tlm = None  # Zero-Order Hold (ZOH) cache for fail-safe telemetry
 
     def engage(self):
         """
@@ -140,10 +141,11 @@ class SpaceGuidanceHardware:
         self.mm.write(struct.pack("=I", cr))
 
     def read_registers(self):
-        # Seqlock lock-free retry loop (up to 10 attempts) to prevent torn reads
+        # Seqlock lock-free retry loop (up to 25 attempts) to prevent torn reads
         res = {}
         shm_ext_loaded = False
-        for retry in range(10):
+        data = None
+        for retry in range(25):
             self.mm.seek(0)
             data = self.mm.read(self.SIZE)
             seq_start = 0
@@ -151,7 +153,7 @@ class SpaceGuidanceHardware:
                 magic_check, seq_start = struct.unpack_from("=2I", data, 0xA8)
                 if magic_check == 0x53504731 and (seq_start & 1):
                     # Odd sequence number indicates daemon write in progress; retry
-                    time.sleep(0.0005)
+                    time.sleep(0.0008)
                     continue
 
             unpacked = struct.unpack(self.SHM_LAYOUT, data[:struct.calcsize(self.SHM_LAYOUT)])
@@ -192,7 +194,7 @@ class SpaceGuidanceHardware:
                 if magic == 0x53504731: # 'SPG1'
                     if seq_start != seq_end:
                         # Sequence changed during unpack (torn read); retry
-                        time.sleep(0.0005)
+                        time.sleep(0.0008)
                         continue
                     doubles = struct.unpack_from("=23d", data, 0xB0)
                     res["pos_z"] = doubles[0]
@@ -245,7 +247,45 @@ class SpaceGuidanceHardware:
                     shm_ext_loaded = True
             break
 
-        if not shm_ext_loaded:
+        # Best-effort unpack if retries were exhausted during write
+        if not res and data and len(data) >= struct.calcsize(self.SHM_LAYOUT):
+            try:
+                unpacked = struct.unpack(self.SHM_LAYOUT, data[:struct.calcsize(self.SHM_LAYOUT)])
+                res = {
+                    "cr_ctrl": unpacked[0],
+                    "sr_status": unpacked[1],
+                    "sensor_raw": unpacked[2],
+                    "sensor_edge": unpacked[3],
+                    "thrust_cmd_x": unpacked[4],
+                    "thrust_cmd_y": unpacked[5],
+                    "thrust_cmd_z": unpacked[6],
+                    "torque_cmd": unpacked[7],
+                    "chaos_fault_inj": unpacked[10],
+                    "wheel_torque_cmd": unpacked[11],
+                    "pos_x": unpacked[12],
+                    "pos_y": unpacked[13],
+                    "vel_x": unpacked[14],
+                    "vel_y": unpacked[15],
+                    "angle": unpacked[16],
+                    "omega": unpacked[17],
+                    "fuel": unpacked[18],
+                    "cross_track_err": unpacked[19],
+                    "wheel_rpm": unpacked[20],
+                    "fdir_mode": unpacked[21],
+                    "stage_id": unpacked[22],
+                    "score": unpacked[23],
+                    "official_score": unpacked[23],
+                    "passed_checkpoints": unpacked[24],
+                    "passed_gates": unpacked[24],
+                    "mission_status": unpacked[25],
+                    "total_checkpoints": unpacked[26],
+                    "total_gates": unpacked[26]
+                }
+            except Exception:
+                pass
+
+        # Complete JSON fallback: Load all available keys if SHM extended unpack did not complete or res is empty
+        if not shm_ext_loaded or "pos_x" not in res:
             telem_path = None
             for cand in ["/tmp/fbb_scenario_telemetry.json", "/tmp/space_guidance_telemetry.json"]:
                 if os.path.exists(cand):
@@ -256,15 +296,36 @@ class SpaceGuidanceHardware:
                     try:
                         with open(telem_path, "r") as jf:
                             jdata = json.load(jf)
-                        for k in ["pos_z", "vel_z", "roll", "pitch", "yaw", "omega_x", "omega_y", "omega_z",
-                                  "wheel_rpm_x", "wheel_rpm_y", "wheel_rpm_z", "thruster_health",
-                                  "chaos_seed", "debris_azimuth", "debris_elevation",
-                                  "damaged_thruster_1", "damaged_thruster_2"]:
-                            if k in jdata:
+                        all_telemetry_keys = [
+                            "pos_x", "pos_y", "pos_z", "vel_x", "vel_y", "vel_z",
+                            "angle", "omega", "roll", "pitch", "yaw",
+                            "omega_x", "omega_y", "omega_z",
+                            "wheel_rpm", "wheel_rpm_x", "wheel_rpm_y", "wheel_rpm_z",
+                            "fuel", "cross_track_err", "fdir_mode", "stage_id",
+                            "score", "official_score", "passed_checkpoints", "passed_gates",
+                            "mission_status", "total_checkpoints", "total_gates",
+                            "thruster_health", "cable_tension", "cable_vibration",
+                            "detumble_time", "elapsed_time", "chaos_seed",
+                            "debris_azimuth", "debris_elevation", "debris_hits",
+                            "damaged_thruster_1", "damaged_thruster_2",
+                            "official_grade", "last_event"
+                        ]
+                        for k in all_telemetry_keys:
+                            if k in jdata and (k not in res or not shm_ext_loaded):
                                 res[k] = jdata[k]
                         break
                     except Exception:
                         time.sleep(0.001)
+
+        # Zero-Order Hold (ZOH) safeguard: If still missing essential keys, use previous valid frame
+        if "pos_x" not in res and self._last_tlm is not None:
+            for k, v in self._last_tlm.items():
+                if k not in res:
+                    res[k] = v
+
+        if "pos_x" in res:
+            self._last_tlm = res.copy()
+
         return Telemetry(res)
 
     def write_commands(self, thrust_x: float, thrust_y: float, torque: float = 0.0, wheel_torque: float = 0.0,

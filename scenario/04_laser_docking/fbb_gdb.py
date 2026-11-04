@@ -24,17 +24,17 @@ FBB_DEVICES = [
             {
                 "name": "SR_STATUS",
                 "offset": 4,
-                "direction": "RW"
+                "direction": "RO"
             },
             {
                 "name": "SENSOR_RAW",
                 "offset": 8,
-                "direction": "RW"
+                "direction": "RO"
             },
             {
                 "name": "SENSOR_EDGE",
                 "offset": 12,
-                "direction": "RW"
+                "direction": "RO"
             },
             {
                 "name": "THRUST_CMD_X",
@@ -64,7 +64,7 @@ FBB_DEVICES = [
             {
                 "name": "WATCHDOG_KICK",
                 "offset": 36,
-                "direction": "RW"
+                "direction": "WO"
             },
             {
                 "name": "CHAOS_FAULT_INJ",
@@ -75,6 +75,566 @@ FBB_DEVICES = [
                 "name": "WHEEL_TORQUE_CMD",
                 "offset": 44,
                 "direction": "RW"
+            },
+            {
+                "name": "POS_X_L",
+                "offset": 48,
+                "direction": "RO"
+            },
+            {
+                "name": "POS_X_H",
+                "offset": 52,
+                "direction": "RO"
+            },
+            {
+                "name": "POS_Y_L",
+                "offset": 56,
+                "direction": "RO"
+            },
+            {
+                "name": "POS_Y_H",
+                "offset": 60,
+                "direction": "RO"
+            },
+            {
+                "name": "VEL_X_L",
+                "offset": 64,
+                "direction": "RO"
+            },
+            {
+                "name": "VEL_X_H",
+                "offset": 68,
+                "direction": "RO"
+            },
+            {
+                "name": "VEL_Y_L",
+                "offset": 72,
+                "direction": "RO"
+            },
+            {
+                "name": "VEL_Y_H",
+                "offset": 76,
+                "direction": "RO"
+            },
+            {
+                "name": "ANGLE_L",
+                "offset": 80,
+                "direction": "RO"
+            },
+            {
+                "name": "ANGLE_H",
+                "offset": 84,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_L",
+                "offset": 88,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_H",
+                "offset": 92,
+                "direction": "RO"
+            },
+            {
+                "name": "FUEL_L",
+                "offset": 96,
+                "direction": "RO"
+            },
+            {
+                "name": "FUEL_H",
+                "offset": 100,
+                "direction": "RO"
+            },
+            {
+                "name": "XT_ERR_L",
+                "offset": 104,
+                "direction": "RO"
+            },
+            {
+                "name": "XT_ERR_H",
+                "offset": 108,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_L",
+                "offset": 112,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_H",
+                "offset": 116,
+                "direction": "RO"
+            },
+            {
+                "name": "FDIR_MODE",
+                "offset": 120,
+                "direction": "RW"
+            },
+            {
+                "name": "STAGE_ID",
+                "offset": 124,
+                "direction": "RO"
+            },
+            {
+                "name": "OFFICIAL_SCORE",
+                "offset": 128,
+                "direction": "RO"
+            },
+            {
+                "name": "PASSED_GATES",
+                "offset": 132,
+                "direction": "RO"
+            },
+            {
+                "name": "MISSION_STATUS",
+                "offset": 136,
+                "direction": "RO"
+            },
+            {
+                "name": "TOTAL_GATES",
+                "offset": 140,
+                "direction": "RO"
+            },
+            {
+                "name": "TORQUE_X_CMD",
+                "offset": 144,
+                "direction": "RW"
+            },
+            {
+                "name": "TORQUE_Y_CMD",
+                "offset": 148,
+                "direction": "RW"
+            },
+            {
+                "name": "WHEEL_TORQUE_X",
+                "offset": 152,
+                "direction": "RW"
+            },
+            {
+                "name": "WHEEL_TORQUE_Y",
+                "offset": 156,
+                "direction": "RW"
+            },
+            {
+                "name": "THRUST_VERT_CMD",
+                "offset": 160,
+                "direction": "RW"
+            },
+            {
+                "name": "RESERVED_A4",
+                "offset": 164,
+                "direction": "RO"
+            },
+            {
+                "name": "SHM_MAGIC",
+                "offset": 168,
+                "direction": "RO"
+            },
+            {
+                "name": "SEQLOCK_COUNTER",
+                "offset": 172,
+                "direction": "RO"
+            },
+            {
+                "name": "POS_Z_L",
+                "offset": 176,
+                "direction": "RO"
+            },
+            {
+                "name": "POS_Z_H",
+                "offset": 180,
+                "direction": "RO"
+            },
+            {
+                "name": "VEL_Z_L",
+                "offset": 184,
+                "direction": "RO"
+            },
+            {
+                "name": "VEL_Z_H",
+                "offset": 188,
+                "direction": "RO"
+            },
+            {
+                "name": "ROLL_L",
+                "offset": 192,
+                "direction": "RO"
+            },
+            {
+                "name": "ROLL_H",
+                "offset": 196,
+                "direction": "RO"
+            },
+            {
+                "name": "PITCH_L",
+                "offset": 200,
+                "direction": "RO"
+            },
+            {
+                "name": "PITCH_H",
+                "offset": 204,
+                "direction": "RO"
+            },
+            {
+                "name": "YAW_L",
+                "offset": 208,
+                "direction": "RO"
+            },
+            {
+                "name": "YAW_H",
+                "offset": 212,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_X_L",
+                "offset": 216,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_X_H",
+                "offset": 220,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_Y_L",
+                "offset": 224,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_Y_H",
+                "offset": 228,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_Z_L",
+                "offset": 232,
+                "direction": "RO"
+            },
+            {
+                "name": "OMEGA_Z_H",
+                "offset": 236,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_X_L",
+                "offset": 240,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_X_H",
+                "offset": 244,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_Y_L",
+                "offset": 248,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_Y_H",
+                "offset": 252,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_Z_L",
+                "offset": 256,
+                "direction": "RO"
+            },
+            {
+                "name": "WHEEL_RPM_Z_H",
+                "offset": 260,
+                "direction": "RO"
+            },
+            {
+                "name": "CABLE_TENSION_L",
+                "offset": 264,
+                "direction": "RO"
+            },
+            {
+                "name": "CABLE_TENSION_H",
+                "offset": 268,
+                "direction": "RO"
+            },
+            {
+                "name": "CABLE_VIB_L",
+                "offset": 272,
+                "direction": "RO"
+            },
+            {
+                "name": "CABLE_VIB_H",
+                "offset": 276,
+                "direction": "RO"
+            },
+            {
+                "name": "DETUMBLE_TIME_L",
+                "offset": 280,
+                "direction": "RO"
+            },
+            {
+                "name": "DETUMBLE_TIME_H",
+                "offset": 284,
+                "direction": "RO"
+            },
+            {
+                "name": "ELAPSED_TIME_L",
+                "offset": 288,
+                "direction": "RO"
+            },
+            {
+                "name": "ELAPSED_TIME_H",
+                "offset": 292,
+                "direction": "RO"
+            },
+            {
+                "name": "TARGET_ANG_L",
+                "offset": 296,
+                "direction": "RO"
+            },
+            {
+                "name": "TARGET_ANG_H",
+                "offset": 300,
+                "direction": "RO"
+            },
+            {
+                "name": "TARGET_OMG_L",
+                "offset": 304,
+                "direction": "RO"
+            },
+            {
+                "name": "TARGET_OMG_H",
+                "offset": 308,
+                "direction": "RO"
+            },
+            {
+                "name": "REL_ANG_L",
+                "offset": 312,
+                "direction": "RO"
+            },
+            {
+                "name": "REL_ANG_H",
+                "offset": 316,
+                "direction": "RO"
+            },
+            {
+                "name": "REL_OMG_L",
+                "offset": 320,
+                "direction": "RO"
+            },
+            {
+                "name": "REL_OMG_H",
+                "offset": 324,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_148_L",
+                "offset": 328,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_148_H",
+                "offset": 332,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_150_L",
+                "offset": 336,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_150_H",
+                "offset": 340,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_158_L",
+                "offset": 344,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_158_H",
+                "offset": 348,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_160_L",
+                "offset": 352,
+                "direction": "RO"
+            },
+            {
+                "name": "RESERVED_160_H",
+                "offset": 356,
+                "direction": "RO"
+            },
+            {
+                "name": "CHECKPOINT_PTS",
+                "offset": 360,
+                "direction": "RO"
+            },
+            {
+                "name": "BONUS_PTS",
+                "offset": 364,
+                "direction": "RO"
+            },
+            {
+                "name": "CABLE_SNAPPED",
+                "offset": 368,
+                "direction": "RO"
+            },
+            {
+                "name": "THRUST_HEALTH",
+                "offset": 372,
+                "direction": "RO"
+            },
+            {
+                "name": "IS_DETUMBLED",
+                "offset": 376,
+                "direction": "RO"
+            },
+            {
+                "name": "DEBRIS_HITS",
+                "offset": 380,
+                "direction": "RO"
+            },
+            {
+                "name": "CHAOS_SEED",
+                "offset": 384,
+                "direction": "RO"
+            },
+            {
+                "name": "DMG_THRUST_1",
+                "offset": 388,
+                "direction": "RO"
+            },
+            {
+                "name": "DMG_THRUST_2",
+                "offset": 392,
+                "direction": "RO"
+            },
+            {
+                "name": "MISSION_CODE",
+                "offset": 396,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_0",
+                "offset": 400,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_1",
+                "offset": 404,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_2",
+                "offset": 408,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_3",
+                "offset": 412,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_4",
+                "offset": 416,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_5",
+                "offset": 420,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_6",
+                "offset": 424,
+                "direction": "RO"
+            },
+            {
+                "name": "GRADE_STR_7",
+                "offset": 428,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_0",
+                "offset": 432,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_1",
+                "offset": 436,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_2",
+                "offset": 440,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_3",
+                "offset": 444,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_4",
+                "offset": 448,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_5",
+                "offset": 452,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_6",
+                "offset": 456,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_7",
+                "offset": 460,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_8",
+                "offset": 464,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_9",
+                "offset": 468,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_10",
+                "offset": 472,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_11",
+                "offset": 476,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_12",
+                "offset": 480,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_13",
+                "offset": 484,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_14",
+                "offset": 488,
+                "direction": "RO"
+            },
+            {
+                "name": "EVENT_STR_15",
+                "offset": 492,
+                "direction": "RO"
             }
         ]
     },

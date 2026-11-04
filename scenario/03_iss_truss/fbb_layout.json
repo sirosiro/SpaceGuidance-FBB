@@ -4,31 +4,15 @@
             "type": "branch",
             "data": [
                 {
-                    "type": "branch",
-                    "data": [
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
-                                    "registerMonitor"
-                                ],
-                                "activeView": "registerMonitor",
-                                "id": "4"
-                            },
-                            "size": 585
-                        },
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
-                                    "dtsVisualizer"
-                                ],
-                                "activeView": "dtsVisualizer",
-                                "id": "2"
-                            },
-                            "size": 575
-                        }
-                    ],
+                    "type": "leaf",
+                    "data": {
+                        "views": [
+                            "registerMonitor",
+                            "dtsVisualizer"
+                        ],
+                        "activeView": "registerMonitor",
+                        "id": "4"
+                    },
                     "size": 359
                 },
                 {
@@ -44,7 +28,7 @@
                                 "activeView": "sg-orbit-viewer",
                                 "id": "7"
                             },
-                            "size": 438
+                            "size": 369
                         },
                         {
                             "type": "leaf",
@@ -55,7 +39,7 @@
                                 "activeView": "registerTracer",
                                 "id": "5"
                             },
-                            "size": 425
+                            "size": 528
                         },
                         {
                             "type": "leaf",
@@ -66,7 +50,7 @@
                                 "activeView": "uartTerminal_vfpga_uart_1",
                                 "id": "3"
                             },
-                            "size": 297
+                            "size": 263
                         }
                     ],
                     "size": 959
@@ -100,18 +84,19 @@
                                     "size": 402
                                 }
                             ],
-                            "size": 433
+                            "size": 465
                         },
                         {
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "chaosEngine"
+                                    "chaosEngine",
+                                    "sg-pilot-editor"
                                 ],
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 727
+                            "size": 695
                         }
                     ],
                     "size": 800
@@ -156,6 +141,14 @@
             },
             "title": "SG 3D Cyber Orbit Viewer"
         },
+        "registerTracer": {
+            "id": "registerTracer",
+            "contentComponent": "registerTracer",
+            "params": {
+                "_componentName": "registerTracer"
+            },
+            "title": "Tracer"
+        },
         "uartTerminal_vfpga_uart_1": {
             "id": "uartTerminal_vfpga_uart_1",
             "contentComponent": "uartTerminal",
@@ -189,14 +182,161 @@
             },
             "title": "Chaos & Fault Injection"
         },
-        "registerTracer": {
-            "id": "registerTracer",
-            "contentComponent": "registerTracer",
+        "sg-pilot-editor": {
+            "id": "sg-pilot-editor",
+            "contentComponent": "sg-pilot-editor",
             "params": {
-                "_componentName": "registerTracer"
+                "_componentName": "sg-pilot-editor"
             },
-            "title": "Tracer"
+            "title": "SG Pilot Code Editor"
         }
     },
-    "activeGroup": "5"
+    "activeGroup": "7",
+    "_fbb_pane_state": {
+        "tracer": {
+            "selectedGroup": "ALL",
+            "mode": "zero_center",
+            "timebaseSpan": "all"
+        },
+        "monitor": {
+            "expandedDevices": {},
+            "expandedGroups": {
+                "vfpga_reg_Standard Hardware Control & Actuation": true,
+                "vfpga_reg_Base 2D Telemetry Export": false,
+                "vfpga_reg_FDIR Mode & Official Referee Engine": true,
+                "vfpga_reg_Extended Multi-Axis Control Commands": true,
+                "vfpga_reg_Synchronization Header & Seqlock": true,
+                "vfpga_reg_Extended 3D Kinematics & Physical Dynamics": false,
+                "vfpga_reg_Truss Structural Defect Telemetry": false,
+                "vfpga_reg_Scores & Status Flags": false,
+                "vfpga_reg_Strings & Buffers": false
+            }
+        },
+        "hiddenTraceKeys": {
+            "vfpga_reg_CR_CTRL": false,
+            "vfpga_reg_SR_STATUS": false,
+            "vfpga_reg_SENSOR_RAW": false,
+            "vfpga_reg_SENSOR_EDGE": false,
+            "vfpga_reg_THRUST_CMD_X": false,
+            "vfpga_reg_THRUST_CMD_Y": false,
+            "vfpga_reg_THRUST_CMD_Z": false,
+            "vfpga_reg_TORQUE_CMD": false,
+            "vfpga_reg_SAFETY_LIMIT": false,
+            "vfpga_reg_WATCHDOG_KICK": false,
+            "vfpga_reg_CHAOS_FAULT_INJ": false,
+            "vfpga_reg_WHEEL_TORQUE_CMD": false,
+            "vfpga_reg_POS_X_L": true,
+            "vfpga_reg_POS_X_H": true,
+            "vfpga_reg_POS_Y_L": true,
+            "vfpga_reg_POS_Y_H": true,
+            "vfpga_reg_VEL_X_L": true,
+            "vfpga_reg_VEL_X_H": true,
+            "vfpga_reg_VEL_Y_L": true,
+            "vfpga_reg_VEL_Y_H": true,
+            "vfpga_reg_ANGLE_L": true,
+            "vfpga_reg_ANGLE_H": true,
+            "vfpga_reg_OMEGA_L": true,
+            "vfpga_reg_OMEGA_H": true,
+            "vfpga_reg_FUEL_L": true,
+            "vfpga_reg_FUEL_H": true,
+            "vfpga_reg_XT_ERR_L": true,
+            "vfpga_reg_XT_ERR_H": true,
+            "vfpga_reg_WHEEL_RPM_L": true,
+            "vfpga_reg_WHEEL_RPM_H": true,
+            "vfpga_reg_FDIR_MODE": false,
+            "vfpga_reg_STAGE_ID": false,
+            "vfpga_reg_OFFICIAL_SCORE": false,
+            "vfpga_reg_PASSED_GATES": false,
+            "vfpga_reg_MISSION_STATUS": false,
+            "vfpga_reg_TOTAL_GATES": false,
+            "vfpga_reg_TORQUE_X_CMD": false,
+            "vfpga_reg_TORQUE_Y_CMD": false,
+            "vfpga_reg_WHEEL_TORQUE_X": false,
+            "vfpga_reg_WHEEL_TORQUE_Y": false,
+            "vfpga_reg_THRUST_VERT_CMD": false,
+            "vfpga_reg_RESERVED_A4": false,
+            "vfpga_reg_SHM_MAGIC": false,
+            "vfpga_reg_SEQLOCK_COUNTER": false,
+            "vfpga_reg_POS_Z_L": true,
+            "vfpga_reg_POS_Z_H": true,
+            "vfpga_reg_VEL_Z_L": true,
+            "vfpga_reg_VEL_Z_H": true,
+            "vfpga_reg_ROLL_L": true,
+            "vfpga_reg_ROLL_H": true,
+            "vfpga_reg_PITCH_L": true,
+            "vfpga_reg_PITCH_H": true,
+            "vfpga_reg_YAW_L": true,
+            "vfpga_reg_YAW_H": true,
+            "vfpga_reg_OMEGA_X_L": true,
+            "vfpga_reg_OMEGA_X_H": true,
+            "vfpga_reg_OMEGA_Y_L": true,
+            "vfpga_reg_OMEGA_Y_H": true,
+            "vfpga_reg_OMEGA_Z_L": true,
+            "vfpga_reg_OMEGA_Z_H": true,
+            "vfpga_reg_WHEEL_RPM_X_L": true,
+            "vfpga_reg_WHEEL_RPM_X_H": true,
+            "vfpga_reg_WHEEL_RPM_Y_L": true,
+            "vfpga_reg_WHEEL_RPM_Y_H": true,
+            "vfpga_reg_WHEEL_RPM_Z_L": true,
+            "vfpga_reg_WHEEL_RPM_Z_H": true,
+            "vfpga_reg_CABLE_TENSION_L": true,
+            "vfpga_reg_CABLE_TENSION_H": true,
+            "vfpga_reg_CABLE_VIB_L": true,
+            "vfpga_reg_CABLE_VIB_H": true,
+            "vfpga_reg_DETUMBLE_TIME_L": true,
+            "vfpga_reg_DETUMBLE_TIME_H": true,
+            "vfpga_reg_ELAPSED_TIME_L": true,
+            "vfpga_reg_ELAPSED_TIME_H": true,
+            "vfpga_reg_RESERVED_128_L": true,
+            "vfpga_reg_RESERVED_128_H": true,
+            "vfpga_reg_RESERVED_130_L": true,
+            "vfpga_reg_RESERVED_130_H": true,
+            "vfpga_reg_DEFECT_0_ANG_L": true,
+            "vfpga_reg_DEFECT_0_ANG_H": true,
+            "vfpga_reg_DEFECT_1_ANG_L": true,
+            "vfpga_reg_DEFECT_1_ANG_H": true,
+            "vfpga_reg_DEFECT_2_ANG_L": true,
+            "vfpga_reg_DEFECT_2_ANG_H": true,
+            "vfpga_reg_DEFECT_0_JNT_L": true,
+            "vfpga_reg_DEFECT_0_JNT_H": true,
+            "vfpga_reg_DEFECT_1_JNT_L": true,
+            "vfpga_reg_DEFECT_1_JNT_H": true,
+            "vfpga_reg_DEFECT_2_JNT_L": true,
+            "vfpga_reg_DEFECT_2_JNT_H": true,
+            "vfpga_reg_CHECKPOINT_PTS": true,
+            "vfpga_reg_BONUS_PTS": true,
+            "vfpga_reg_CABLE_SNAPPED": true,
+            "vfpga_reg_THRUST_HEALTH": true,
+            "vfpga_reg_IS_DETUMBLED": true,
+            "vfpga_reg_DEBRIS_HITS": true,
+            "vfpga_reg_CHAOS_SEED": true,
+            "vfpga_reg_DMG_THRUST_1": true,
+            "vfpga_reg_DMG_THRUST_2": true,
+            "vfpga_reg_MISSION_CODE": true,
+            "vfpga_reg_GRADE_STR_0": true,
+            "vfpga_reg_GRADE_STR_1": true,
+            "vfpga_reg_GRADE_STR_2": true,
+            "vfpga_reg_GRADE_STR_3": true,
+            "vfpga_reg_GRADE_STR_4": true,
+            "vfpga_reg_GRADE_STR_5": true,
+            "vfpga_reg_GRADE_STR_6": true,
+            "vfpga_reg_GRADE_STR_7": true,
+            "vfpga_reg_EVENT_STR_0": true,
+            "vfpga_reg_EVENT_STR_1": true,
+            "vfpga_reg_EVENT_STR_2": true,
+            "vfpga_reg_EVENT_STR_3": true,
+            "vfpga_reg_EVENT_STR_4": true,
+            "vfpga_reg_EVENT_STR_5": true,
+            "vfpga_reg_EVENT_STR_6": true,
+            "vfpga_reg_EVENT_STR_7": true,
+            "vfpga_reg_EVENT_STR_8": true,
+            "vfpga_reg_EVENT_STR_9": true,
+            "vfpga_reg_EVENT_STR_10": true,
+            "vfpga_reg_EVENT_STR_11": true,
+            "vfpga_reg_EVENT_STR_12": true,
+            "vfpga_reg_EVENT_STR_13": true,
+            "vfpga_reg_EVENT_STR_14": true,
+            "vfpga_reg_EVENT_STR_15": true
+        }
+    }
 }
