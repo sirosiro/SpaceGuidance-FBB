@@ -1313,7 +1313,11 @@ export default function SpaceOrbitViewer3D() {
       { id: 4, pos: [-1.3, -1.8, 0] },
       { id: 5, pos: [0.8, -0.65, 0] },
       { id: 6, pos: [-1.3, 1.8, 0] },
-      { id: 7, pos: [0.8, 0.65, 0] }
+      { id: 7, pos: [0.8, 0.65, 0] },
+      { id: 8, pos: [1.2, 0, 0.4] },
+      { id: 9, pos: [1.2, 0, -0.4] },
+      { id: 10, pos: [-1.2, 0, 0.4] },
+      { id: 11, pos: [-1.2, 0, -0.4] }
     ];
     const rcsCubes = [];
     const cubeBoxGeo = new THREE.BoxGeometry(0.04, 0.04, 0.04);
@@ -2184,15 +2188,18 @@ export default function SpaceOrbitViewer3D() {
         // Pitch Up (TauY > 0): Nose pushes Up, Tail pushes Down
         //   -> T9  (Forward Ventral, -Z): sprays DOWN (-Z) to push nose up
         //   -> T10 (Aft Dorsal, +Z):     sprays UP (+Z) to push tail down
+        // Vertical Heave / Altitude Trim:
+        //   -> Upward (+Z Force):   T9 & T11 (Ventral, -Z) spray DOWN (-Z) to push ship UP
+        //   -> Downward (-Z Force): T8 & T10 (Dorsal, +Z) spray UP (+Z) to push ship DOWN
         const pitchDownDemand = Math.max(0, -actualTauY);
         const pitchUpDemand   = Math.max(0,  actualTauY);
         const vertUpDemand    = Math.max(0,  actualFz);
         const vertDownDemand  = Math.max(0, -actualFz);
 
-        const d8  = Math.max(0, pitchDownDemand + vertUpDemand)   + ((thrustMask & (1 << 8))  ? 0.6 : 0);
-        const d9  = Math.max(0, pitchUpDemand   + vertDownDemand) + ((thrustMask & (1 << 9))  ? 0.6 : 0);
-        const d10 = Math.max(0, pitchUpDemand   + vertUpDemand)   + ((thrustMask & (1 << 10)) ? 0.6 : 0);
-        const d11 = Math.max(0, pitchDownDemand + vertDownDemand) + ((thrustMask & (1 << 11)) ? 0.6 : 0);
+        const d8  = Math.max(0, pitchDownDemand + vertDownDemand) + ((thrustMask & (1 << 8))  ? 0.6 : 0);
+        const d9  = Math.max(0, pitchUpDemand   + vertUpDemand)   + ((thrustMask & (1 << 9))  ? 0.6 : 0);
+        const d10 = Math.max(0, pitchUpDemand   + vertDownDemand) + ((thrustMask & (1 << 10)) ? 0.6 : 0);
+        const d11 = Math.max(0, pitchDownDemand + vertUpDemand)   + ((thrustMask & (1 << 11)) ? 0.6 : 0);
 
         if (d8  > 0.005 && (healthMask & (1 << 8)))  addRcsSpray( 1.2, 0,  0.4, 'z',  1.0, rcsLen(d8));
         if (d9  > 0.005 && (healthMask & (1 << 9)))  addRcsSpray( 1.2, 0, -0.4, 'z', -1.0, rcsLen(d9));
