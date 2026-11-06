@@ -113,7 +113,8 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| + |\t
 01_asteroid_pipeline/
 ├── pilot.py                # 🎯【主要編集対象】自律飛行アルゴリズム・PD制御・姿勢誘導スクリプト (Python)
 ├── main.c                  # 組み込みC言語ファームウェア（MMIO bridge / test_bin のソースコード）
-├── config.dts              # Device Tree 定義（UIO 0x43C00000 レジスタマップ・シリアル定義）
+├── config.gtr              # GTR 定義（UIO 0x43C00000 仮想レジスタマップ定義）
+├── config.dts              # Device Tree 定義（標準Linux互換デバイスノード・シリアル定義）
 ├── fbb_layout.json         # Webダッシュボード画面レイアウト定義（3Dビューア、テレメトリゲージ等の配置）
 ├── run_mission.sh          # 単体ミッション実行スクリプト（シミュレータデーモン + pilot.py の起動）
 ├── run.sh                  # F-BB 連携用シナリオランナースクリプト（fbb lab / fbb test から自動呼出）
@@ -123,7 +124,7 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| + |\t
 ├── .gdbinit                # GDB 初期化スクリプト
 ├── panes/ -> ../../panes   # DPPA UIペイン群へのシンボリックリンク（3D Cyber Orbit Viewer 等）
 ├── images/                 # 機体レイアウト等のドキュメント用画像アセット
-├── vfpga_device_config.h   # [自動生成] config.dts から生成される C言語用レジスタマクロ定義
+├── vfpga_device_config.h   # [自動生成] config.gtr から生成される C言語用レジスタマクロ定義
 └── README.md               # 本ドキュメント（ミッション仕様・機体緒元・制御理論解説）
 ```
 
@@ -133,7 +134,8 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| + |\t
 | :--- | :--- | :---: | :--- |
 | **`pilot.py`** | **自律航法パイロットスクリプト** | **◎ (主対象)** | **学習者・開発者が直接チューニングするメインスクリプト**。<br>50Hz（20ms）周期で動作し、光学センサ重心偏差に基づく PD 制御、3D バンク角計算、リアクションホイールおよび RCS の推力配分を自律実行します。 |
 | **`main.c`** | **組み込み C 言語ファームウェア** | ○ (任意) | UIO デバイス（`/dev/uio0`）経由で FPGA レジスタ空間（`0x43C00000`）へアクセスする C 言語ブリッジプログラムです。C 言語で自律制御器を実装したい場合や組み込みファームウェアの挙動を直接書き換える際に編集します。 |
-| **`config.dts`** | **デバイスツリー定義 (Device Tree Source)** | △ (上級者) | 探査機の制御レジスタマップ（`CR_CTRL`, `THRUST_CMD_X`, `TORQUE_CMD` 等）やシリアル通信（`/dev/ttyPS1`）のアドレス定義を記述したハードウェア仕様書です。レジスタ追加等のハードウェア拡張時に編集します。 |
+| **`config.gtr`** | **GTR定義 (General Tree Registers)** | △ (上級者) | 探査機の制御レジスタマップ（`CR_CTRL`, `THRUST_CMD_X`, `TORQUE_CMD` 等）を記述した仮想レジスタ仕様書です。`/include/ "config.dts"` でLinux標準デバイスツリーを取り込み、レジスタ追加等のハードウェア拡張時に編集します。 |
+| **`config.dts`** | **デバイスツリー定義 (Device Tree Source)** | △ (上級者) | Linux標準のベースハードウェア仕様書（UIOベースアドレス `0x43C00000`、シリアル通信 `/dev/ttyPS1` 等）です。 |
 | **`fbb_layout.json`** | **ダッシュボード画面配置設定** | ○ (UI調整) | Web ダッシュボード（`http://localhost:8080`）で表示する DPPA ペイン（3D軌道ビューア、テレメトリゲージ、カオスFDIR等）の配置・グリッドサイズを定義しています。パネル配置をカスタマイズしたい場合に編集します。 |
 | **`run_mission.sh`** | **スタンドアロン実行スクリプト** | － (実行用) | 物理シミュレータデーモン（`space_guidance_daemon`）と `pilot.py` を順次起動し、ミッションを開始するシェルスクリプトです。ターミナルから直接 `./run_mission.sh` で実行できます。 |
 | **`run.sh`** | **F-BB 標準ランナースクリプト** | － (実行用) | F-BB の統合ランナー（`fbb lab` / `fbb test`）から自動的に呼び出され、デーモンと自律スクリプトのライフサイクル・終了処理を管理します。通常は直接編集不要です。 |
@@ -142,7 +144,7 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| + |\t
 | **`fbb_gdb.py` / `.gdbinit`** | **GDB デバッグ支援スクリプト** | － (デバッグ用) | `fbb debug` 実行時に GDB 内から FPGA レジスタを名前付きで表示・追跡可能にする拡張スクリプト群です。 |
 | **`panes/`** | **DPPA UIペイン群（シンボリックリンク）** | ○ (UI開発) | Three.js を用いた 3D Cyber Orbit Viewer やテレメトリ計器、スコアボード等の Web UI 実装（プラグインルートの `panes/` への参照）です。 |
 | **`images/`** | **ドキュメントアセット** | － (閲覧用) | `spacecraft_hardware_layout.svg` などの機体配線図・座標系図面を格納しています。 |
-| **`vfpga_device_config.h`** | **自動生成 C ヘッダー** | × (自動生成) | `config.dts` から F-BB ビルドシステムによって自動生成されるレジスタオフセット定義マクロです（手動編集不可）。 |
+| **`vfpga_device_config.h`** | **自動生成 C ヘッダー** | × (自動生成) | `config.gtr` から F-BB ビルドシステムによって自動生成されるレジスタオフセット定義マクロです（手動編集不可）。 |
 
 ---
 
