@@ -53,12 +53,13 @@
 ## 3. 通信・可視化アーキテクチャ (Unified Telemetry Bus)
 
 1. **統合 WebSocket バス (`scenario:telemetry`)**:
-   - `dashboard/server.js` は、毎秒 30 回（33ms 周期）共有メモリバッファを走査し、`seq_num` が更新されていれば即座にバイナリを展開して WebSocket `scenario:telemetry` イベントとしてブラウザへプッシュ配信する。
+   - C++ 物理デーモンは、毎秒 30 回（33ms 周期）観測プレーン契約ファイル `/tmp/fbb_scenario_telemetry.json` をアトミック出力し、F-BB コア（`dashboard/server.js`）がこれを中立トランスポートとして WebSocket `scenario:telemetry` イベント経由でブラウザへプッシュ配信する（プラグイン完全隔離原則の遵守）。
    - 個別ペインが HTTP GET（`/api/file?path=...`）を連打するポーリングは完全に禁止とする。
 2. **DPPA プラグインペイン群**:
    - `sg-orbit-viewer`: Three.js / Canvas による 3D ワイヤーフレーム宇宙空間・軌道・デブリ描画。
    - `sg-chaos-fdir`: FDIR 縮退運用ステータス、公式スコアカード、カオス障害発生ログ。
    - `sg-telemetry-gauge`: 計器盤、推進薬残量、C&W アナンシエータ（警報灯）。
+   - `sg-pilot-editor`: ブラウザ内自律航法スクリプトエディタ（`pilot.py` のリアルタイム編集・ホットリロード）。
 
 ---
 
@@ -78,3 +79,10 @@
     - AI や事前最適化アルゴリズムを導入したプレイヤーが、モデル読込やデータ準備時間を理由に理不尽なタイムペナルティを受ける構造的欠陥を排除し、公平な競技環境を確立するため。
     - プレイヤーの自己申告計測によるチート（`elapsed` 改ざん）を物理的に排除し、100% 公式審判 SSOT による決定論的公正性を担保するため。
     - 学習者・開発者が余計なインフラや表示整形コードに惑わされず、制御工学の本質に 100% 集中できる Learner-Centric Purity を確立するため。
+
+- **2026-11-06: ADR #003 Linux標準 Device Tree (DTS) の完全維持と General Tree Registers (GTR) 仮想ハードウェア契約分離**
+  - **Decision**:
+    1. 全 5 ステージ（01_asteroid_pipeline 〜 05_panic_control）の `config.dts` から独自レジスタ定義（`registers = ...;`）を完全撤廃し、純粋な Linux 標準デバイスツリー仕様（`compatible`, `reg`）のみを維持。
+    2. シミュレーション用の仮想レジスタマップ契約を各ステージの `config.gtr` へ分離し、`/include/ "config.dts"` および `&vfpga_sg { registers = ...; };` によるノード参照結合形式へ移行した。
+  - **Rationale**:
+    - 実機（AMD Zynq / Kria）への 100% Sim-to-Real 透過性を高め、初学者が本番の組み込み Linux カーネル開発で通用する正しい DTS 作法を体得できるようにするため。

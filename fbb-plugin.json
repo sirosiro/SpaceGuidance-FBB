@@ -55,6 +55,11 @@
       "id": "sg-chaos-fdir",
       "title": "SG Chaos FDIR & Scorecard",
       "entry": "panes/sg-chaos-fdir/index.js"
+    },
+    {
+      "id": "sg-pilot-editor",
+      "title": "SG Pilot Code Editor",
+      "entry": "panes/sg-pilot-editor/index.js"
     }
   ]
 }
