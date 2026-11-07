@@ -33,11 +33,6 @@ class Telemetry(dict):
             raise KeyError(f"[Telemetry] Invalid key '{key}'.{hint} Available keys: {sample_keys}...")
 
     def get(self, key: str, default: Any = None) -> Any:
-        if key not in self:
-            matches = difflib.get_close_matches(str(key), self.keys(), n=1, cutoff=0.6)
-            if matches:
-                sys.stderr.write(f"\n⚠️  [Telemetry Warning] tlm.get('{key}') not found! Did you mean '{matches[0]}'? (Falling back to default: {default})\n")
-                sys.stderr.flush()
         return super().get(key, default)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -305,9 +300,13 @@ class SpaceGuidanceHardware:
                             "score", "official_score", "passed_checkpoints", "passed_gates",
                             "mission_status", "total_checkpoints", "total_gates",
                             "thruster_health", "cable_tension", "cable_vibration",
+                            "target_angle", "target_omega", "rel_angle", "rel_omega",
                             "detumble_time", "elapsed_time", "chaos_seed",
                             "debris_azimuth", "debris_elevation", "debris_hits",
+                            "debris_spawn_x", "debris_spawn_y", "debris_spawn_z",
+                            "debris_impact_x", "debris_impact_y", "debris_impact_z",
                             "damaged_thruster_1", "damaged_thruster_2",
+                            "checkpoint_score", "bonus_score", "cable_snapped", "is_detumbled",
                             "official_grade", "last_event"
                         ]
                         for k in all_telemetry_keys:

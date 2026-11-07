@@ -273,56 +273,7 @@ export default function SpaceOrbitViewer3D() {
     }
 
     // ------------------------------------------------------------------------
-    // 1. Celestial Starfield (1200 Cosmic Stars on Sphere R=450)
-    // ------------------------------------------------------------------------
-    const starCount = 1200;
-    const starGeo = new THREE.BufferGeometry();
-    const starPositions = new Float32Array(starCount * 3);
-    const starColors = new Float32Array(starCount * 3);
-
-    let seed = 1337;
-    const rand = () => {
-      seed = (seed * 16807) % 2147483647;
-      return (seed - 1) / 2147483646;
-    };
-
-    const colorSky = new THREE.Color(0x38bdf8);
-    const colorYellow = new THREE.Color(0xfde047);
-    const colorWhite = new THREE.Color(0xffffff);
-    const colorDim = new THREE.Color(0x94a3b8);
-
-    for (let i = 0; i < starCount; i++) {
-      const u = rand();
-      const v = rand();
-      const theta = u * 2.0 * Math.PI;
-      const phi = Math.acos(2.0 * v - 1.0);
-      const r = 450 + rand() * 40;
-      starPositions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta);
-      starPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      starPositions[i * 3 + 2] = r * Math.cos(phi);
-
-      const roll = rand();
-      const c = roll > 0.85 ? colorSky : (roll > 0.65 ? colorYellow : (roll > 0.35 ? colorWhite : colorDim));
-      starColors[i * 3 + 0] = c.r;
-      starColors[i * 3 + 1] = c.g;
-      starColors[i * 3 + 2] = c.b;
-    }
-
-    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-
-    const starMat = new THREE.PointsMaterial({
-      size: 1.8,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending
-    });
-    const starField = new THREE.Points(starGeo, starMat);
-    scene.add(starField);
-
-    // ------------------------------------------------------------------------
-    // 2. Stage 1: Asteroid Pipeline Corridor & Surface Grid
+    // 1. Stage 1: Asteroid Pipeline Corridor & Surface Grid
     // ------------------------------------------------------------------------
     const stage1Group = new THREE.Group();
 
@@ -402,7 +353,7 @@ export default function SpaceOrbitViewer3D() {
     scene.add(stage1Group);
 
     // ------------------------------------------------------------------------
-    // 3. Stage 2: 100m High-Tension Carbon Nanotube Tether & Stations
+    // 2. Stage 2: 100m High-Tension Carbon Nanotube Tether & Stations
     // ------------------------------------------------------------------------
     const stage2Group = new THREE.Group();
 
@@ -526,7 +477,7 @@ export default function SpaceOrbitViewer3D() {
     scene.add(stage2Group);
 
     // ------------------------------------------------------------------------
-    // 4. Stage 3: 60m ISS Modular Box Truss & Full ISS Station Complex
+    // 3. Stage 3: 60m ISS Modular Box Truss & Full ISS Station Complex
     // ------------------------------------------------------------------------
     const stage3Group = new THREE.Group();
     const trussPts = [];
@@ -876,7 +827,7 @@ export default function SpaceOrbitViewer3D() {
     scene.add(stage3Group);
 
     // ------------------------------------------------------------------------
-    // 5. Stage 4: 50m Laser Docking Corridor & Target Station
+    // 4. Stage 4: 50m Laser Docking Corridor & Target Station
     // ------------------------------------------------------------------------
     const stage4Group = new THREE.Group();
 
@@ -1053,7 +1004,7 @@ export default function SpaceOrbitViewer3D() {
     scene.add(stage4Group);
 
     // ------------------------------------------------------------------------
-    // 6. Stage 5: Panic Control Debris Field & Recovery Gate
+    // 5. Stage 5: Panic Control Debris Field & Recovery Gate
     // ------------------------------------------------------------------------
     const stage5Group = new THREE.Group();
 
@@ -1152,7 +1103,7 @@ export default function SpaceOrbitViewer3D() {
     scene.add(stage5Group);
 
     // ------------------------------------------------------------------------
-    // 7. Spacecraft 3D Models
+    // 6. Spacecraft 3D Models
     // ------------------------------------------------------------------------
     // Ship Root Object
     const shipRoot = new THREE.Group();
@@ -1184,6 +1135,55 @@ export default function SpaceOrbitViewer3D() {
     const fighterHullGeo = new THREE.BufferGeometry();
     fighterHullGeo.setAttribute('position', new THREE.Float32BufferAttribute(fighterHullPts, 3));
     
+    // 0. Translucent Composite Interior Hull (Deep Space Aerospace Tint, matching Stage 3 style)
+    const P_nose   = [ 2.18,  0.00,  0.00];
+    const P_wingL  = [-1.28,  1.76,  0.00];
+    const P_wingR  = [-1.28, -1.76,  0.00];
+    const P_engL   = [-1.58,  0.38,  0.00];
+    const P_engR   = [-1.58, -0.38,  0.00];
+    const P_canopy = [-0.20,  0.00,  0.63];
+    const P_keel   = [-0.40,  0.00, -0.38];
+    const P_finL   = [-1.38,  0.68,  0.78];
+    const P_finR   = [-1.38, -0.68,  0.78];
+
+    const fighterMeshTris = [
+      // Dorsal Deck (Canopy & Wings)
+      P_nose, P_wingL, P_canopy,
+      P_nose, P_canopy, P_wingR,
+      P_canopy, P_wingL, P_engL,
+      P_canopy, P_engR, P_wingR,
+      P_canopy, P_engL, P_engR,
+      // Ventral Hull (Keel & Wings)
+      P_nose, P_keel, P_wingL,
+      P_nose, P_wingR, P_keel,
+      P_keel, P_engL, P_wingL,
+      P_keel, P_wingR, P_engR,
+      P_keel, P_engR, P_engL,
+      // Aft Engine Bulkhead
+      P_canopy, P_engR, P_engL,
+      P_keel, P_engL, P_engR,
+      // Twin Vertical Stabilizer Fins
+      P_canopy, P_finL, P_engL,
+      P_canopy, P_engR, P_finR
+    ];
+    const fighterMeshVerts = [];
+    for (const pt of fighterMeshTris) {
+      fighterMeshVerts.push(pt[0], pt[1], pt[2]);
+    }
+    const fighterBodyGeo = new THREE.BufferGeometry();
+    fighterBodyGeo.setAttribute('position', new THREE.Float32BufferAttribute(fighterMeshVerts, 3));
+    fighterBodyGeo.computeVertexNormals();
+
+    const fighterBodyMat = new THREE.MeshBasicMaterial({
+      color: 0x071e3d, // Deep space translucent navy tint
+      transparent: true,
+      opacity: 0.45,   // Provides authentic mass & shields background stars
+      depthWrite: false,
+      side: THREE.FrontSide
+    });
+    const fighterBodyMesh = new THREE.Mesh(fighterBodyGeo, fighterBodyMat);
+    fighterGroup.add(fighterBodyMesh);
+
     // 1. Primary Vibrant Neon Hull Lines
     const fighterHullMat = new THREE.LineBasicMaterial({
       color: 0x38bdf8,
@@ -1399,6 +1399,58 @@ export default function SpaceOrbitViewer3D() {
       climberPts.push(-0.35, y2, 0, -0.35, y1, 0);
       climberPts.push(-0.35, y1, 0, 0.35, y1, 0);
     }
+    // 0. Translucent Gondola Composite Hull & Solar Panels (Stage 3 Style)
+    const gondolaTris = [];
+    const climberHexAngles = [];
+    for (let i = 0; i < 6; i++) climberHexAngles.push((i * Math.PI * 2) / 6);
+    const gx1 = 0.49, gx2 = -0.49;
+    const cgy = 0.93, cgz = 0.73;
+
+    for (let i = 0; i < 6; i++) {
+      const a1 = climberHexAngles[i];
+      const a2 = climberHexAngles[(i + 1) % 6];
+      const y1 = cgy * Math.sin(a1), z1 = cgz * Math.cos(a1);
+      const y2 = cgy * Math.sin(a2), z2 = cgz * Math.cos(a2);
+      gondolaTris.push(
+        gx1, y1, z1,   gx2, y2, z2,   gx2, y1, z1,
+        gx1, y1, z1,   gx1, y2, z2,   gx2, y2, z2
+      );
+      if (i > 0 && i < 5) {
+        gondolaTris.push(gx1, 0, 0,  gx1, y2, z2,  gx1, y1, z1);
+        gondolaTris.push(gx2, 0, 0,  gx2, y1, z1,  gx2, y2, z2);
+      }
+    }
+    const gondolaGeo = new THREE.BufferGeometry();
+    gondolaGeo.setAttribute('position', new THREE.Float32BufferAttribute(gondolaTris, 3));
+    gondolaGeo.computeVertexNormals();
+    climberGroup.add(new THREE.Mesh(gondolaGeo, new THREE.MeshBasicMaterial({
+      color: 0x071e3d,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+      side: THREE.FrontSide
+    })));
+
+    // Translucent Solar Wing Panels
+    const solarTris = [];
+    for (const wy of [-1, 1]) {
+      const y1 = wy * 0.95;
+      const y2 = wy * 2.48;
+      solarTris.push(
+        0.34, y1, 0,  -0.34, y1, 0,  -0.34, y2, 0,
+        0.34, y1, 0,  -0.34, y2, 0,   0.34, y2, 0
+      );
+    }
+    const climberSolarGeo = new THREE.BufferGeometry();
+    climberSolarGeo.setAttribute('position', new THREE.Float32BufferAttribute(solarTris, 3));
+    climberGroup.add(new THREE.Mesh(climberSolarGeo, new THREE.MeshBasicMaterial({
+      color: 0x0369a1,
+      transparent: true,
+      opacity: 0.40,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    })));
+
     const climberGeo = new THREE.BufferGeometry();
     climberGeo.setAttribute('position', new THREE.Float32BufferAttribute(climberPts, 3));
     climberGroup.add(new THREE.LineSegments(climberGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 })));
@@ -1450,6 +1502,38 @@ export default function SpaceOrbitViewer3D() {
     }
     cargoPts.push(-1.50, 0, 0.22, -3.30, 0, 0.22);
     cargoPts.push(-1.50, 0, -0.22, -3.30, 0, -0.22);
+
+    // Translucent Heavy Octagonal Cargo Container Hull
+    const cargoMeshTris = [];
+    const cargoOctAngles = [];
+    for (let i = 0; i < 8; i++) cargoOctAngles.push((i * Math.PI * 2) / 8);
+    const cx1 = -1.52, cx2 = -3.28;
+    const cr = 0.78;
+
+    for (let i = 0; i < 8; i++) {
+      const a1 = cargoOctAngles[i];
+      const a2 = cargoOctAngles[(i + 1) % 8];
+      const y1 = cr * Math.sin(a1), z1 = cr * Math.cos(a1);
+      const y2 = cr * Math.sin(a2), z2 = cr * Math.cos(a2);
+      cargoMeshTris.push(
+        cx1, y1, z1,  cx2, y2, z2,  cx2, y1, z1,
+        cx1, y1, z1,  cx1, y2, z2,  cx2, y2, z2
+      );
+      if (i > 0 && i < 7) {
+        cargoMeshTris.push(cx1, 0, 0,  cx1, y2, z2,  cx1, y1, z1);
+        cargoMeshTris.push(cx2, 0, 0,  cx2, y1, z1,  cx2, y2, z2);
+      }
+    }
+    const cargoHullMeshGeo = new THREE.BufferGeometry();
+    cargoHullMeshGeo.setAttribute('position', new THREE.Float32BufferAttribute(cargoMeshTris, 3));
+    cargoHullMeshGeo.computeVertexNormals();
+    climberGroup.add(new THREE.Mesh(cargoHullMeshGeo, new THREE.MeshBasicMaterial({
+      color: 0x271708, // Deep amber bronze freight tint
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+      side: THREE.FrontSide
+    })));
 
     const cargoGeo = new THREE.BufferGeometry();
     cargoGeo.setAttribute('position', new THREE.Float32BufferAttribute(cargoPts, 3));
@@ -1540,7 +1624,7 @@ export default function SpaceOrbitViewer3D() {
       transparent: true,
       opacity: 0.50,   // Balanced translucency - crisp visual shielding of ISS lines
       depthWrite: false,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide
     });
     const hullMesh = new THREE.Mesh(hullGeo, hullMat);
     inspectorGroup.add(hullMesh);
@@ -2624,9 +2708,6 @@ export default function SpaceOrbitViewer3D() {
       st.lastEffectiveMode = effectiveMode;
       st.lastShipX = shipX;
       st.lastStageId = stageId;
-
-      // Keep celestial starfield centered around camera (Infinite Distance zero parallax)
-      starField.position.set(camX, camY, camZ);
 
       // WebGL Hardware Render Call
       renderer.render(scene, camera);

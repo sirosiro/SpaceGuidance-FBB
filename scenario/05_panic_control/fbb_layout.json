@@ -156,7 +156,7 @@
             "title": "SG Chaos FDIR & Scorecard"
         }
     },
-    "activeGroup": "7",
+    "activeGroup": "4",
     "_fbb_pane_state": {
         "tracer": {
             "selectedGroup": "ALL",
@@ -168,7 +168,7 @@
             "expandedGroups": {
                 "vfpga_reg_Standard Hardware Control & Actuation": true,
                 "vfpga_reg_Base 2D Telemetry Export": false,
-                "vfpga_reg_FDIR Mode & Official Referee Engine": true,
+                "vfpga_reg_FDIR Mode & Official Referee Engine": false,
                 "vfpga_reg_Extended Multi-Axis Control Commands": true,
                 "vfpga_reg_Synchronization Header & Seqlock": true,
                 "vfpga_reg_Extended 3D Kinematics & Physical Dynamics": false,
@@ -209,12 +209,12 @@
             "vfpga_reg_XT_ERR_H": true,
             "vfpga_reg_WHEEL_RPM_L": true,
             "vfpga_reg_WHEEL_RPM_H": true,
-            "vfpga_reg_FDIR_MODE": false,
-            "vfpga_reg_STAGE_ID": false,
-            "vfpga_reg_OFFICIAL_SCORE": false,
-            "vfpga_reg_PASSED_GATES": false,
-            "vfpga_reg_MISSION_STATUS": false,
-            "vfpga_reg_TOTAL_GATES": false,
+            "vfpga_reg_FDIR_MODE": true,
+            "vfpga_reg_STAGE_ID": true,
+            "vfpga_reg_OFFICIAL_SCORE": true,
+            "vfpga_reg_PASSED_GATES": true,
+            "vfpga_reg_MISSION_STATUS": true,
+            "vfpga_reg_TOTAL_GATES": true,
             "vfpga_reg_TORQUE_X_CMD": false,
             "vfpga_reg_TORQUE_Y_CMD": false,
             "vfpga_reg_WHEEL_TORQUE_X": false,

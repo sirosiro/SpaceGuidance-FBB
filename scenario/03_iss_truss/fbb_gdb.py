@@ -649,7 +649,7 @@ FBB_DEVICES = [
 
 
 class FbbRegsCommand(gdb.Command):
-    """Print all F-BB MMIO registers defined in DTS with current memory values.
+    """Print all F-BB MMIO registers defined in GTR with current memory values.
 Usage: fbb-regs [device_name_or_filter]"""
 
     def __init__(self):
@@ -672,7 +672,7 @@ Usage: fbb-regs [device_name_or_filter]"""
             base_hex = f"0x{dev['base_addr']:08X}" if dev["base_addr"] else "N/A"
             print(f"\n\033[1;36m=== Device: {dev['name']} ({dev['type']}) @ {base_hex} (size: 0x{dev['size']:X}) ===\033[0m")
             if not regs:
-                print("  (No discrete registers declared in DTS)")
+                print("  (No discrete registers declared in GTR)")
                 continue
 
             print(f"  {'Offset':<8} {'Address':<12} {'Register':<24} {'Dir':<5} {'Value (Hex)':<14} {'Value (Dec)':<12}")
@@ -778,7 +778,7 @@ Usage: fbb-write <REG_NAME|ADDRESS> <VALUE_HEX_OR_DEC>"""
                     break
 
         if addr is None and reg_offset is None:
-            print(f"Error: Register or address '{target}' not found in DTS.")
+            print(f"Error: Register or address '{target}' not found in GTR.")
             return
 
         inferior = gdb.selected_inferior() if hasattr(gdb, "selected_inferior") else None
