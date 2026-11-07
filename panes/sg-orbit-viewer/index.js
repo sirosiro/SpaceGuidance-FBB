@@ -110,7 +110,8 @@ export default function SpaceOrbitViewer3D() {
     // Historical Time-Travel scrubbing listener
     const handleEffectiveTelemetry = (e) => {
       if (e && e.detail) {
-        handleTelemetry(e.detail, true);
+        const isHistorical = !!e.detail.isHistorical;
+        handleTelemetry(e.detail, isHistorical);
       }
     };
     if (typeof window !== 'undefined') {
@@ -241,6 +242,35 @@ export default function SpaceOrbitViewer3D() {
 
     const camera = new THREE.PerspectiveCamera(52, 1, 0.2, 800);
     camera.up.set(0, 0, 1); // Z is vertical up in flight coordinates
+
+    // Event-driven size tracking via ResizeObserver to completely eliminate forced synchronous layout (Layout Thrashing)
+    let clientW = Math.max(container.clientWidth || 300, 10);
+    let clientH = Math.max(container.clientHeight || 150, 10);
+
+    const updateDimensions = (w, h) => {
+      clientW = Math.max(w, 10);
+      clientH = Math.max(h, 10);
+      renderer.setSize(clientW, clientH, false);
+      camera.aspect = clientW / clientH;
+      camera.updateProjectionMatrix();
+      hudCanvas.width = clientW;
+      hudCanvas.height = clientH;
+    };
+
+    updateDimensions(clientW, clientH);
+
+    let resizeObserver = null;
+    if (typeof targetWin.ResizeObserver !== 'undefined') {
+      resizeObserver = new targetWin.ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            updateDimensions(Math.floor(width), Math.floor(height));
+          }
+        }
+      });
+      resizeObserver.observe(container);
+    }
 
     // ------------------------------------------------------------------------
     // 1. Celestial Starfield (1200 Cosmic Stars on Sphere R=450)
@@ -1730,22 +1760,8 @@ export default function SpaceOrbitViewer3D() {
     // ------------------------------------------------------------------------
     const render = () => {
       try {
-        const clientW = Math.max(container.clientWidth || 300, 10);
-        const clientH = Math.max(container.clientHeight || 150, 10);
-
-        const dpr = targetWin.devicePixelRatio || 1;
-        const expectedGlW = Math.floor(clientW * Math.min(dpr, 2));
-        const expectedGlH = Math.floor(clientH * Math.min(dpr, 2));
-
-        if (glCanvas.width !== expectedGlW || glCanvas.height !== expectedGlH) {
-          renderer.setSize(clientW, clientH, false);
-          camera.aspect = clientW / clientH;
-          camera.updateProjectionMatrix();
-          hudCanvas.width = clientW;
-          hudCanvas.height = clientH;
-        }
-
-      const now = Date.now();
+        // Zero forced synchronous reflow: clientW and clientH are maintained via ResizeObserver
+        const now = Date.now();
       const nowSec = now * 0.001;
       const st = stateRef.current;
       const sm = smoothRef.current;
@@ -2853,6 +2869,7 @@ export default function SpaceOrbitViewer3D() {
     animId = targetWin.requestAnimationFrame(render);
 
     return () => {
+      if (resizeObserver) resizeObserver.disconnect();
       targetWin.cancelAnimationFrame(animId);
       if (renderer) renderer.dispose();
       scene.clear();

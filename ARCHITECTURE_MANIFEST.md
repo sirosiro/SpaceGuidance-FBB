@@ -56,7 +56,7 @@
    - C++ 物理デーモンは、毎秒 30 回（33ms 周期）観測プレーン契約ファイル `/tmp/fbb_scenario_telemetry.json` をアトミック出力し、F-BB コア（`dashboard/server.js`）がこれを中立トランスポートとして WebSocket `scenario:telemetry` イベント経由でブラウザへプッシュ配信する（プラグイン完全隔離原則の遵守）。
    - 個別ペインが HTTP GET（`/api/file?path=...`）を連打するポーリングは完全に禁止とする。
 2. **DPPA プラグインペイン群**:
-   - `sg-orbit-viewer`: Three.js / Canvas による 3D ワイヤーフレーム宇宙空間・軌道・デブリ描画。
+   - `sg-orbit-viewer`: Three.js / Canvas による 3D ワイヤーフレーム宇宙空間・軌道・デブリ描画。ResizeObserver によるイベント駆動型リサイズ同期を採用し、描画ループ内での強制同期リフロー（Layout Thrashing）を完全排除した 120 FPS 高性能 WebGL パイプライン。
    - `sg-chaos-fdir`: FDIR 縮退運用ステータス、公式スコアカード、カオス障害発生ログ。
    - `sg-telemetry-gauge`: 計器盤、推進薬残量、C&W アナンシエータ（警報灯）。
    - `sg-pilot-editor`: ブラウザ内自律航法スクリプトエディタ（`pilot.py` のリアルタイム編集・ホットリロード）。
