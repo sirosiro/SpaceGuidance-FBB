@@ -2,7 +2,7 @@ export const minApiVersion = 1;
 
 export default function SpaceTelemetryGauge() {
   const React = window.React || window.FBB?.React;
-  const { useState, useEffect } = window.FBB?.hooks || React;
+  const { useState, useEffect, useRef } = window.FBB?.hooks || React;
 
   const [data, setData] = useState({
     pos_x: 0.0,
@@ -18,16 +18,32 @@ export default function SpaceTelemetryGauge() {
     sensor_saturated: false
   });
 
+  const [isHistorical, setIsHistorical] = useState(false);
+  const [historyIndex, setHistoryIndex] = useState(null);
+  const isTimeTravelRef = useRef(false);
+
   useEffect(() => {
-    const handleTelemetry = (j) => {
+    const applyTelemetry = (j, historical = false, snapIndex = null) => {
       if (j && j.type && j.type !== 'space_guidance') return;
       setData(prev => ({
         ...prev,
         ...j,
         sensor_saturated: (j.sensor_raw === 0xFFFFFFFF)
       }));
+      if (historical) {
+        isTimeTravelRef.current = true;
+        setIsHistorical(true);
+        if (snapIndex !== null && snapIndex !== undefined) {
+          setHistoryIndex(snapIndex);
+        }
+      } else if (historical === false && isTimeTravelRef.current) {
+        isTimeTravelRef.current = false;
+        setIsHistorical(false);
+        setHistoryIndex(null);
+      }
     };
 
+    // 1. Live WebSocket Telemetry Listener
     let sock = window.FBB?.socket;
     if (!sock && window.FBB?.useDashboard) {
       try {
@@ -35,22 +51,79 @@ export default function SpaceTelemetryGauge() {
       } catch (e) {}
     }
 
+    const onLiveTelemetry = (j) => {
+      // INTERLOCK: Discard incoming live packets while Time-Travel is active
+      // to eliminate jitter and maintain stable historical inspection.
+      if (isTimeTravelRef.current) return;
+      applyTelemetry(j, false);
+    };
+
     if (sock) {
-      sock.on('scenario:telemetry', handleTelemetry);
-      return () => sock.off('scenario:telemetry', handleTelemetry);
-    } else {
-      const t = setInterval(async () => {
+      sock.on('scenario:telemetry', onLiveTelemetry);
+    }
+
+    // 2. Same-Window Time-Travel Listener (fbb:telemetry:effective)
+    const onEffectiveTelemetry = (e) => {
+      if (!e || !e.detail) return;
+      if (e.detail.isHistorical) {
+        applyTelemetry(e.detail, true, e.detail.index);
+      } else {
+        // Return to LIVE event
+        isTimeTravelRef.current = false;
+        setIsHistorical(false);
+        setHistoryIndex(null);
+        applyTelemetry(e.detail, false);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('fbb:telemetry:effective', onEffectiveTelemetry);
+    }
+
+    // 3. Multi-Window / Popout BroadcastChannel Sync Listener
+    let syncChannel;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        syncChannel = new BroadcastChannel('fbb_dashboard_sync');
+        syncChannel.onmessage = (event) => {
+          const { type, payload } = event.data || {};
+          if (type === 'SYNC_TIME_TRAVEL') {
+            if (payload && payload.isLive === false && payload.snapshot?.telemetry) {
+              applyTelemetry(payload.snapshot.telemetry, true, payload.snapshot.index);
+            } else if (payload && payload.isLive === true) {
+              isTimeTravelRef.current = false;
+              setIsHistorical(false);
+              setHistoryIndex(null);
+            }
+          }
+        };
+      }
+    } catch (e) {}
+
+    // 4. Polling Fallback (only used when WebSocket is unavailable)
+    let fallbackTimer = null;
+    if (!sock) {
+      fallbackTimer = setInterval(async () => {
+        // INTERLOCK: Skip file polling during Time-Travel to protect past state
+        if (isTimeTravelRef.current) return;
         try {
           let res = await fetch('/api/file?path=/tmp/fbb_scenario_telemetry.json');
           if (!res.ok) res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
           if (res.ok) {
             const j = await res.json();
-            handleTelemetry(j);
+            onLiveTelemetry(j);
           }
         } catch (e) {}
       }, 100);
-      return () => clearInterval(t);
     }
+
+    return () => {
+      if (sock) sock.off('scenario:telemetry', onLiveTelemetry);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('fbb:telemetry:effective', onEffectiveTelemetry);
+      }
+      if (syncChannel) syncChannel.close();
+      if (fallbackTimer) clearInterval(fallbackTimer);
+    };
   }, []);
 
   const rwX = Number(data.wheel_rpm_x || 0);
@@ -71,6 +144,29 @@ export default function SpaceTelemetryGauge() {
       overflowY: 'auto'
     }
   },
+    // Optional Time-Travel Read-Only Indicator Badge
+    isHistorical ? React.createElement('div', {
+      style: {
+        background: 'rgba(6, 182, 212, 0.15)',
+        border: '1px solid #06b6d4',
+        color: '#22d3ee',
+        borderRadius: '4px',
+        padding: '5px 10px',
+        marginBottom: '12px',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '6px',
+        boxShadow: '0 0 10px rgba(6, 182, 212, 0.25)'
+      }
+    }, [
+      React.createElement('span', { key: 'tt_icon' }, '⏪'),
+      React.createElement('span', { key: 'tt_text' }, `TIME-TRAVEL ${historyIndex !== null && historyIndex !== undefined ? `#${historyIndex}` : ''} (READ-ONLY SNAPSHOT)`)
+    ]) : null,
+
     // Master C&W Annunciator Header
     React.createElement('div', {
       style: {

@@ -28,29 +28,19 @@
                                 "activeView": "sg-orbit-viewer",
                                 "id": "7"
                             },
-                            "size": 369
+                            "size": 644
                         },
                         {
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "registerTracer"
+                                    "registerTracer",
+                                    "uartTerminal_vfpga_uart_1"
                                 ],
                                 "activeView": "registerTracer",
                                 "id": "5"
                             },
-                            "size": 528
-                        },
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
-                                    "uartTerminal_vfpga_uart_1"
-                                ],
-                                "activeView": "uartTerminal_vfpga_uart_1",
-                                "id": "3"
-                            },
-                            "size": 263
+                            "size": 516
                         }
                     ],
                     "size": 959
@@ -191,7 +181,7 @@
             "title": "SG Pilot Code Editor"
         }
     },
-    "activeGroup": "7",
+    "activeGroup": "5",
     "_fbb_pane_state": {
         "tracer": {
             "selectedGroup": "ALL",

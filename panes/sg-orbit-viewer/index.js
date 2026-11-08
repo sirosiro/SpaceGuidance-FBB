@@ -84,6 +84,8 @@ export default function SpaceOrbitViewer3D() {
     basePitch: 0.0
   });
 
+  const isTimeTravelRef = useRef(false);
+
   // Unified WebSocket Telemetry Bus (scenario:telemetry) with time-travel & fallback
   useEffect(() => {
     const handleTelemetry = (data, immediate = false) => {
@@ -103,15 +105,26 @@ export default function SpaceOrbitViewer3D() {
       } catch (e) {}
     }
 
+    const onLiveTelemetry = (data) => {
+      // INTERLOCK: Discard incoming live packets while Time-Travel is active
+      if (isTimeTravelRef.current) return;
+      handleTelemetry(data, false);
+    };
+
     if (sock) {
-      sock.on('scenario:telemetry', handleTelemetry);
+      sock.on('scenario:telemetry', onLiveTelemetry);
     }
 
     // Historical Time-Travel scrubbing listener
     const handleEffectiveTelemetry = (e) => {
       if (e && e.detail) {
-        const isHistorical = !!e.detail.isHistorical;
-        handleTelemetry(e.detail, isHistorical);
+        if (e.detail.isHistorical) {
+          isTimeTravelRef.current = true;
+          handleTelemetry(e.detail, true);
+        } else {
+          isTimeTravelRef.current = false;
+          handleTelemetry(e.detail, false);
+        }
       }
     };
     if (typeof window !== 'undefined') {
@@ -125,8 +138,13 @@ export default function SpaceOrbitViewer3D() {
         syncChannel = new BroadcastChannel('fbb_dashboard_sync');
         syncChannel.onmessage = (event) => {
           const { type, payload } = event.data || {};
-          if (type === 'SYNC_TIME_TRAVEL' && payload?.snapshot?.telemetry) {
-            handleTelemetry(payload.snapshot.telemetry, true);
+          if (type === 'SYNC_TIME_TRAVEL') {
+            if (payload && payload.isLive === false && payload.snapshot?.telemetry) {
+              isTimeTravelRef.current = true;
+              handleTelemetry(payload.snapshot.telemetry, true);
+            } else if (payload && payload.isLive === true) {
+              isTimeTravelRef.current = false;
+            }
           }
         };
       }
@@ -135,19 +153,20 @@ export default function SpaceOrbitViewer3D() {
     let fallbackTimer = null;
     if (!sock) {
       fallbackTimer = setInterval(async () => {
+        if (isTimeTravelRef.current) return;
         try {
           let res = await fetch('/api/file?path=/tmp/fbb_scenario_telemetry.json');
           if (!res.ok) res = await fetch('/api/file?path=/tmp/space_guidance_telemetry.json');
           if (res.ok) {
             const data = await res.json();
-            handleTelemetry(data);
+            onLiveTelemetry(data);
           }
         } catch (e) {}
       }, 100);
     }
 
     return () => {
-      if (sock) sock.off('scenario:telemetry', handleTelemetry);
+      if (sock) sock.off('scenario:telemetry', onLiveTelemetry);
       if (typeof window !== 'undefined') {
         window.removeEventListener('fbb:telemetry:effective', handleEffectiveTelemetry);
       }

@@ -90,7 +90,7 @@
                                     "size": 457
                                 }
                             ],
-                            "size": 449
+                            "size": 500
                         },
                         {
                             "type": "leaf",
@@ -102,7 +102,7 @@
                                 "activeView": "chaosEngine",
                                 "id": "1"
                             },
-                            "size": 711
+                            "size": 660
                         }
                     ],
                     "size": 909
@@ -202,7 +202,7 @@
         "tracer": {
             "selectedGroup": "ALL",
             "mode": "zero_center",
-            "timebaseSpan": 100
+            "timebaseSpan": "all"
         },
         "monitor": {
             "expandedDevices": {
