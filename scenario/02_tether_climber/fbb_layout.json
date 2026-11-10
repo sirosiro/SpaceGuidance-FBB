@@ -45,32 +45,22 @@
                                 "activeView": "sg-orbit-viewer",
                                 "id": "7"
                             },
-                            "size": 404
+                            "size": 580
                         },
                         {
                             "type": "leaf",
                             "data": {
                                 "views": [
-                                    "registerTracer"
-                                ],
-                                "activeView": "registerTracer",
-                                "id": "5"
-                            },
-                            "size": 531
-                        },
-                        {
-                            "type": "leaf",
-                            "data": {
-                                "views": [
+                                    "registerTracer",
                                     "uartTerminal_vfpga_uart_1"
                                 ],
                                 "activeView": "uartTerminal_vfpga_uart_1",
-                                "id": "3"
+                                "id": "5"
                             },
-                            "size": 225
+                            "size": 580
                         }
                     ],
-                    "size": 856.6038709273562
+                    "size": 857
                 },
                 {
                     "type": "branch",
@@ -98,7 +88,7 @@
                                         "activeView": "sg-chaos-fdir",
                                         "id": "8"
                                     },
-                                    "size": 453.3961290726438
+                                    "size": 453
                                 }
                             ],
                             "size": 465
@@ -116,7 +106,7 @@
                             "size": 695
                         }
                     ],
-                    "size": 902.3961290726438
+                    "size": 902
                 }
             ],
             "size": 1160

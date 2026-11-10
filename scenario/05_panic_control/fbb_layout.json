@@ -28,7 +28,7 @@
                                 "activeView": "sg-orbit-viewer",
                                 "id": "5"
                             },
-                            "size": 632
+                            "size": 499
                         },
                         {
                             "type": "leaf",
@@ -38,10 +38,10 @@
                                     "registerTracer",
                                     "uartTerminal_vfpga_uart_1"
                                 ],
-                                "activeView": "registerTracer",
+                                "activeView": "chaosEngine",
                                 "id": "7"
                             },
-                            "size": 528
+                            "size": 661
                         }
                     ],
                     "size": 1267
@@ -156,7 +156,7 @@
             "title": "SG Chaos FDIR & Scorecard"
         }
     },
-    "activeGroup": "4",
+    "activeGroup": "7",
     "_fbb_pane_state": {
         "tracer": {
             "selectedGroup": "ALL",

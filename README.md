@@ -210,7 +210,7 @@ flowchart TB
    * **役割**: ホスト PC 上で 100Hz の 6 自由度剛体力学演算、外乱・カオス障害、および Web3D ダッシュボードへのリアルタイム配信を、実機 FPGA なし（Boardless）で軽快に成立させます。
    * **価値**: 開発者は EDA ツールの重厚なクロック遅延シミュレーションに待たされることなく、自律航行アルゴリズムや FDIR の試行錯誤・反復学習を瞬時に行えます。
 2. **Track B: 論理合成対応 RTL IP コア（Synthesizable Hardware & Verilator Co-Sim）**
-   * **実装**: ピュア Verilog HDL（`rtl/space_guidance_top.v`, `line_sensor_filter.v`, `rcs_thruster_pwm.v`, `safety_interlock.v`）
+   * **実装**: ピュア Verilog HDL（詳細仕様・アーキテクチャ・レジスタマップは [rtl/README.md](./rtl/README.md) を参照。構成: `space_guidance_top.v`, `line_sensor_filter.v`, `rcs_thruster_pwm.v`, `safety_interlock.v`）
    * **役割**: AMD Xilinx Vivado で論理合成（Synthesis）し、Zynq / Kria KV260 の実機 FPGA ファブリック（PL）にそのまま書き込み可能なハードウェア IP です。
    * **高信頼性安全アーキテクチャ**:
      * **真の 100% PWM 連続出力**: カウンタ飽和判定により 255/256（99.61%）のドロップアウトを排除し、最大指令時の正真正銘 100.00% 連続全開噴射（Continuous Full Burn）を担保。
@@ -396,7 +396,7 @@ SpaceGuidance-FBB/
 ├── fbb-plugin.json               # PPA/DPPA ハイブリッドプラグインマニフェスト
 ├── CMakeLists.txt                # C++ ビルド定義
 ├── README.md                     # ポータル: プロジェクト総合ガイド（本ドキュメント）
-├── rtl/                          # Verilog HDL ハードウェア回路
+├── [rtl/](./rtl/README.md)                  # Verilog HDL ハードウェア回路（詳細仕様・レジスタマップ・ブロック図）
 │   ├── space_guidance_top.v      # AXI4-Lite IP コアトップ
 │   ├── line_sensor_filter.v      # Stage 1: 8ch 光学センサ重心検出回路
 │   ├── rcs_thruster_pwm.v        # RCS パルス幅変調ジェネレータ
@@ -404,8 +404,8 @@ SpaceGuidance-FBB/
 ├── src/                          # C++ 物理シミュレータ & デーモン
 │   ├── space_physics.cpp         # 剛体力学・弾性テザー・レール・6-DoF 力学エンジン
 │   └── space_guidance_daemon.cpp # 100Hz 物理デーモン & 公式審判エンジン (OfficialReferee)
-├── ros2/nodes/                   # Python ハードウェアドライバ
-│   └── guidance_controller.py    # Sim-to-Real UIO クライアント (SpaceGuidanceHardware)
+├── [ros2/](./ros2/README.md)                 # Python ハードウェアドライバ（HAL ＆ ROS 2 連携ブリッジ）
+│   └── nodes/guidance_controller.py # Sim-to-Real UIO クライアント (SpaceGuidanceHardware)
 ├── scenario/                     # ステージ別独立シナリオ
 │   ├── 01_asteroid_pipeline/     # 【Stage 1】小惑星回廊シナリオ (稼働中)
 │   ├── 02_tether_climber/        # 【Stage 2】宇宙テザークライマー (稼働中)
@@ -417,7 +417,8 @@ SpaceGuidance-FBB/
 │   ├── mission02_baseline_climber.py # Stage 2 原本
 │   ├── mission03_baseline_truss.py   # Stage 3 原本
 │   ├── mission04_baseline_docker.py  # Stage 4 原本
-│   └── mission05_baseline_panic.py   # Stage EX 原本
+│   ├── mission05_baseline_panic.py   # Stage EX 原本 (スターター)
+│   └── mission05_perfect_panic.py    # Stage EX パーフェクト制御 (10,909点 / GRADE S / BULLSEYE)
 └── panes/                        # DPPA Web ダッシュボード動的ペイン
     ├── sg-orbit-viewer/          # 3D サイバー・ワイヤーフレーム描画
     ├── sg-telemetry-gauge/       # テレメトリ＆C&W レッドアラート
