@@ -35,7 +35,6 @@ def run_pilot():
     print("======================================================================\n")
 
     dt = 0.02
-    panic_start_time = time.time()
 
     # === TUNE ZONE 1: デタンブル制動ゲイン ===
     kd_detumble = 2.5        # レートダンピングゲイン (RCS)
@@ -105,7 +104,7 @@ def run_pilot():
             # PHASE 0: 衝突緊急事態検知 & 3Dカオスタンブリング観察 (4.5秒間プロローグ)
             # -------------------------------------------------------------
             if phase == 0:
-                elapsed_panic = time.time() - panic_start_time
+                elapsed_panic = tlm.get("elapsed_time", 0.0)
                 hw.write_commands(0.0, 0.0, 0.0, 0.0, fdir_mode=0)
                 spin_deg = omega_mag * 180.0 / math.pi
                 if int(elapsed_panic * 10) % 5 == 0:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SpaceGuidance-FBB: Stage 3 ISS Truss Inspector (Calibrated High-Performance Autopilot)
-# 国際宇宙ステーション (ISS) の立体トラス主構造ガイドパイプを巡回・スキャンするお手本コードです。
+# 国際宇宙ステーション (ISS) の立体トラス主構造ガイドパイプを巡回・スキャンする制御コードです。
 
 import sys
 import os
@@ -9,6 +9,7 @@ import math
 import json
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(script_dir, "..", "..", "ros2", "nodes")))
 sys.path.append(os.path.abspath(os.path.join(script_dir, "..", "ros2", "nodes")))
 from guidance_controller import SpaceGuidanceHardware, UartTee
 

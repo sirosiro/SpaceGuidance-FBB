@@ -380,7 +380,7 @@ flowchart LR
 
 ### (2) 共有メモリ仕様 (C 構造体インターフェース)
 
-パイロット側は、プロジェクト共通ヘッダー [include/space_guidance_shm.h](include/space_guidance_shm.h) の `struct ShmSpaceGuidance` をメモリマップするだけで、全テレメトリの取得と推力指令の書き込みが完了します。
+パイロット側は、プロジェクト共通ヘッダー [include/space_guidance_shm.h](../../include/space_guidance_shm.h) の `struct ShmSpaceGuidance` をメモリマップするだけで、全テレメトリの取得と推力指令の書き込みが完了します。
 
 * **初動トリガー (ADR #002)**: `cr_ctrl |= 0x08` を書き込んだ瞬間、公式タイマーが自動始動します。
 * **テレメトリ直読 (8バイト浮動小数点)**: `ext.omega_x`, `ext.omega_y`, `ext.omega_z`, `pos_x`, `vel_x`, `fuel` など
@@ -516,7 +516,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### (5) 起動スクリプト（`run.sh`）のハイブリッド自動認識化
 
-[run.sh](scenario/05_panic_control/run.sh) のパイロット起動部を以下のように拡張することで、**「コンパイル済みバイナリ（C++ / Rust）が存在すれば優先起動し、無ければ標準の Python スクリプトを実行する」** という完全透過な運用が可能です：
+[run.sh](run.sh) のパイロット起動部を以下のように拡張することで、**「コンパイル済みバイナリ（C++ / Rust）が存在すれば優先起動し、無ければ標準の Python スクリプトを実行する」** という完全透過な運用が可能です：
 
 ```bash
 # バイナリ優先起動ロジックの例
