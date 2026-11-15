@@ -1,6 +1,8 @@
 # SpaceGuidance-FBB: 自律宇宙探査・軌道ガイダンス プラグイン
 (Autonomous Space Guidance & Docking Challenge Plugin for FPGA-BoardlessBench)
 
+🌐 [English (Google Translate)](https://translate.google.com/translate?sl=ja&tl=en&u=https://github.com/sirosiro/SpaceGuidance-FBB)
+
 ![Stage 1: 小惑星パイプライン巡回](assets/dashboard.gif)
 *▲ Stage 1: 小惑星パイプライン巡回 (2D微小重力ライン追従 & 光センサ重心検出回路)*
 
