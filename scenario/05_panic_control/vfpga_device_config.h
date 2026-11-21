@@ -15,4 +15,10 @@
 #ifndef FBB_DEV_PATH_SERIAL_0
 #define FBB_DEV_PATH_SERIAL_0 FBB_DEV_PATH_SERIAL
 #endif
+#ifndef FBB_DEV_PATH_UART0
+#define FBB_DEV_PATH_UART0 "/dev/ttyPS1"
+#endif
+#ifndef FBB_DEV_PATH_UART0_0
+#define FBB_DEV_PATH_UART0_0 FBB_DEV_PATH_UART0
+#endif
 #endif

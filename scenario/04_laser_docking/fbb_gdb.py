@@ -639,7 +639,7 @@ FBB_DEVICES = [
         ]
     },
     {
-        "name": "serial",
+        "name": "uart0",
         "type": "uart",
         "base_addr": 3758100480,
         "size": 4096,
