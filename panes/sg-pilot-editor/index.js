@@ -12,7 +12,6 @@ export default function PilotCodeEditor() {
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [statusType, setStatusType] = useState('info'); // info, success, error
-  const [tuneZones, setTuneZones] = useState([]);
   const [syntaxError, setSyntaxError] = useState(null);
 
   // Search & Replace state
@@ -34,25 +33,65 @@ export default function PilotCodeEditor() {
   const replaceInputRef = useRef(null);
   const jumpLineInputRef = useRef(null);
 
-  // Discover tune zones in code (e.g. "# === TUNE ZONE 1: ... ===", "# 🎯 TUNE ZONE 1: ...")
-  const parseTuneZones = (src) => {
+  // Discover section headers & tune zones in code (e.g. "# === ... ===", 3-line banners, "# 🎯 TUNE ZONE ...")
+  const extractSections = (src) => {
     const lines = src.split('\n');
     const zones = [];
-    const re = /(?:===|🎯|⚡|\b)\s*(TUNE ZONE[^\n=]*)/i;
+    const seenLines = new Set();
+    const dividerRe = /^\s*#\s*(?:={3,}|-{3,})\s*$/;
+    const inlineBannerRe = /^\s*#\s*(?:={2,}|-{3,})\s*(.+?)\s*(?:={2,}|-{3,})?\s*$/;
+    const tuneZoneRe = /(?:===|🎯|⚡|\b)\s*(TUNE ZONE[^\n=]*)/i;
+
+    const addZone = (lineIdx, rawLabel) => {
+      if (seenLines.has(lineIdx)) return;
+      let label = rawLabel.replace(/^(?:={2,}|-{3,})\s*|\s*(?:={2,}|-{3,})$/g, '').trim();
+      if (!label || /^[=-]+$/.test(label)) return;
+      if (label.length > 56) label = label.substring(0, 53) + '...';
+      seenLines.add(lineIdx);
+      zones.push({ line: lineIdx, label });
+    };
+
     lines.forEach((line, idx) => {
-      if (line.trim().startsWith('#   ') || /#\s*\d+\.\s*TUNE/i.test(line)) return;
-      const m = line.match(re);
-      if (m) {
-        let label = m[1].replace(/===/g, '').trim();
-        if (label.length > 36) label = label.substring(0, 34) + '...';
-        zones.push({
-          line: idx,
-          label: label
-        });
+      // Skip bulleted challenge list items in header docstrings (e.g. "#   1. TUNE ZONE 1: ...")
+      if (/^\s*#\s+\d+\.\s*TUNE\b/i.test(line)) return;
+
+      // 1. Inline "# === Title ===" or "#=== Title ===" (or "# --- Title ---")
+      if (!dividerRe.test(line)) {
+        const bannerMatch = line.match(inlineBannerRe);
+        if (bannerMatch) {
+          addZone(idx, bannerMatch[1]);
+          return;
+        }
+      }
+
+      // 2. 3-line banner block (# ====\n# Title\n# ==== or # ----\n# Title\n# ----)
+      if (
+        idx > 0 &&
+        idx + 1 < lines.length &&
+        dividerRe.test(lines[idx - 1]) &&
+        dividerRe.test(lines[idx + 1]) &&
+        !dividerRe.test(line)
+      ) {
+        const commentMatch = line.match(/^\s*#\s*(.+)$/);
+        if (commentMatch) {
+          addZone(idx, commentMatch[1]);
+          return;
+        }
+      }
+
+      // 3. Explicit TUNE ZONE marker lines (e.g. "# 🎯 TUNE ZONE ...", "# ⚡ TUNE ZONE ...")
+      if (!line.trim().startsWith('#   ')) {
+        const tzMatch = line.match(tuneZoneRe);
+        if (tzMatch) {
+          addZone(idx, tzMatch[1]);
+        }
       }
     });
-    setTuneZones(zones);
+
+    return zones;
   };
+
+  const tuneZones = useMemo(() => extractSections(code), [code]);
 
   // String escaping helpers
   const escapeHtml = (str) =>
@@ -75,7 +114,6 @@ export default function PilotCodeEditor() {
         setCode(data.content || '');
         setSavedCode(data.content || '');
         if (data.scenario) setScenarioName(data.scenario);
-        parseTuneZones(data.content || '');
         setSyntaxError(null);
         setStatusMsg('Loaded');
         setStatusType('info');
@@ -267,7 +305,6 @@ export default function PilotCodeEditor() {
         const data = await res.json();
         setSavedCode(code);
         if (data.scenario) setScenarioName(data.scenario);
-        parseTuneZones(code);
         const now = new Date().toLocaleTimeString();
         if (data.syntaxError) {
           setSyntaxError(data.syntaxError);
@@ -316,7 +353,6 @@ export default function PilotCodeEditor() {
         if (saveRes.ok) {
           setCode(defaultContent);
           setSavedCode(defaultContent);
-          parseTuneZones(defaultContent);
           setSyntaxError(null);
           setStatusMsg('Reverted to original ✓');
           setStatusType('success');
@@ -722,13 +758,13 @@ export default function PilotCodeEditor() {
         flexWrap: 'wrap'
       }
     },
-      // Left: Tune Zone Selector (takes full horizontal width)
+      // Left: Tune Zone & Section Selector (takes full horizontal width)
       tuneZones.length > 0 && React.createElement('div', {
         style: { display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: '220px' }
       },
         React.createElement('span', {
           style: { fontSize: '11px', color: '#38bdf8', whiteSpace: 'nowrap', fontWeight: 'bold' }
-        }, '🎯 Tune Zone:'),
+        }, '🎯 Section / Zone:'),
         React.createElement('select', {
           onChange: (e) => {
             const idx = parseInt(e.target.value, 10);
@@ -750,8 +786,8 @@ export default function PilotCodeEditor() {
             maxWidth: '520px'
           }
         },
-          React.createElement('option', { value: '', disabled: true }, '-- Select Tune Zone to Jump --'),
-          tuneZones.map((z, i) => React.createElement('option', { key: i, value: z.line }, `Line ${z.line + 1}: ${z.label}`))
+          React.createElement('option', { value: '', disabled: true, style: { background: '#1e293b', color: '#94a3b8' } }, '-- Select Section / Tune Zone to Jump --'),
+          tuneZones.map((z, i) => React.createElement('option', { key: i, value: z.line, style: { background: '#1e293b', color: '#f8fafc' } }, `Line ${z.line + 1}: ${z.label}`))
         )
       ),
 
