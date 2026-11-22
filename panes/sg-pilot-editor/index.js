@@ -15,6 +15,17 @@ const aiSessionStore = {
   aiTracePreset: 'control', // 'control' | 'energy' | 'fdir' | 'tracer' | 'custom'
   aiTraceSelectedSignals: ['POS_X', 'XT_ERR', 'ANGLE', 'ROLL', 'THRUST_CMD_X', 'THRUST_CMD_Y', 'TORQUE_CMD', 'WHEEL_TORQUE_X', 'WHEEL_TORQUE_CMD'],
   aiPromptDraft: '',
+  // Persistent references & active-session flags for Browser Web AI companion windows
+  // (NOTE: gemini.google.com / chatgpt.com use COOP same-origin which turns ref.closed=true after load,
+  // so we track sessionStarted explicitly rather than trusting ref.closed!)
+  webAiWindows: {
+    gemini: null,
+    chatgpt: null
+  },
+  webAiSessionStarted: {
+    gemini: false,
+    chatgpt: false
+  },
   // Pinned initialization context anchor (sent once per model / manual sync; keeps Ollama KV-cache hot)
   ollamaSession: {
     model: '',
@@ -689,6 +700,10 @@ export default function PilotCodeEditor() {
   const [aiSplitRatio, setAiSplitRatio] = useState(aiSessionStore.aiSplitRatio);
   const [prevCodeBeforeAi, setPrevCodeBeforeAi] = useState(aiSessionStore.prevCodeBeforeAi);
   const [hasTelemetry, setHasTelemetry] = useState(false);
+  const [webAiOpenMap, setWebAiOpenMap] = useState(() => ({
+    gemini: Boolean(aiSessionStore.webAiSessionStarted.gemini),
+    chatgpt: Boolean(aiSessionStore.webAiSessionStarted.chatgpt)
+  }));
 
   // Inline Modals (Portal-safe: zero window.confirm / window.alert)
   const [smartApplyModal, setSmartApplyModal] = useState(null); // { rawText, selectedBlockIdx }
@@ -792,12 +807,53 @@ export default function PilotCodeEditor() {
     return null;
   };
 
-  // Portal-safe Synchronous Right-Half Window Launcher (MUST be called BEFORE any await!)
-  const openWebAiWindowSync = (targetProvider) => {
+  // Helper: Check stored Browser AI companion window reference (may be COOP-severed on cross-origin)
+  const getFocusHandleIfAllowed = (prov) => {
+    const key = prov === 'chatgpt' ? 'chatgpt' : 'gemini';
+    const ref = aiSessionStore.webAiWindows[key];
+    try {
+      if (ref && !ref.closed) return ref;
+    } catch (e) {}
+    return null;
+  };
+
+  const syncWebAiSessionState = () => {
+    setWebAiOpenMap(prev => {
+      const nextG = Boolean(aiSessionStore.webAiSessionStarted.gemini);
+      const nextC = Boolean(aiSessionStore.webAiSessionStarted.chatgpt);
+      return (prev.gemini === nextG && prev.chatgpt === nextC) ? prev : { gemini: nextG, chatgpt: nextC };
+    });
+  };
+
+  // Portal-safe Synchronous Right-Half Window Launcher / Activator (MUST be called BEFORE any await!)
+  const openWebAiWindowSync = (targetProvider, { forceNew = false, copyOnly = false } = {}) => {
     const { win } = getActiveWinDoc();
-    const url = targetProvider === 'chatgpt'
+    const prov = targetProvider === 'chatgpt' ? 'chatgpt' : 'gemini';
+    const url = prov === 'chatgpt'
       ? 'https://chatgpt.com/'
       : 'https://gemini.google.com/app';
+    const targetName = `sg_ai_copilot_${prov}`;
+
+    const liveHandle = getFocusHandleIfAllowed(prov);
+    const alreadyStarted = Boolean(aiSessionStore.webAiSessionStarted[prov]);
+
+    if (copyOnly || (!forceNew && (liveHandle || alreadyStarted))) {
+      let focused = false;
+      if (liveHandle) {
+        try {
+          if (typeof liveHandle.focus === 'function') {
+            liveHandle.focus();
+            focused = true;
+          }
+        } catch (e) {}
+      }
+      if (copyOnly) {
+        aiSessionStore.webAiSessionStarted[prov] = true;
+        syncWebAiSessionState();
+      }
+      return { opened: liveHandle || true, reused: true, focused, url, targetName };
+    }
+
     const scr = win.screen || window.screen || {};
     const availW = scr.availWidth || 1440;
     const availH = scr.availHeight || 900;
@@ -810,10 +866,15 @@ export default function PilotCodeEditor() {
     const features = `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`;
     let opened = null;
     try {
-      opened = win.open(url, 'sg_ai_copilot', features);
-      if (opened && typeof opened.focus === 'function') opened.focus();
+      opened = win.open(url, targetName, features);
+      if (opened) {
+        aiSessionStore.webAiWindows[prov] = opened;
+        aiSessionStore.webAiSessionStarted[prov] = true;
+        if (typeof opened.focus === 'function') opened.focus();
+      }
     } catch (e) {}
-    return { opened, url };
+    syncWebAiSessionState();
+    return { opened, reused: false, focused: Boolean(opened), url, targetName };
   };
 
   // Passive Telemetry & Hardware Trace Listener (zero 30Hz re-render overhead on editor)
@@ -1396,21 +1457,25 @@ export default function PilotCodeEditor() {
     return blocks.join('\n');
   };
 
-  // Launch Browser Web AI (Gemini / ChatGPT) — Synchronous open FIRST for Safari/Pop-out compliance!
+  // Launch Browser Web AI (Gemini / ChatGPT) — Reuses active session without reloading unless forceNew=true!
   const handleLaunchWebAi = (targetProvider, opts = {}) => {
     const prov = targetProvider === 'chatgpt' ? 'chatgpt' : 'gemini';
     const providerLabel = prov === 'chatgpt' ? 'ChatGPT (Web)' : 'Gemini (Web)';
+    const forceNew = Boolean(opts.forceNew);
+    const copyOnly = Boolean(opts.copyOnly);
     const promptText = buildAiContextPrompt(opts);
 
-    // 1. MUST open synchronously inside click gesture before any await!
-    const { opened, url } = openWebAiWindowSync(prov);
+    // 1. MUST focus/open synchronously inside click gesture before any await!
+    const { opened, reused, focused, url, targetName } = openWebAiWindowSync(prov, { forceNew, copyOnly });
 
     // 2. Copy prompt safely using activeWin / activeDoc
     copyTextSafe(promptText).then((copied) => {
       if (!opened) {
         setManualPromptModal({
+          prov,
           promptText,
           url,
+          targetName,
           providerLabel,
           reason: copied
             ? 'Popup was blocked by the browser. The prompt is already copied to your clipboard — click the button below to open and paste (Ctrl+V / Cmd+V).'
@@ -1420,13 +1485,22 @@ export default function PilotCodeEditor() {
         setStatusType('info');
       } else if (!copied) {
         setManualPromptModal({
+          prov,
           promptText,
           url,
+          targetName,
           providerLabel,
-          reason: `Opened ${providerLabel} in the right window. Automatic clipboard copy was restricted — copy the prompt below and paste it there.`
+          reason: `${reused ? 'Continue in your open' : 'Opened'} ${providerLabel} window. Automatic clipboard copy was restricted — copy the prompt below and paste it there.`
         });
-        setStatusMsg(`Opened ${providerLabel} (manual copy fallback)`);
+        setStatusMsg(`${reused ? 'Active session' : 'Opened'} ${providerLabel} (manual copy fallback)`);
         setStatusType('info');
+      } else if (reused) {
+        setStatusMsg(
+          focused
+            ? `✓ Copied follow-up prompt & focused ${providerLabel} — Press Ctrl+V / Cmd+V in your active chat!`
+            : `✓ Copied follow-up prompt — Paste (Ctrl+V / Cmd+V) into your open ${providerLabel} chat!`
+        );
+        setStatusType('success');
       } else {
         setStatusMsg(`✓ Copied prompt & opened ${providerLabel} — Press Ctrl+V / Cmd+V to paste!`);
         setStatusType('success');
@@ -2345,23 +2419,59 @@ export default function PilotCodeEditor() {
         ),
 
         // Web AI Primary Action Buttons (when Gemini or ChatGPT selected)
-        aiProvider !== 'ollama' && React.createElement('button', {
-          onClick: () => handleLaunchWebAi(aiProvider),
-          title: 'Copy code + telemetry prompt and open Web AI in the right half of the current monitor',
-          style: {
-            background: aiProvider === 'chatgpt' ? '#059669' : '#2563eb',
-            color: '#ffffff',
-            border: aiProvider === 'chatgpt' ? '1px solid #34d399' : '1px solid #60a5fa',
-            borderRadius: '4px',
-            padding: '4px 10px',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }
-        }, aiProvider === 'chatgpt' ? '↗ Copy & Open ChatGPT' : '↗ Copy & Open Gemini'),
+        aiProvider !== 'ollama' && React.createElement('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '4px' }
+        },
+          React.createElement('button', {
+            onClick: (e) => handleLaunchWebAi(aiProvider, { forceNew: e.shiftKey }),
+            title: webAiOpenMap[aiProvider]
+              ? `Copy updated prompt to clipboard without reloading your ${aiProvider === 'chatgpt' ? 'ChatGPT' : 'Gemini'} window (Shift+Click to open a new window)`
+              : `Copy code + telemetry prompt and open ${aiProvider === 'chatgpt' ? 'ChatGPT' : 'Gemini'} in the right half of the current monitor`,
+            style: {
+              background: webAiOpenMap[aiProvider]
+                ? (aiProvider === 'chatgpt' ? '#047857' : '#1d4ed8')
+                : (aiProvider === 'chatgpt' ? '#059669' : '#2563eb'),
+              color: '#ffffff',
+              border: aiProvider === 'chatgpt' ? '1px solid #34d399' : '1px solid #60a5fa',
+              borderRadius: '4px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }
+          }, webAiOpenMap[aiProvider]
+            ? (aiProvider === 'chatgpt' ? '📋 Copy Follow-up (ChatGPT)' : '📋 Copy Follow-up (Gemini)')
+            : (aiProvider === 'chatgpt' ? '↗ Copy & Open ChatGPT' : '↗ Copy & Open Gemini')),
+          !webAiOpenMap[aiProvider] && React.createElement('button', {
+            onClick: () => handleLaunchWebAi(aiProvider, { copyOnly: true }),
+            title: `Copy prompt only (use this if you already have ${aiProvider === 'chatgpt' ? 'ChatGPT' : 'Gemini'} open in another window/tab)`,
+            style: {
+              background: '#1e293b',
+              color: '#cbd5e1',
+              border: '1px solid #475569',
+              borderRadius: '4px',
+              padding: '4px 7px',
+              fontSize: '10px',
+              cursor: 'pointer'
+            }
+          }, '📋 Copy Only'),
+          webAiOpenMap[aiProvider] && React.createElement('button', {
+            onClick: () => handleLaunchWebAi(aiProvider, { forceNew: true }),
+            title: `Open a fresh ${aiProvider === 'chatgpt' ? 'ChatGPT' : 'Gemini'} chat window`,
+            style: {
+              background: '#1e293b',
+              color: '#cbd5e1',
+              border: '1px solid #475569',
+              borderRadius: '4px',
+              padding: '4px 7px',
+              fontSize: '10px',
+              cursor: 'pointer'
+            }
+          }, '↗ New Window')
+        ),
 
         // Smart Apply Button (always accessible for pasting code back from Web AI)
         React.createElement('button', {
@@ -3578,9 +3688,19 @@ export default function PilotCodeEditor() {
             }, '📋 Copy Again'),
             React.createElement('a', {
               href: manualPromptModal.url,
-              target: 'sg_ai_copilot',
+              target: manualPromptModal.targetName || 'sg_ai_copilot',
               rel: 'noopener noreferrer',
-              onClick: () => setManualPromptModal(null),
+              onClick: (e) => {
+                const live = getFocusHandleIfAllowed(manualPromptModal.prov);
+                if (live) {
+                  e.preventDefault();
+                  try { if (typeof live.focus === 'function') live.focus(); } catch (err) {}
+                } else if (manualPromptModal.prov) {
+                  aiSessionStore.webAiSessionStarted[manualPromptModal.prov] = true;
+                  syncWebAiSessionState();
+                }
+                setManualPromptModal(null);
+              },
               style: {
                 background: '#2563eb',
                 color: '#ffffff',
@@ -3591,7 +3711,7 @@ export default function PilotCodeEditor() {
                 fontWeight: 'bold',
                 textDecoration: 'none'
               }
-            }, `↗ Open ${manualPromptModal.providerLabel}`)
+            }, getFocusHandleIfAllowed(manualPromptModal.prov) ? `↗ Focus ${manualPromptModal.providerLabel}` : `↗ Open ${manualPromptModal.providerLabel}`)
           )
         )
       )
