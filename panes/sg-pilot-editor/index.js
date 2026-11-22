@@ -5,12 +5,27 @@ export const minApiVersion = 1;
 // =============================================================================
 const AI_PREFS_KEY = 'sg_pilot_ai_prefs_v1';
 const aiSessionStore = {
-  chatMessages: [],       // [{ id, role: 'user'|'assistant', content, model?, timestamp }]
+  chatMessages: [],       // [{ id, role: 'user'|'assistant'|'system-notice', content, apiContent?, model?, timestamp }]
   aiBarOpen: false,       // Web AI / Copilot bar or Ollama split panel open state
   aiSplitRatio: 0.56,     // Left editor width fraction in Ollama split mode (0.35 ~ 0.75)
   prevCodeBeforeAi: null, // 1-step Undo snapshot before last AI Smart Apply
   aiIncludeTelemetry: true,
-  aiPromptDraft: ''
+  aiIncludeTrace: false,
+  aiTraceWindow: 'full_30', // 'time_travel' | 'last_30' | 'full_30'
+  aiTracePreset: 'control', // 'control' | 'energy' | 'fdir' | 'tracer' | 'custom'
+  aiTraceSelectedSignals: ['POS_X', 'XT_ERR', 'ANGLE', 'ROLL', 'THRUST_CMD_X', 'THRUST_CMD_Y', 'TORQUE_CMD', 'WHEEL_TORQUE_X', 'WHEEL_TORQUE_CMD'],
+  aiPromptDraft: '',
+  // Pinned initialization context anchor (sent once per model / manual sync; keeps Ollama KV-cache hot)
+  ollamaSession: {
+    model: '',
+    scenario: '',
+    fileName: '',
+    initializedCode: '',
+    systemMsg: null,
+    initUserMsg: null,
+    initAssistantMsg: null,
+    turnAnchorIdx: 0
+  }
 };
 
 function loadAiPrefs() {
@@ -126,6 +141,70 @@ function extractCodeBlocks(rawText) {
     }];
   }
   return [];
+}
+
+function dedentSnippet(rawSnippet) {
+  const normalized = (rawSnippet || '').replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  let minIndent = Infinity;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const m = line.match(/^[ \t]*/);
+    const indentLen = m ? m[0].length : 0;
+    if (indentLen < minIndent) minIndent = indentLen;
+  }
+  if (!Number.isFinite(minIndent) || minIndent === 0) return lines;
+  return lines.map(line => (line.trim() ? line.slice(minIndent) : ''));
+}
+
+function alignSnippetForInsert(srcCode, start, end, rawSnippet) {
+  const safeStart = Math.max(0, Math.min(srcCode.length, start || 0));
+  const safeEnd = Math.max(safeStart, Math.min(srcCode.length, end || safeStart));
+  const lineStart = srcCode.lastIndexOf('\n', safeStart - 1) + 1;
+  const beforeCursor = srcCode.slice(lineStart, safeStart);
+  const selectedText = srcCode.slice(safeStart, safeEnd);
+
+  const dedentedLines = dedentSnippet(rawSnippet);
+  let targetIndent = '';
+  let indentFirstLine = false;
+
+  if (/^[ \t]*$/.test(beforeCursor)) {
+    if (beforeCursor.length > 0) {
+      // Cursor is already positioned at the desired indentation column (e.g. "    |")
+      targetIndent = beforeCursor;
+      indentFirstLine = false;
+    } else if (safeEnd > safeStart) {
+      // User selected whole line(s) starting from column 0 (e.g. "|    kp = 1.2\n    kd = 0.6|")
+      const firstNonEmpty = selectedText.split('\n').find(l => l.trim().length > 0) || '';
+      const m = firstNonEmpty.match(/^[ \t]*/);
+      targetIndent = m ? m[0] : '';
+      indentFirstLine = targetIndent.length > 0;
+    }
+  } else {
+    // Cursor is after non-whitespace text on the line -> align subsequent lines to this line's base indent
+    const m = beforeCursor.match(/^[ \t]*/);
+    targetIndent = m ? m[0] : '';
+    indentFirstLine = false;
+  }
+
+  const alignedLines = dedentedLines.map((line, idx) => {
+    if (!line.trim()) return '';
+    if (idx === 0 && !indentFirstLine) return line;
+    return targetIndent + line;
+  });
+
+  const alignedText = alignedLines.join('\n');
+  const nextCode = srcCode.substring(0, safeStart) + alignedText + srcCode.substring(safeEnd);
+  const newCursorPos = safeStart + alignedText.length;
+  const lineNum = (srcCode.slice(0, safeStart).match(/\n/g) || []).length + 1;
+  return {
+    alignedText,
+    nextCode,
+    newCursorPos,
+    targetIndent,
+    indentCols: targetIndent.replace(/\t/g, '    ').length,
+    lineNum
+  };
 }
 
 function computeLineDiff(oldText, newText) {
@@ -291,6 +370,275 @@ function formatTelemetrySummary(tlm) {
   return lines.join('\n');
 }
 
+// =============================================================================
+// Semantic Hardware Trace Decoder & Role Dictionary (Q16.16 / IEEE-754 f64 / Flags)
+// =============================================================================
+const TRACE_SIGNAL_CATALOG = {
+  // Control & Actuation (Q16.16 signed fixed-point)
+  THRUST_CMD_X:     { group: 'Control',      unit: '-1..1',   offset: '0x10', enc: 'q16', digits: 3, role: 'Forward main thrust command (hw.write_commands(thrust_x=...))' },
+  THRUST_CMD_Y:     { group: 'Control',      unit: '-1..1',   offset: '0x14', enc: 'q16', digits: 3, role: 'Lateral RCS thrust command (hw.write_commands(thrust_y=...))' },
+  THRUST_CMD_Z:     { group: 'Control',      unit: '-1..1',   offset: '0x18', enc: 'q16', digits: 3, role: 'Z/Bitmask thrust command (hw.write_commands(thrust_z=...))' },
+  TORQUE_CMD:       { group: 'Control',      unit: 'N*m',     offset: '0x1C', enc: 'q16', digits: 3, role: 'Yaw RCS torque command (hw.write_commands(torque=...))' },
+  WHEEL_TORQUE_CMD: { group: 'Control',      unit: 'N*m',     offset: '0x2C', enc: 'q16', digits: 3, role: 'Yaw Reaction Wheel torque (hw.write_commands(wheel_torque=...))' },
+  TORQUE_X_CMD:     { group: 'Control',      unit: 'N*m',     offset: '0x90', enc: 'q16', digits: 3, role: 'Roll RCS torque command (hw.write_commands(torque_x=...))' },
+  TORQUE_Y_CMD:     { group: 'Control',      unit: 'N*m',     offset: '0x94', enc: 'q16', digits: 3, role: 'Pitch RCS torque command (hw.write_commands(torque_y=...))' },
+  WHEEL_TORQUE_X:   { group: 'Control',      unit: 'N*m',     offset: '0x98', enc: 'q16', digits: 3, role: 'Roll Reaction Wheel torque (hw.write_commands(wheel_torque_x=...))' },
+  WHEEL_TORQUE_Y:   { group: 'Control',      unit: 'N*m',     offset: '0x9C', enc: 'q16', digits: 3, role: 'Pitch Reaction Wheel torque (hw.write_commands(wheel_torque_y=...))' },
+  THRUST_VERT_CMD:  { group: 'Control',      unit: '-1..1',   offset: '0xA0', enc: 'q16', digits: 3, role: 'Vertical Z-axis thrust command (hw.write_commands(thrust_vertical=...))' },
+  // Kinematics & Dynamics (IEEE-754 64-bit double split across _L/_H)
+  POS_X:            { group: 'Kinematics',   unit: 'm',       offset: '0x30/34', enc: 'f64', tlmKey: 'pos_x', digits: 2, role: 'Longitudinal X position along course (tlm["pos_x"])' },
+  POS_Y:            { group: 'Kinematics',   unit: 'm',       offset: '0x38/3C', enc: 'f64', tlmKey: 'pos_y', digits: 2, role: 'Lateral Y position (tlm["pos_y"])' },
+  POS_Z:            { group: 'Kinematics',   unit: 'm',       offset: '0xB0/B4', enc: 'f64', tlmKey: 'pos_z', digits: 2, role: 'Vertical Z position (tlm["pos_z"])' },
+  VEL_X:            { group: 'Kinematics',   unit: 'm/s',     offset: '0x40/44', enc: 'f64', tlmKey: 'vel_x', digits: 2, role: 'Forward X velocity (tlm["vel_x"])' },
+  VEL_Y:            { group: 'Kinematics',   unit: 'm/s',     offset: '0x48/4C', enc: 'f64', tlmKey: 'vel_y', digits: 2, role: 'Lateral Y velocity (tlm["vel_y"])' },
+  VEL_Z:            { group: 'Kinematics',   unit: 'm/s',     offset: '0xB8/BC', enc: 'f64', tlmKey: 'vel_z', digits: 2, role: 'Vertical Z velocity (tlm["vel_z"])' },
+  XT_ERR:           { group: 'Kinematics',   unit: 'm',       offset: '0x68/6C', enc: 'f64', tlmKey: 'cross_track_err', digits: 3, role: 'Cross-track trajectory error from centerline (tlm["cross_track_err"])' },
+  ANGLE:            { group: 'Attitude',     unit: 'rad',     offset: '0x50/54', enc: 'f64', tlmKey: 'angle', digits: 3, role: 'Yaw heading angle (tlm["angle"])' },
+  OMEGA:            { group: 'Attitude',     unit: 'rad/s',   offset: '0x58/5C', enc: 'f64', tlmKey: 'omega', digits: 3, role: 'Yaw angular rate (tlm["omega"])' },
+  ROLL:             { group: 'Attitude',     unit: 'rad',     offset: '0xC0/C4', enc: 'f64', tlmKey: 'roll', digits: 3, role: 'Roll bank angle (tlm["roll"])' },
+  PITCH:            { group: 'Attitude',     unit: 'rad',     offset: '0xC8/CC', enc: 'f64', tlmKey: 'pitch', digits: 3, role: 'Pitch angle (tlm["pitch"])' },
+  YAW:              { group: 'Attitude',     unit: 'rad',     offset: '0xD0/D4', enc: 'f64', tlmKey: 'yaw', digits: 3, role: '3D Yaw angle (tlm["yaw"])' },
+  OMEGA_X:          { group: 'Attitude',     unit: 'rad/s',   offset: '0xD8/DC', enc: 'f64', tlmKey: 'omega_x', digits: 3, role: 'Roll angular rate (tlm["omega_x"])' },
+  OMEGA_Y:          { group: 'Attitude',     unit: 'rad/s',   offset: '0xE0/E4', enc: 'f64', tlmKey: 'omega_y', digits: 3, role: 'Pitch angular rate (tlm["omega_y"])' },
+  OMEGA_Z:          { group: 'Attitude',     unit: 'rad/s',   offset: '0xE8/EC', enc: 'f64', tlmKey: 'omega_z', digits: 3, role: 'Yaw angular rate (tlm["omega_z"])' },
+  // Energy & Reaction Wheels
+  FUEL:             { group: 'Energy/RW',    unit: '%',       offset: '0x60/64', enc: 'f64', tlmKey: 'fuel', digits: 1, role: 'Remaining RCS propellant percentage (tlm["fuel"])' },
+  WHEEL_RPM:        { group: 'Energy/RW',    unit: 'RPM',     offset: '0x70/74', enc: 'f64', tlmKey: 'wheel_rpm', digits: 0, role: 'Yaw Reaction Wheel RPM; desat threshold ~5200 RPM (tlm["wheel_rpm"])' },
+  WHEEL_RPM_X:      { group: 'Energy/RW',    unit: 'RPM',     offset: '0xF0/F4', enc: 'f64', tlmKey: 'wheel_rpm_x', digits: 0, role: 'Roll Reaction Wheel RPM (tlm["wheel_rpm_x"])' },
+  WHEEL_RPM_Y:      { group: 'Energy/RW',    unit: 'RPM',     offset: '0xF8/FC', enc: 'f64', tlmKey: 'wheel_rpm_y', digits: 0, role: 'Pitch Reaction Wheel RPM (tlm["wheel_rpm_y"])' },
+  WHEEL_RPM_Z:      { group: 'Energy/RW',    unit: 'RPM',     offset: '0x100/104', enc: 'f64', tlmKey: 'wheel_rpm_z', digits: 0, role: 'Z Reaction Wheel RPM (tlm["wheel_rpm_z"])' },
+  CABLE_TENSION:    { group: 'Energy/RW',    unit: 'N',       offset: '0x108/10C', enc: 'f64', tlmKey: 'cable_tension', digits: 1, role: 'Tether climber cable tension (tlm["cable_tension"])' },
+  CABLE_VIB:        { group: 'Energy/RW',    unit: 'm',       offset: '0x110/114', enc: 'f64', tlmKey: 'cable_vibration', digits: 3, role: 'Tether lateral vibration amplitude (tlm["cable_vibration"])' },
+  // Sensors, FDIR & Referee
+  SENSOR_EDGE:      { group: 'Sensors/FDIR', unit: 'm',       offset: '0x0C', enc: 'q16', digits: 3, role: 'Line-sensor lateral edge offset (tlm["sensor_edge"]/65536.0)' },
+  SENSOR_RAW:       { group: 'Sensors/FDIR', unit: 'hex',     offset: '0x08', enc: 'hex', role: 'Raw line-sensor bitmask (0=lost, 0xFFFFFFFF=saturated)' },
+  SR_STATUS:        { group: 'Sensors/FDIR', unit: 'hex',     offset: '0x04', enc: 'hex', role: 'Hardware status flags (Bit 3 = CARRIER_LOST)' },
+  FDIR_MODE:        { group: 'Sensors/FDIR', unit: 'enum',    offset: '0x78', enc: 'u32', role: 'FDIR mode (0=Nominal, 1=LOS/Recovery, 2=Safe)' },
+  OFFICIAL_SCORE:   { group: 'Sensors/FDIR', unit: 'pts',     offset: '0x80', enc: 'i32', role: 'Official referee cumulative score (tlm["score"])' },
+  PASSED_GATES:     { group: 'Sensors/FDIR', unit: 'cnt',     offset: '0x84', enc: 'u32', role: 'Number of passed checkpoints/gates (tlm["passed_checkpoints"])' },
+  THRUST_HEALTH:    { group: 'Sensors/FDIR', unit: 'hex',     offset: '0x174', enc: 'hex', role: '12-ch RCS thruster health bitmask (1=healthy, 0=damaged)' }
+};
+
+const TRACE_PRESETS = {
+  control: {
+    label: '🎯 Control Loop',
+    signals: ['POS_X', 'XT_ERR', 'ANGLE', 'ROLL', 'THRUST_CMD_X', 'THRUST_CMD_Y', 'TORQUE_CMD', 'WHEEL_TORQUE_X', 'WHEEL_TORQUE_CMD']
+  },
+  energy: {
+    label: '⚡ Energy & Wheels',
+    signals: ['POS_X', 'FUEL', 'WHEEL_RPM', 'WHEEL_RPM_X', 'TORQUE_CMD', 'WHEEL_TORQUE_CMD', 'WHEEL_TORQUE_X']
+  },
+  fdir: {
+    label: '🛡 FDIR & Sensors',
+    signals: ['POS_X', 'SR_STATUS', 'FDIR_MODE', 'SENSOR_RAW', 'SENSOR_EDGE', 'XT_ERR', 'THRUST_HEALTH']
+  }
+};
+
+function toSigned32(val) {
+  if (val == null) return 0;
+  const n = Number(val) >>> 0;
+  return (n & 0x80000000) ? (n - 0x100000000) : n;
+}
+
+function decodeDoubleFromHalves(lo, hi) {
+  const buf = new ArrayBuffer(8);
+  const view = new DataView(buf);
+  view.setUint32(0, Number(lo) >>> 0, true);
+  view.setUint32(4, Number(hi) >>> 0, true);
+  const v = view.getFloat64(0, true);
+  return Number.isFinite(v) ? v : 0;
+}
+
+function discoverTraceSignals(history, manifestRegs) {
+  if (!Array.isArray(history) || history.length === 0) return [];
+  const sample = history[history.length - 1];
+  const rawKeys = Object.keys(sample).filter(k => k !== 'index' && k !== 'time' && k !== 'telemetry');
+  const regLookup = {};
+  (manifestRegs || []).forEach(r => {
+    regLookup[`${r.deviceName}_${r.name}`] = r;
+  });
+
+  // Group raw register keys by base name (auto-merging *_L and *_H into a single f64 signal)
+  const rawByShort = {};
+  rawKeys.forEach(fullKey => {
+    const meta = regLookup[fullKey];
+    const shortName = meta?.name || fullKey.replace(/^[a-zA-Z0-9]+_reg_|^[^_]+_/, '');
+    rawByShort[shortName] = { fullKey, meta };
+  });
+
+  const signals = [];
+  const consumed = new Set();
+
+  Object.keys(rawByShort).forEach(shortName => {
+    if (consumed.has(shortName)) return;
+    // Skip internal/noisy sync/reserved/string registers unless explicitly desired
+    if (/^(RESERVED_|SHM_MAGIC|SEQLOCK_COUNTER|GRADE_STR|EVENT_STR|WATCHDOG_KICK)/.test(shortName)) return;
+
+    // Pair *_L and *_H into a single 64-bit IEEE-754 double signal
+    if (shortName.endsWith('_L')) {
+      const base = shortName.slice(0, -2);
+      const hiName = `${base}_H`;
+      if (rawByShort[hiName]) {
+        consumed.add(shortName);
+        consumed.add(hiName);
+        const cat = TRACE_SIGNAL_CATALOG[base];
+        signals.push({
+          id: base,
+          rawKeys: [rawByShort[shortName].fullKey, rawByShort[hiName].fullKey],
+          loKey: rawByShort[shortName].fullKey,
+          hiKey: rawByShort[hiName].fullKey,
+          group: cat?.group || rawByShort[shortName].meta?.group || 'Telemetry (f64)',
+          unit: cat?.unit || '',
+          offset: cat?.offset || rawByShort[shortName].meta?.offset || '',
+          enc: 'f64',
+          tlmKey: cat?.tlmKey || null,
+          digits: cat?.digits ?? 3,
+          role: cat?.role || `64-bit IEEE-754 float register pair (${base}_L / ${base}_H)`
+        });
+        return;
+      }
+    }
+    if (shortName.endsWith('_H') && rawByShort[`${shortName.slice(0, -2)}_L`]) {
+      return; // Handled when *_L is visited
+    }
+
+    consumed.add(shortName);
+    const cat = TRACE_SIGNAL_CATALOG[shortName];
+    signals.push({
+      id: shortName,
+      rawKeys: [rawByShort[shortName].fullKey],
+      key: rawByShort[shortName].fullKey,
+      group: cat?.group || rawByShort[shortName].meta?.group || 'Other Registers',
+      unit: cat?.unit || '',
+      offset: cat?.offset || rawByShort[shortName].meta?.offset || '',
+      enc: cat?.enc || 'i32',
+      digits: cat?.digits ?? 0,
+      role: cat?.role || `32-bit hardware register (${rawByShort[shortName].meta?.group || 'MMIO'})`
+    });
+  });
+
+  const groupOrder = { Control: 0, Kinematics: 1, Attitude: 2, 'Energy/RW': 3, 'Sensors/FDIR': 4 };
+  signals.sort((a, b) => (groupOrder[a.group] ?? 9) - (groupOrder[b.group] ?? 9) || a.id.localeCompare(b.id));
+  return signals;
+}
+
+function decodeSignalValue(snap, sig) {
+  if (!snap || !sig) return null;
+  if (sig.enc === 'f64') {
+    if (sig.tlmKey && snap.telemetry && typeof snap.telemetry[sig.tlmKey] === 'number') {
+      return snap.telemetry[sig.tlmKey];
+    }
+    return decodeDoubleFromHalves(snap[sig.loKey], snap[sig.hiKey]);
+  }
+  const raw = snap[sig.key];
+  if (raw === undefined || raw === null) return null;
+  if (sig.enc === 'q16') return toSigned32(raw) / 65536.0;
+  if (sig.enc === 'i32') return toSigned32(raw);
+  return Number(raw) >>> 0;
+}
+
+function formatDecodedVal(val, sig) {
+  if (val === null || val === undefined || Number.isNaN(val)) return '-';
+  if (sig.enc === 'hex') return `0x${(Number(val) >>> 0).toString(16).toUpperCase()}`;
+  if (sig.enc === 'u32' || sig.enc === 'i32') return String(Math.round(val));
+  return Number(val).toFixed(sig.digits ?? 2);
+}
+
+function formatTraceContext(history, selectedIds, windowMode, timeTravelIndex, manifestRegs) {
+  if (!Array.isArray(history) || history.length === 0) return '';
+  const allSignals = discoverTraceSignals(history, manifestRegs);
+  const sigMap = {};
+  allSignals.forEach(s => { sigMap[s.id] = s; });
+  const activeSignals = (selectedIds || []).map(id => sigMap[id]).filter(Boolean);
+  if (activeSignals.length === 0) return '';
+
+  // 1. Slice & downsample target window (keep ~25-31 compact rows for token efficiency)
+  const total = history.length;
+  let picked = [];
+  let windowDesc = '';
+  if (windowMode === 'time_travel' && typeof timeTravelIndex === 'number') {
+    let center = history.findIndex(s => s.index === timeTravelIndex);
+    if (center === -1) center = Math.min(total - 1, Math.max(0, timeTravelIndex));
+    const start = Math.max(0, center - 15);
+    const end = Math.min(total, center + 16);
+    picked = history.slice(start, end);
+    windowDesc = `Around Time-Travel Frame #${history[center]?.index ?? center} (${picked.length} of ${total} frames)`;
+  } else if (windowMode === 'last_30') {
+    picked = history.slice(-30);
+    windowDesc = `Last ${picked.length} of ${total} frames`;
+  } else {
+    const targetPts = 30;
+    if (total <= targetPts) {
+      picked = history;
+    } else {
+      const idxSet = new Set([0, total - 1]);
+      // Always include peak |XT_ERR| frame if present so worst overshoot is never dropped
+      const xtSig = sigMap.XT_ERR;
+      if (xtSig) {
+        let peakIdx = 0;
+        let peakAbs = -1;
+        for (let i = 0; i < total; i++) {
+          const v = Math.abs(decodeSignalValue(history[i], xtSig) || 0);
+          if (v > peakAbs) { peakAbs = v; peakIdx = i; }
+        }
+        idxSet.add(peakIdx);
+      }
+      for (let k = 1; k < targetPts - 1; k++) {
+        idxSet.add(Math.round((k * (total - 1)) / (targetPts - 1)));
+      }
+      picked = Array.from(idxSet).sort((a, b) => a - b).map(i => history[i]);
+    }
+    windowDesc = `Full Run Downsampled (${picked.length} pts from ${total} total frames)`;
+  }
+
+  const lines = [];
+  lines.push(`### Hardware Register Trace Data — ${windowDesc}`);
+  lines.push('');
+  lines.push('#### Signal Roles & Encoding (Decoded to Physical Units)');
+  activeSignals.forEach(s => {
+    const unitStr = s.unit ? ` [${s.unit}]` : '';
+    const offStr = s.offset ? ` @ ${s.offset}` : '';
+    lines.push(`- **${s.id}**${unitStr} (${s.enc}${offStr}): ${s.role}`);
+  });
+
+  // 2. Summary statistics over the selected window
+  lines.push('');
+  lines.push('#### Window Statistics');
+  activeSignals.forEach(s => {
+    const vals = picked.map(sn => ({ idx: sn.index, v: decodeSignalValue(sn, s) })).filter(x => x.v !== null && !Number.isNaN(x.v));
+    if (vals.length === 0) return;
+    if (s.enc === 'hex') {
+      const uniq = Array.from(new Set(vals.map(x => formatDecodedVal(x.v, s)))).slice(0, 6);
+      lines.push(`- ${s.id}: unique=[${uniq.join(', ')}]`);
+      return;
+    }
+    let minItem = vals[0];
+    let maxItem = vals[0];
+    let sum = 0;
+    vals.forEach(x => {
+      if (x.v < minItem.v) minItem = x;
+      if (x.v > maxItem.v) maxItem = x;
+      sum += x.v;
+    });
+    const mean = sum / vals.length;
+    lines.push(
+      `- ${s.id}: min=${formatDecodedVal(minItem.v, s)} (#${minItem.idx}), max=${formatDecodedVal(maxItem.v, s)} (#${maxItem.idx}), mean=${formatDecodedVal(mean, s)}, start->end=${formatDecodedVal(vals[0].v, s)}->${formatDecodedVal(vals[vals.length - 1].v, s)}`
+    );
+  });
+
+  // 3. Compact CSV time-series table
+  lines.push('');
+  lines.push('#### Time-Series Samples (CSV)');
+  lines.push('```csv');
+  lines.push(['idx', 'time', ...activeSignals.map(s => s.id)].join(','));
+  picked.forEach(sn => {
+    const row = [sn.index ?? '', sn.time ?? '', ...activeSignals.map(s => formatDecodedVal(decodeSignalValue(sn, s), s))];
+    lines.push(row.join(','));
+  });
+  lines.push('```');
+  return lines.join('\n');
+}
+
 export default function PilotCodeEditor() {
   const React = window.React || window.FBB?.React;
   const { useState, useEffect, useRef, useMemo } = window.FBB?.hooks || React;
@@ -325,11 +673,19 @@ export default function PilotCodeEditor() {
   const [ollamaStatus, setOllamaStatus] = useState({ checked: false, available: false, models: [], host: '' });
   const [ollamaModel, setOllamaModel] = useState(initialPrefs.ollamaModel);
   const [aiIncludeTelemetry, setAiIncludeTelemetry] = useState(aiSessionStore.aiIncludeTelemetry);
+  const [aiIncludeTrace, setAiIncludeTrace] = useState(aiSessionStore.aiIncludeTrace);
+  const [aiTraceWindow, setAiTraceWindow] = useState(aiSessionStore.aiTraceWindow);
+  const [aiTracePreset, setAiTracePreset] = useState(aiSessionStore.aiTracePreset);
+  const [aiTraceSelectedSignals, setAiTraceSelectedSignals] = useState(aiSessionStore.aiTraceSelectedSignals);
+  const [traceCount, setTraceCount] = useState(0);
+  const [tracePickerModal, setTracePickerModal] = useState(false);
   const [aiIntent, setAiIntent] = useState('tune'); // 'tune' | 'fix' | 'explain' | 'custom'
   const [aiCustomNote, setAiCustomNote] = useState(aiSessionStore.aiPromptDraft);
   const [chatMessages, setChatMessages] = useState(aiSessionStore.chatMessages);
   const [chatInput, setChatInput] = useState('');
   const [aiStreaming, setAiStreaming] = useState(false);
+  const [aiInitializing, setAiInitializing] = useState(false);
+  const [ollamaSession, setOllamaSession] = useState(aiSessionStore.ollamaSession);
   const [aiSplitRatio, setAiSplitRatio] = useState(aiSessionStore.aiSplitRatio);
   const [prevCodeBeforeAi, setPrevCodeBeforeAi] = useState(aiSessionStore.prevCodeBeforeAi);
   const [hasTelemetry, setHasTelemetry] = useState(false);
@@ -349,7 +705,12 @@ export default function PilotCodeEditor() {
   const jumpLineInputRef = useRef(null);
   const chatScrollRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const initInFlightRef = useRef(false);
   const telemetryRef = useRef(null);
+  const traceHistoryRef = useRef([]);
+  const manifestRegsRef = useRef([]);
+  const hiddenTraceKeysRef = useRef({});
+  const timeTravelIdxRef = useRef(null);
   const selectionRef = useRef({ start: 0, end: 0 });
   const isComposingRef = useRef(false);
   const lastCompositionEndRef = useRef(0);
@@ -373,10 +734,15 @@ export default function PilotCodeEditor() {
 
   // Sync AI session store so Dock <-> Pop-out remounts never lose chat or state
   useEffect(() => { aiSessionStore.chatMessages = chatMessages; }, [chatMessages]);
+  useEffect(() => { aiSessionStore.ollamaSession = ollamaSession; }, [ollamaSession]);
   useEffect(() => { aiSessionStore.aiBarOpen = aiBarOpen; }, [aiBarOpen]);
   useEffect(() => { aiSessionStore.aiSplitRatio = aiSplitRatio; }, [aiSplitRatio]);
   useEffect(() => { aiSessionStore.prevCodeBeforeAi = prevCodeBeforeAi; }, [prevCodeBeforeAi]);
   useEffect(() => { aiSessionStore.aiIncludeTelemetry = aiIncludeTelemetry; }, [aiIncludeTelemetry]);
+  useEffect(() => { aiSessionStore.aiIncludeTrace = aiIncludeTrace; }, [aiIncludeTrace]);
+  useEffect(() => { aiSessionStore.aiTraceWindow = aiTraceWindow; }, [aiTraceWindow]);
+  useEffect(() => { aiSessionStore.aiTracePreset = aiTracePreset; }, [aiTracePreset]);
+  useEffect(() => { aiSessionStore.aiTraceSelectedSignals = aiTraceSelectedSignals; }, [aiTraceSelectedSignals]);
   useEffect(() => { aiSessionStore.aiPromptDraft = aiCustomNote; }, [aiCustomNote]);
 
   // Helper: Resolve active window & document dynamically (React Portal Pop-out safe!)
@@ -450,7 +816,31 @@ export default function PilotCodeEditor() {
     return { opened, url };
   };
 
-  // Passive Telemetry Listener (zero 30Hz re-render overhead on editor)
+  // Passive Telemetry & Hardware Trace Listener (zero 30Hz re-render overhead on editor)
+  const refreshTraceFromServer = async () => {
+    try {
+      const [trRes, mfRes] = await Promise.all([
+        fetch(`/api/trace-history?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null),
+        fetch(`/api/manifest?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null)
+      ]);
+      if (trRes && trRes.ok) {
+        const arr = await trRes.json();
+        if (Array.isArray(arr)) {
+          traceHistoryRef.current = arr.slice(-500);
+          setTraceCount(traceHistoryRef.current.length);
+        }
+      }
+      if (mfRes && mfRes.ok) {
+        const mf = await mfRes.json();
+        const flatRegs = [];
+        (mf?.devices || []).forEach(d => {
+          (d.registers || []).forEach(r => flatRegs.push({ ...r, deviceName: d.name }));
+        });
+        manifestRegsRef.current = flatRegs;
+      }
+    } catch (e) {}
+  };
+
   useEffect(() => {
     const updateTlm = (j, historical = false) => {
       if (!j || (j.type && j.type !== 'space_guidance')) return;
@@ -458,15 +848,43 @@ export default function PilotCodeEditor() {
       setHasTelemetry(prev => (prev ? prev : true));
     };
 
+    refreshTraceFromServer();
+
     let sock = window.FBB?.socket;
     if (!sock && window.FBB?.useDashboard) {
       try { sock = window.FBB.useDashboard().socket; } catch (e) {}
     }
     const onLive = (j) => updateTlm(j, false);
-    if (sock) sock.on('scenario:telemetry', onLive);
+    const onTraceInit = (arr) => {
+      if (Array.isArray(arr)) {
+        traceHistoryRef.current = arr.slice(-500);
+        setTraceCount(traceHistoryRef.current.length);
+      }
+    };
+    const onTraceUpdate = (snap) => {
+      if (!snap) return;
+      const buf = traceHistoryRef.current;
+      buf.push(snap);
+      if (buf.length > 500) buf.shift();
+      // Only trigger lightweight count state on first frame (avoid 30Hz editor re-renders)
+      if (buf.length === 1) setTraceCount(1);
+    };
+
+    if (sock) {
+      sock.on('scenario:telemetry', onLive);
+      sock.on('trace-history-init', onTraceInit);
+      sock.on('trace-history-update', onTraceUpdate);
+    }
 
     const onEffective = (e) => {
-      if (e?.detail) updateTlm(e.detail, Boolean(e.detail.isHistorical));
+      if (e?.detail) {
+        updateTlm(e.detail, Boolean(e.detail.isHistorical));
+        if (e.detail.isHistorical && typeof e.detail.index === 'number') {
+          timeTravelIdxRef.current = e.detail.index;
+        } else if (!e.detail.isHistorical) {
+          timeTravelIdxRef.current = null;
+        }
+      }
     };
     window.addEventListener('fbb:telemetry:effective', onEffective);
 
@@ -476,19 +894,69 @@ export default function PilotCodeEditor() {
         syncChannel = new BroadcastChannel('fbb_dashboard_sync');
         syncChannel.onmessage = (event) => {
           const { type, payload } = event.data || {};
-          if (type === 'SYNC_TIME_TRAVEL' && payload?.snapshot?.telemetry) {
-            updateTlm(payload.snapshot.telemetry, payload.isLive === false);
+          if (type === 'SYNC_TIME_TRAVEL') {
+            if (payload?.isLive === false) {
+              if (typeof payload.selectedIndex === 'number') timeTravelIdxRef.current = payload.selectedIndex;
+              if (payload?.snapshot?.telemetry) updateTlm(payload.snapshot.telemetry, true);
+            } else if (payload?.isLive === true) {
+              timeTravelIdxRef.current = null;
+            }
+          } else if (type === 'SYNC_HIDDEN_TRACE_KEYS' && payload) {
+            hiddenTraceKeysRef.current = payload;
           }
         };
       }
     } catch (e) {}
 
     return () => {
-      if (sock) sock.off('scenario:telemetry', onLive);
+      if (sock) {
+        sock.off('scenario:telemetry', onLive);
+        sock.off('trace-history-init', onTraceInit);
+        sock.off('trace-history-update', onTraceUpdate);
+      }
       window.removeEventListener('fbb:telemetry:effective', onEffective);
       try { syncChannel?.close(); } catch (e) {}
     };
   }, []);
+
+  // Resolve active trace signals (supports "Sync with Register Tracer" dynamically)
+  const resolveSelectedTraceSignalIds = () => {
+    const allSigs = discoverTraceSignals(traceHistoryRef.current, manifestRegsRef.current);
+    if (aiTracePreset === 'tracer') {
+      const hidden = hiddenTraceKeysRef.current || {};
+      const visible = allSigs.filter(s => s.rawKeys.some(k => !hidden[k])).map(s => s.id);
+      return visible.length > 0 ? visible.slice(0, 14) : aiTraceSelectedSignals;
+    }
+    return aiTraceSelectedSignals;
+  };
+
+  const handleOpenTracePicker = async () => {
+    await refreshTraceFromServer();
+    setTraceCount(traceHistoryRef.current.length);
+    setTracePickerModal(true);
+  };
+
+  const handleApplyTracePreset = (presetKey) => {
+    setAiTracePreset(presetKey);
+    if (presetKey === 'tracer') {
+      const allSigs = discoverTraceSignals(traceHistoryRef.current, manifestRegsRef.current);
+      const hidden = hiddenTraceKeysRef.current || {};
+      const visible = allSigs.filter(s => s.rawKeys.some(k => !hidden[k])).map(s => s.id);
+      if (visible.length > 0) setAiTraceSelectedSignals(visible.slice(0, 14));
+      return;
+    }
+    const preset = TRACE_PRESETS[presetKey];
+    if (preset) {
+      setAiTraceSelectedSignals([...preset.signals]);
+    }
+  };
+
+  const handleToggleTraceSignal = (sigId) => {
+    setAiTracePreset('custom');
+    setAiTraceSelectedSignals(prev =>
+      prev.includes(sigId) ? prev.filter(x => x !== sigId) : [...prev, sigId]
+    );
+  };
 
   // Probe Local Ollama Availability (Progressive Enhancement)
   const checkOllamaStatus = async () => {
@@ -887,6 +1355,19 @@ export default function PilotCodeEditor() {
       }
     }
 
+    if (aiIncludeTrace && traceHistoryRef.current.length > 0) {
+      const traceBlock = formatTraceContext(
+        traceHistoryRef.current,
+        resolveSelectedTraceSignalIds(),
+        aiTraceWindow,
+        timeTravelIdxRef.current,
+        manifestRegsRef.current
+      );
+      if (traceBlock) {
+        blocks.push('\n' + traceBlock);
+      }
+    }
+
     // Selected code slice if user highlighted a region in the editor
     const { start, end } = selectionRef.current || { start: 0, end: 0 };
     if (end > start && end <= code.length) {
@@ -953,32 +1434,64 @@ export default function PilotCodeEditor() {
     });
   };
 
-  // Open Smart Apply Modal (reads clipboard or pre-fills provided code block)
+  // Open Smart Apply Modal (reads clipboard or pre-fills provided code block, snapshotting cursor/selection)
   const handleOpenSmartApply = async (prefilledText = null) => {
+    const ta = textareaRef.current;
+    const selStart = ta ? ta.selectionStart : (selectionRef.current?.start || 0);
+    const selEnd = ta ? ta.selectionEnd : (selectionRef.current?.end || selStart);
+    const pickDefaultMode = (txt) => {
+      const blocks = extractCodeBlocks(txt || '');
+      const first = blocks[0];
+      const curLines = (code.match(/\n/g) || []).length + 1;
+      if (first && first.lines < Math.max(20, Math.floor(curLines * 0.6))) return 'selection';
+      return (selEnd > selStart) ? 'selection' : 'full';
+    };
+
     if (typeof prefilledText === 'string' && prefilledText.trim()) {
-      setSmartApplyModal({ rawText: prefilledText, selectedBlockIdx: 0 });
+      setSmartApplyModal({
+        rawText: prefilledText,
+        selectedBlockIdx: 0,
+        selStart,
+        selEnd,
+        previewMode: pickDefaultMode(prefilledText)
+      });
       return;
     }
     const clip = await readClipboardSafe();
+    const initialRaw = clip || '';
     setSmartApplyModal({
-      rawText: clip || '',
-      selectedBlockIdx: 0
+      rawText: initialRaw,
+      selectedBlockIdx: 0,
+      selStart,
+      selEnd,
+      previewMode: pickDefaultMode(initialRaw)
     });
   };
 
   const applyCodeToEditor = (newSnippet, mode) => {
     setPrevCodeBeforeAi(code);
     if (mode === 'selection') {
-      const ta = textareaRef.current;
-      const start = ta ? ta.selectionStart : selectionRef.current.start;
-      const end = ta ? ta.selectionEnd : selectionRef.current.end;
-      const nextCode = code.substring(0, start) + newSnippet + code.substring(end);
-      setCode(nextCode);
-      setStatusMsg('✨ AI code inserted into selection (Ctrl+S to save)');
+      const start = (smartApplyModal && typeof smartApplyModal.selStart === 'number')
+        ? smartApplyModal.selStart
+        : (textareaRef.current ? textareaRef.current.selectionStart : (selectionRef.current?.start || 0));
+      const end = (smartApplyModal && typeof smartApplyModal.selEnd === 'number')
+        ? smartApplyModal.selEnd
+        : (textareaRef.current ? textareaRef.current.selectionEnd : (selectionRef.current?.end || start));
+      const aligned = alignSnippetForInsert(code, start, end, newSnippet);
+      setCode(aligned.nextCode);
+      selectionRef.current = { start: aligned.newCursorPos, end: aligned.newCursorPos };
+      setTimeout(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.focus({ preventScroll: true });
+          ta.setSelectionRange(aligned.newCursorPos, aligned.newCursorPos);
+        }
+      }, 20);
+      setStatusMsg(`✨ Inserted at Line ${aligned.lineNum} (Auto-Indent: ${aligned.indentCols}sp — Ctrl+S to save)`);
       setStatusType('success');
     } else {
       setCode(newSnippet);
-      setStatusMsg('✨ AI code applied to editor (Ctrl+S to save, or Undo AI)');
+      setStatusMsg('✨ AI code applied to full file (Ctrl+S to save, or Undo AI)');
       setStatusType('success');
     }
     setSmartApplyModal(null);
@@ -992,22 +1505,226 @@ export default function PilotCodeEditor() {
     setStatusType('info');
   };
 
-  // Local Ollama Streaming Chat Handler
+  // Build Pinned Initialization Messages (Role + Formatting Template + Current pilot.py)
+  const buildOllamaInitMessages = (srcCode) => {
+    const targetPath = scenarioName ? `${scenarioName}/${fileName}` : fileName;
+    const systemMsg = {
+      role: 'system',
+      content: [
+        'You are an expert Space Guidance & Control (GNC) and Python autopilot assistant for SpaceGuidance-FBB.',
+        'Conversation rules:',
+        '1. Always respond concisely in the same language as the user (English or Japanese).',
+        '2. For casual greetings (e.g., "Hello", "こんにちは") or general questions, reply naturally and briefly WITHOUT dumping unsolicited code reviews or improvements.',
+        '3. Reference the initialized pilot.py script and any attached telemetry only when relevant to the user\'s question.',
+        '4. Whenever you propose modified Python code, output it inside a clean ```python ... ``` fenced code block so the user can apply it with one click.'
+      ].join('\n')
+    };
+
+    const initUserMsg = {
+      role: 'user',
+      content: [
+        `[SESSION INITIALIZATION — ${targetPath}]`,
+        `Here is the current \`${fileName}\` script for this session. Read and retain it as our active reference context:`,
+        '```python',
+        srcCode,
+        '```',
+        'Reply in 1–2 brief sentences confirming you have understood this pilot.py script and are ready to help. Do NOT propose changes yet.'
+      ].join('\n')
+    };
+
+    return { systemMsg, initUserMsg };
+  };
+
+  // Shared NDJSON Streaming Reader for /api/ai/chat
+  const streamOllamaToMessage = async (model, apiMessages, assistantId) => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const res = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: apiMessages,
+        stream: true
+      }),
+      signal: controller.signal
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      const data = await res.json();
+      const content = data.message?.content || data.response || '(Empty response)';
+      setChatMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content } : m));
+      return content;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let accContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const chunk = JSON.parse(trimmed);
+          if (chunk.error) throw new Error(chunk.error);
+          const delta = chunk.message?.content || '';
+          if (delta) {
+            accContent += delta;
+            setChatMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m));
+          }
+        } catch (parseErr) {
+          if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
+        }
+      }
+    }
+
+    if (!accContent.trim()) {
+      accContent = '(Empty response)';
+      setChatMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m));
+    }
+    return accContent;
+  };
+
+  // One-Time Initialization / Manual Refresh of Role + Template + pilot.py
+  const initializeOllamaSession = async (targetModel, isManualRefresh = false) => {
+    if (!targetModel || !code || initInFlightRef.current || aiStreaming) return;
+    initInFlightRef.current = true;
+    setAiInitializing(true);
+    setAiStreaming(true);
+
+    const { systemMsg, initUserMsg } = buildOllamaInitMessages(code);
+    const lineCnt = (code.match(/\n/g) || []).length + 1;
+    const noticeId = `sys_${Date.now()}`;
+    const assistantId = `init_${Date.now() + 1}`;
+    const noticeObj = {
+      id: noticeId,
+      role: 'system-notice',
+      content: isManualRefresh
+        ? `🔄 Context Refreshed — Re-sent Role, Template & ${fileName} (${lineCnt} lines) to ${targetModel}`
+        : `🚀 Initializing ${targetModel} with Role, Template & ${fileName} (${lineCnt} lines)...`,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    const assistantObj = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      model: targetModel,
+      timestamp: new Date().toLocaleTimeString()
+    };
+
+    const nextAnchorIdx = chatMessages.length + 2;
+    setChatMessages(prev => [...prev, noticeObj, assistantObj]);
+
+    try {
+      const ackContent = await streamOllamaToMessage(targetModel, [systemMsg, initUserMsg], assistantId);
+      const cleanedAck = (ackContent || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim() || 'Understood pilot.py and ready to help.';
+      setOllamaSession({
+        model: targetModel,
+        scenario: scenarioName,
+        fileName,
+        initializedCode: code,
+        systemMsg,
+        initUserMsg,
+        initAssistantMsg: { role: 'assistant', content: cleanedAck },
+        turnAnchorIdx: nextAnchorIdx
+      });
+      setStatusMsg(`✓ ${targetModel} initialized with ${fileName}`);
+      setStatusType('success');
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        setChatMessages(prev => prev.map(m =>
+          m.id === assistantId ? { ...m, content: (m.content ? m.content + '\n\n' : '') + '⏹ *(Initialization cancelled — click 🔄 Sync Context to retry)*' } : m
+        ));
+      } else {
+        setChatMessages(prev => prev.map(m =>
+          m.id === assistantId ? { ...m, content: `⚠️ Initialization error: ${e.message}\n\nClick [🔄 Sync Context] to retry, or use [↗ Gemini] / [↗ ChatGPT] above.` } : m
+        ));
+      }
+    } finally {
+      abortControllerRef.current = null;
+      initInFlightRef.current = false;
+      setAiInitializing(false);
+      setAiStreaming(false);
+    }
+  };
+
+  // Auto-initialize once when Ollama split panel is opened or model/scenario changes
+  useEffect(() => {
+    const isOllamaSplitVisible = aiBarOpen && aiProvider === 'ollama' && ollamaStatus.available;
+    if (!isOllamaSplitVisible || loading || !code || !ollamaModel || aiStreaming || initInFlightRef.current) return;
+    const needsInit =
+      ollamaSession.model !== ollamaModel ||
+      ollamaSession.fileName !== fileName ||
+      ollamaSession.scenario !== scenarioName ||
+      !ollamaSession.initAssistantMsg;
+    if (needsInit) {
+      initializeOllamaSession(ollamaModel, false);
+    }
+  }, [aiBarOpen, aiProvider, ollamaStatus.available, loading, ollamaModel, fileName, scenarioName, Boolean(code)]);
+
+  // Local Ollama Streaming Chat Handler (Sends ONLY prompt + optional Telemetry after init!)
   const handleSendOllamaChat = async (overridePrompt = null, overrideIntent = null) => {
     if (aiStreaming || !ollamaStatus.available || !ollamaModel) return;
     const userText = (overridePrompt !== null ? overridePrompt : chatInput).trim();
     if (!userText && !overrideIntent) return;
 
     const displayUserMsg = userText || (
-      overrideIntent === 'tune' ? '🔧 Suggest gain & control tuning improvements based on current code and telemetry.' :
-      overrideIntent === 'fix' ? '🐛 Diagnose errors or instability and propose a safe fix.' :
-      '📖 Explain how this control logic works and key areas to improve.'
+      overrideIntent === 'tune' ? '🔧 Suggest gain & control tuning improvements based on current pilot.py and telemetry.' :
+      overrideIntent === 'fix' ? '🐛 Diagnose errors or instability in pilot.py and propose a safe fix.' :
+      '📖 Explain how the current pilot.py control logic works and key areas to improve.'
     );
+
+    // Build ONLY the lightweight per-turn payload (NEVER re-sends full pilot.py on every turn!)
+    const turnParts = [displayUserMsg];
+    if (aiIncludeTelemetry) {
+      if (syntaxError) {
+        const errLineStr = syntaxError.line ? `Line ${syntaxError.line}` : 'Unknown line';
+        turnParts.push(`⚠️ Current Syntax Error (${errLineStr}): \`${syntaxError.message}\``);
+      }
+      if (telemetryRef.current) {
+        const tlmSummary = formatTelemetrySummary(telemetryRef.current);
+        if (tlmSummary) turnParts.push(tlmSummary);
+      }
+      const { start, end } = selectionRef.current || { start: 0, end: 0 };
+      if (end > start && end <= code.length) {
+        const selectedSnippet = code.slice(start, end);
+        if (selectedSnippet.trim() && selectedSnippet.length < code.length) {
+          const startLine = (code.slice(0, start).match(/\n/g) || []).length + 1;
+          const endLine = (code.slice(0, end).match(/\n/g) || []).length + 1;
+          turnParts.push(`Selected Code Focus (Lines ${startLine}-${endLine}):\n\`\`\`python\n${selectedSnippet}\n\`\`\``);
+        }
+      }
+    }
+    if (aiIncludeTrace && traceHistoryRef.current.length > 0) {
+      const traceBlock = formatTraceContext(
+        traceHistoryRef.current,
+        resolveSelectedTraceSignalIds(),
+        aiTraceWindow,
+        timeTravelIdxRef.current,
+        manifestRegsRef.current
+      );
+      if (traceBlock) turnParts.push(traceBlock);
+    }
+    const userApiContent = turnParts.join('\n\n');
 
     const userMsgObj = {
       id: `u_${Date.now()}`,
       role: 'user',
       content: displayUserMsg,
+      apiContent: userApiContent,
       timestamp: new Date().toLocaleTimeString()
     };
     const assistantId = `a_${Date.now() + 1}`;
@@ -1024,93 +1741,38 @@ export default function PilotCodeEditor() {
     if (overridePrompt === null) setChatInput('');
     setAiStreaming(true);
 
-    const systemMsg = {
-      role: 'system',
-      content: [
-        'You are an expert Space Guidance & Control (GNC) and Python autopilot engineer for SpaceGuidance-FBB.',
-        'Respond concisely in the same language as the user (English or Japanese).',
-        'When proposing code changes, output clean Python code inside ```python ... ``` fenced blocks so the user can apply it with one click.'
-      ].join('\n')
-    };
+    // Assemble pinned KV-cache prefix + recent follow-up turns + current user message
+    const hasPinnedSession = Boolean(ollamaSession.systemMsg && ollamaSession.initUserMsg && ollamaSession.initAssistantMsg && ollamaSession.model === ollamaModel);
+    const fallbackInit = hasPinnedSession ? null : buildOllamaInitMessages(code);
 
-    // Build payload with recent conversation turns + fresh code/telemetry context on latest turn
-    const recentTurns = nextHistory.slice(-6, -1).map(m => ({
-      role: m.role,
-      content: (m.content || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-    }));
+    const anchorIdx = hasPinnedSession ? (ollamaSession.turnAnchorIdx || 0) : 0;
+    const liveTurns = nextHistory
+      .slice(anchorIdx, -1)
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-12)
+      .map(m => ({
+        role: m.role,
+        content: m.apiContent || (m.content || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+      }));
 
-    const enrichedLatestContent = buildAiContextPrompt({
-      intent: overrideIntent || 'custom',
-      customNote: displayUserMsg
-    });
-
-    const apiMessages = [
-      systemMsg,
-      ...recentTurns,
-      { role: 'user', content: enrichedLatestContent }
-    ];
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const apiMessages = hasPinnedSession
+      ? [
+          ollamaSession.systemMsg,
+          ollamaSession.initUserMsg,
+          ollamaSession.initAssistantMsg,
+          ...liveTurns,
+          { role: 'user', content: userApiContent }
+        ]
+      : [
+          fallbackInit.systemMsg,
+          fallbackInit.initUserMsg,
+          { role: 'assistant', content: 'Understood pilot.py and ready to help.' },
+          ...liveTurns,
+          { role: 'user', content: userApiContent }
+        ];
 
     try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: ollamaModel,
-          messages: apiMessages,
-          stream: true
-        }),
-        signal: controller.signal
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP ${res.status}`);
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) {
-        const data = await res.json();
-        const content = data.message?.content || data.response || '(Empty response)';
-        setChatMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content } : m));
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let accContent = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const chunk = JSON.parse(trimmed);
-            if (chunk.error) {
-              throw new Error(chunk.error);
-            }
-            const delta = chunk.message?.content || '';
-            if (delta) {
-              accContent += delta;
-              setChatMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accContent } : m));
-            }
-          } catch (parseErr) {
-            if (parseErr.message && !parseErr.message.includes('JSON')) {
-              throw parseErr;
-            }
-          }
-        }
-      }
-      if (!accContent.trim()) {
-        setChatMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: '(Empty response)' } : m));
-      }
+      await streamOllamaToMessage(ollamaModel, apiMessages, assistantId);
     } catch (e) {
       if (e.name === 'AbortError') {
         setChatMessages(prev => prev.map(m =>
@@ -1190,6 +1852,7 @@ export default function PilotCodeEditor() {
     }
 
     if (e.key === 'Escape') {
+      if (tracePickerModal) { e.preventDefault(); setTracePickerModal(false); return; }
       if (smartApplyModal) { e.preventDefault(); setSmartApplyModal(null); return; }
       if (manualPromptModal) { e.preventDefault(); setManualPromptModal(null); return; }
       if (confirmModal) { e.preventDefault(); setConfirmModal(null); return; }
@@ -1300,10 +1963,20 @@ export default function PilotCodeEditor() {
   }, [smartApplyModal?.rawText]);
 
   const activeApplyBlock = smartApplyBlocks[smartApplyModal?.selectedBlockIdx || 0] || smartApplyBlocks[0] || null;
+  const smartApplyAligned = useMemo(() => {
+    if (!smartApplyModal || !activeApplyBlock) return null;
+    const start = typeof smartApplyModal.selStart === 'number' ? smartApplyModal.selStart : (selectionRef.current?.start || 0);
+    const end = typeof smartApplyModal.selEnd === 'number' ? smartApplyModal.selEnd : (selectionRef.current?.end || start);
+    return alignSnippetForInsert(code, start, end, activeApplyBlock.code);
+  }, [code, activeApplyBlock?.code, smartApplyModal?.selStart, smartApplyModal?.selEnd]);
+
   const smartApplyDiff = useMemo(() => {
     if (!activeApplyBlock) return null;
-    return computeLineDiff(code, activeApplyBlock.code);
-  }, [code, activeApplyBlock?.code]);
+    const targetNext = (smartApplyModal?.previewMode === 'selection' && smartApplyAligned)
+      ? smartApplyAligned.nextCode
+      : activeApplyBlock.code;
+    return computeLineDiff(code, targetNext);
+  }, [code, activeApplyBlock?.code, smartApplyModal?.previewMode, smartApplyAligned?.nextCode]);
 
   const isDirty = code !== savedCode;
   const lineCount = (code.match(/\n/g) || []).length + 1;
@@ -1626,6 +2299,49 @@ export default function PilotCodeEditor() {
             style: { margin: 0, cursor: 'pointer', accentColor: '#38bdf8' }
           }),
           hasTelemetry ? '📡 Attach TLM (LIVE)' : '📡 Attach TLM'
+        ),
+
+        // Selective Hardware Trace Attachment Toggle + Signal Picker Trigger
+        React.createElement('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '4px' }
+        },
+          React.createElement('label', {
+            title: 'Attach decoded hardware register Trace time-series + role legend to the AI prompt',
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              color: aiIncludeTrace ? '#4ade80' : '#64748b',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }
+          },
+            React.createElement('input', {
+              type: 'checkbox',
+              checked: aiIncludeTrace,
+              onChange: (e) => {
+                const next = e.target.checked;
+                setAiIncludeTrace(next);
+                if (next && traceHistoryRef.current.length === 0) refreshTraceFromServer();
+              },
+              style: { margin: 0, cursor: 'pointer', accentColor: '#4ade80' }
+            }),
+            `📈 Attach Trace (${aiTraceSelectedSignals.length})`
+          ),
+          React.createElement('button', {
+            onClick: handleOpenTracePicker,
+            title: 'Select which hardware signals and time window to attach for AI analysis',
+            style: {
+              background: aiIncludeTrace ? '#064e3b' : '#1e293b',
+              color: aiIncludeTrace ? '#86efac' : '#94a3b8',
+              border: aiIncludeTrace ? '1px solid #10b981' : '1px solid #334155',
+              borderRadius: '4px',
+              padding: '2px 6px',
+              fontSize: '10px',
+              cursor: 'pointer'
+            }
+          }, '⚙ Select')
         ),
 
         // Web AI Primary Action Buttons (when Gemini or ChatGPT selected)
@@ -2240,9 +2956,38 @@ export default function PilotCodeEditor() {
             React.createElement('option', { key: m, value: m, style: { background: '#1e293b', color: '#f8fafc' } }, m)
           )),
 
+          // Refresh / Re-sync Role + Template + latest pilot.py to Ollama
+          React.createElement('button', {
+            onClick: () => initializeOllamaSession(ollamaModel, true),
+            disabled: aiStreaming || !code,
+            title: (ollamaSession.model === ollamaModel && ollamaSession.initializedCode && ollamaSession.initializedCode !== code)
+              ? 'pilot.py has been modified since last sync — Click to re-send Role, Template & latest pilot.py'
+              : 'Re-send Role, Template & latest pilot.py to refresh AI short-term memory',
+            style: {
+              background: (ollamaSession.model === ollamaModel && ollamaSession.initializedCode && ollamaSession.initializedCode !== code)
+                ? '#78350f'
+                : '#1e293b',
+              color: (ollamaSession.model === ollamaModel && ollamaSession.initializedCode && ollamaSession.initializedCode !== code)
+                ? '#fde047'
+                : '#cbd5e1',
+              border: (ollamaSession.model === ollamaModel && ollamaSession.initializedCode && ollamaSession.initializedCode !== code)
+                ? '1px solid #f59e0b'
+                : '1px solid #334155',
+              borderRadius: '4px',
+              padding: '2px 7px',
+              fontSize: '10px',
+              fontWeight: 'bold',
+              cursor: (aiStreaming || !code) ? 'default' : 'pointer'
+            }
+          }, aiInitializing
+            ? '⏳ Syncing...'
+            : ((ollamaSession.model === ollamaModel && ollamaSession.initializedCode && ollamaSession.initializedCode !== code)
+                ? '🔄 Sync*'
+                : '🔄 Sync Context')),
+
           // Escalate to Browser Web AI buttons
           React.createElement('button', {
-            onClick: () => handleLaunchWebAi('gemini', { intent: 'custom', customNote: chatInput, priorHistory: chatMessages }),
+            onClick: () => handleLaunchWebAi('gemini', { intent: 'custom', customNote: chatInput, priorHistory: chatMessages.filter(m => m.role === 'user' || m.role === 'assistant') }),
             title: 'Escalate conversation + code + telemetry to Browser Gemini',
             style: {
               background: '#1e3a8a',
@@ -2256,7 +3001,7 @@ export default function PilotCodeEditor() {
             }
           }, '↗ Gemini'),
           React.createElement('button', {
-            onClick: () => handleLaunchWebAi('chatgpt', { intent: 'custom', customNote: chatInput, priorHistory: chatMessages }),
+            onClick: () => handleLaunchWebAi('chatgpt', { intent: 'custom', customNote: chatInput, priorHistory: chatMessages.filter(m => m.role === 'user' || m.role === 'assistant') }),
             title: 'Escalate conversation + code + telemetry to Browser ChatGPT',
             style: {
               background: '#064e3b',
@@ -2269,9 +3014,12 @@ export default function PilotCodeEditor() {
             }
           }, '↗ ChatGPT'),
           React.createElement('button', {
-            onClick: () => setChatMessages([]),
+            onClick: () => {
+              setChatMessages([]);
+              setOllamaSession(prev => ({ ...prev, turnAnchorIdx: 0 }));
+            },
             disabled: aiStreaming || chatMessages.length === 0,
-            title: 'Clear chat history',
+            title: 'Clear chat log (retains initialized pilot.py context)',
             style: {
               background: 'transparent',
               color: '#94a3b8',
@@ -2310,28 +3058,31 @@ export default function PilotCodeEditor() {
             }
           },
             React.createElement('div', { style: { color: '#e2e8f0', fontWeight: 'bold', marginBottom: '6px' } },
-              `🦙 ${ollamaModel} — Ask about pilot.py with live telemetry`
+              ollamaSession.model === ollamaModel && ollamaSession.initAssistantMsg
+                ? `✓ ${ollamaModel} Ready (${fileName} loaded)`
+                : `🦙 ${ollamaModel} — Initializing session...`
             ),
-            React.createElement('div', { style: { marginBottom: '10px' } },
-              'Choose a quick action below or type a question. Python code blocks include a 1-click [⚡ Apply] button. Use [↗ Gemini / ChatGPT] above anytime to escalate to Browser AI with full context.'
-            ),
-            React.createElement('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-              React.createElement('button', {
-                onClick: () => handleSendOllamaChat('', 'tune'),
-                style: { background: '#1e1b4b', color: '#c4b5fd', border: '1px solid #4c1d95', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }
-              }, '🔧 Tune Gains'),
-              React.createElement('button', {
-                onClick: () => handleSendOllamaChat('', 'fix'),
-                style: { background: '#3f1d2b', color: '#fda4af', border: '1px solid #881337', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }
-              }, '🐛 Fix Bug / Error'),
-              React.createElement('button', {
-                onClick: () => handleSendOllamaChat('', 'explain'),
-                style: { background: '#0c4a6e', color: '#bae6fd', border: '1px solid #0284c7', borderRadius: '4px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }
-              }, '📖 Explain Code')
+            React.createElement('div', null,
+              'Type any question below. When [Attach TLM] is unchecked, only your plain message is sent. Use [🔄 Sync Context] anytime to re-send Role, Template & updated pilot.py.'
             )
           ),
 
           chatMessages.map((msg) => {
+            if (msg.role === 'system-notice') {
+              return React.createElement('div', {
+                key: msg.id,
+                style: {
+                  alignSelf: 'center',
+                  fontSize: '10px',
+                  color: '#94a3b8',
+                  background: '#0f172a',
+                  border: '1px solid #1e293b',
+                  borderRadius: '12px',
+                  padding: '3px 10px',
+                  textAlign: 'center'
+                }
+              }, `${msg.content} (${msg.timestamp || ''})`);
+            }
             const isUser = msg.role === 'user';
             const segments = isUser ? [{ kind: 'text', text: msg.content }] : parseChatSegments(msg.content);
             return React.createElement('div', {
@@ -2434,14 +3185,46 @@ export default function PilotCodeEditor() {
           })
         ),
 
+        // Quick Action Strip (always accessible above chat input)
+        React.createElement('div', {
+          style: {
+            display: 'flex',
+            gap: '5px',
+            padding: '5px 8px 0 8px',
+            background: '#0f172a',
+            borderTop: '1px solid #1e293b',
+            flexWrap: 'wrap',
+            flexShrink: 0
+          }
+        },
+          [
+            { id: 'tune', label: '🔧 Tune Gains', bg: '#1e1b4b', fg: '#c4b5fd', bd: '#4c1d95' },
+            { id: 'fix', label: '🐛 Fix Bug', bg: '#3f1d2b', fg: '#fda4af', bd: '#881337' },
+            { id: 'explain', label: '📖 Explain', bg: '#0c4a6e', fg: '#bae6fd', bd: '#0284c7' }
+          ].map(q => React.createElement('button', {
+            key: q.id,
+            disabled: aiStreaming,
+            onClick: () => handleSendOllamaChat('', q.id),
+            style: {
+              background: q.bg,
+              color: aiStreaming ? '#64748b' : q.fg,
+              border: `1px solid ${q.bd}`,
+              borderRadius: '10px',
+              padding: '2px 8px',
+              fontSize: '10px',
+              cursor: aiStreaming ? 'default' : 'pointer',
+              opacity: aiStreaming ? 0.55 : 1
+            }
+          }, q.label))
+        ),
+
         // Ollama Chat Input Bar
         React.createElement('div', {
           style: {
             display: 'flex',
             gap: '6px',
-            padding: '8px',
+            padding: '6px 8px 8px 8px',
             background: '#0f172a',
-            borderTop: '1px solid #1e293b',
             flexShrink: 0
           }
         },
@@ -2575,7 +3358,7 @@ export default function PilotCodeEditor() {
           ),
           React.createElement('textarea', {
             value: smartApplyModal.rawText,
-            onChange: (e) => setSmartApplyModal({ rawText: e.target.value, selectedBlockIdx: 0 }),
+            onChange: (e) => setSmartApplyModal(prev => ({ ...prev, rawText: e.target.value, selectedBlockIdx: 0 })),
             placeholder: 'Press Ctrl+V / Cmd+V to paste AI response here...',
             rows: 5,
             autoFocus: !smartApplyModal.rawText,
@@ -2627,10 +3410,39 @@ export default function PilotCodeEditor() {
                 fontSize: '11px',
                 display: 'flex',
                 justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '8px',
+                flexWrap: 'wrap',
                 color: '#cbd5e1'
               }
             },
-              React.createElement('span', null, `Extracted (${activeApplyBlock.lang} / ${activeApplyBlock.lines} lines)`),
+              React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+                React.createElement('span', null, `Preview (${activeApplyBlock.lang} / ${activeApplyBlock.lines} lines):`),
+                React.createElement('button', {
+                  onClick: () => setSmartApplyModal(prev => ({ ...prev, previewMode: 'selection' })),
+                  style: {
+                    background: smartApplyModal.previewMode === 'selection' ? '#1e3a8a' : '#0f172a',
+                    color: smartApplyModal.previewMode === 'selection' ? '#bfdbfe' : '#94a3b8',
+                    border: smartApplyModal.previewMode === 'selection' ? '1px solid #3b82f6' : '1px solid #334155',
+                    borderRadius: '4px',
+                    padding: '1px 7px',
+                    fontSize: '10px',
+                    cursor: 'pointer'
+                  }
+                }, smartApplyAligned ? `📌 Insert L${smartApplyAligned.lineNum} (Indent ${smartApplyAligned.indentCols}sp)` : '📌 Selection Insert'),
+                React.createElement('button', {
+                  onClick: () => setSmartApplyModal(prev => ({ ...prev, previewMode: 'full' })),
+                  style: {
+                    background: smartApplyModal.previewMode !== 'selection' ? '#0284c7' : '#0f172a',
+                    color: smartApplyModal.previewMode !== 'selection' ? '#ffffff' : '#94a3b8',
+                    border: smartApplyModal.previewMode !== 'selection' ? '1px solid #38bdf8' : '1px solid #334155',
+                    borderRadius: '4px',
+                    padding: '1px 7px',
+                    fontSize: '10px',
+                    cursor: 'pointer'
+                  }
+                }, '✨ Full File')
+              ),
               React.createElement('span', null,
                 React.createElement('span', { style: { color: '#4ade80', marginRight: '8px' } }, `+${smartApplyDiff.added}`),
                 React.createElement('span', { style: { color: '#f87171' } }, `-${smartApplyDiff.removed}`)
@@ -2682,7 +3494,7 @@ export default function PilotCodeEditor() {
               fontWeight: 'bold',
               cursor: activeApplyBlock ? 'pointer' : 'default'
             }
-          }, '📌 Insert / Replace Selection'),
+          }, smartApplyAligned ? `📌 Insert at L${smartApplyAligned.lineNum} (Auto-Indent: ${smartApplyAligned.indentCols}sp)` : '📌 Insert / Replace Selection'),
           React.createElement('button', {
             disabled: !activeApplyBlock,
             onClick: () => activeApplyBlock && applyCodeToEditor(activeApplyBlock.code, 'full'),
@@ -2827,6 +3639,244 @@ export default function PilotCodeEditor() {
           }, confirmModal.confirmLabel)
         )
       )
-    )
+    ),
+
+    // =========================================================================
+    // Inline Modal 4: Selective Hardware Trace Picker & Preview (Portal-safe)
+    // =========================================================================
+    tracePickerModal && (() => {
+      const availableSignals = discoverTraceSignals(traceHistoryRef.current, manifestRegsRef.current);
+      const grouped = {};
+      availableSignals.forEach(s => {
+        if (!grouped[s.group]) grouped[s.group] = [];
+        grouped[s.group].push(s);
+      });
+      const previewText = formatTraceContext(
+        traceHistoryRef.current,
+        resolveSelectedTraceSignalIds(),
+        aiTraceWindow,
+        timeTravelIdxRef.current,
+        manifestRegsRef.current
+      );
+      return React.createElement('div', {
+        style: {
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(2, 6, 23, 0.84)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 58,
+          padding: '16px'
+        }
+      },
+        React.createElement('div', {
+          style: {
+            width: '100%',
+            maxWidth: '760px',
+            maxHeight: '90%',
+            background: '#0f172a',
+            border: '1px solid #10b981',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 16px 48px rgba(0, 0, 0, 0.78)'
+          }
+        },
+          // Header
+          React.createElement('div', {
+            style: {
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 14px',
+              background: '#064e3b',
+              borderBottom: '1px solid #047857'
+            }
+          },
+            React.createElement('span', { style: { fontWeight: 'bold', color: '#a7f3d0', fontSize: '12px' } },
+              `📈 Trace Signal Selector (${traceHistoryRef.current.length} frames buffered | Decoded Q16.16 & IEEE-754 f64)`
+            ),
+            React.createElement('button', {
+              onClick: () => setTracePickerModal(false),
+              style: { background: 'transparent', border: 'none', color: '#a7f3d0', cursor: 'pointer', fontSize: '14px' }
+            }, '✕')
+          ),
+
+          // Body
+          React.createElement('div', {
+            style: { padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }
+          },
+            // Presets + Time Window Row
+            React.createElement('div', {
+              style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }
+            },
+              React.createElement('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } },
+                React.createElement('span', { style: { fontSize: '11px', color: '#94a3b8', fontWeight: 'bold' } }, 'Presets:'),
+                Object.entries(TRACE_PRESETS).map(([pKey, pDef]) => React.createElement('button', {
+                  key: pKey,
+                  onClick: () => handleApplyTracePreset(pKey),
+                  style: {
+                    background: aiTracePreset === pKey ? '#059669' : '#1e293b',
+                    color: aiTracePreset === pKey ? '#ffffff' : '#cbd5e1',
+                    border: aiTracePreset === pKey ? '1px solid #34d399' : '1px solid #334155',
+                    borderRadius: '12px',
+                    padding: '2px 9px',
+                    fontSize: '10px',
+                    cursor: 'pointer'
+                  }
+                }, pDef.label)),
+                React.createElement('button', {
+                  onClick: () => handleApplyTracePreset('tracer'),
+                  title: 'Use whichever signals are currently visible in Register State Tracer',
+                  style: {
+                    background: aiTracePreset === 'tracer' ? '#0284c7' : '#1e293b',
+                    color: aiTracePreset === 'tracer' ? '#ffffff' : '#cbd5e1',
+                    border: aiTracePreset === 'tracer' ? '1px solid #38bdf8' : '1px solid #334155',
+                    borderRadius: '12px',
+                    padding: '2px 9px',
+                    fontSize: '10px',
+                    cursor: 'pointer'
+                  }
+                }, '📊 Sync with Tracer')
+              ),
+
+              React.createElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
+                React.createElement('span', { style: { fontSize: '11px', color: '#94a3b8', fontWeight: 'bold' } }, 'Window:'),
+                React.createElement('select', {
+                  value: aiTraceWindow,
+                  onChange: (e) => setAiTraceWindow(e.target.value),
+                  style: {
+                    background: '#1e293b',
+                    color: '#f8fafc',
+                    border: '1px solid #334155',
+                    borderRadius: '4px',
+                    padding: '3px 7px',
+                    fontSize: '11px',
+                    outline: 'none'
+                  }
+                },
+                  React.createElement('option', { value: 'full_30', style: { background: '#1e293b', color: '#f8fafc' } }, 'Full Run (~30 pts + Peak Error)'),
+                  React.createElement('option', { value: 'last_30', style: { background: '#1e293b', color: '#f8fafc' } }, 'Last 30 Frames'),
+                  React.createElement('option', { value: 'time_travel', style: { background: '#1e293b', color: '#f8fafc' } },
+                    typeof timeTravelIdxRef.current === 'number'
+                      ? `Around Time-Travel (#${timeTravelIdxRef.current} ±15)`
+                      : 'Around Time-Travel (±15, fallback Last 30)'
+                  )
+                )
+              )
+            ),
+
+            // Signal Checkbox Groups
+            availableSignals.length === 0
+              ? React.createElement('div', {
+                  style: { padding: '14px', background: '#060911', border: '1px dashed #334155', borderRadius: '6px', color: '#94a3b8', fontSize: '11px' }
+                }, 'No trace frames recorded yet. Run the scenario to populate Register Trace history, then click Refresh.')
+              : React.createElement('div', {
+                  style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }
+                },
+                  Object.entries(grouped).map(([grpName, sigs]) => React.createElement('div', {
+                    key: grpName,
+                    style: {
+                      background: '#060911',
+                      border: '1px solid #1e293b',
+                      borderRadius: '6px',
+                      padding: '8px'
+                    }
+                  },
+                    React.createElement('div', {
+                      style: { fontSize: '10px', fontWeight: 'bold', color: '#38bdf8', marginBottom: '6px', textTransform: 'uppercase' }
+                    }, grpName),
+                    React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+                      sigs.map(s => {
+                        const checked = aiTraceSelectedSignals.includes(s.id);
+                        return React.createElement('label', {
+                          key: s.id,
+                          title: `${s.role}${s.offset ? ` (${s.offset}, ${s.enc})` : ''}`,
+                          style: {
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '11px',
+                            color: checked ? '#f8fafc' : '#94a3b8',
+                            cursor: 'pointer'
+                          }
+                        },
+                          React.createElement('input', {
+                            type: 'checkbox',
+                            checked,
+                            onChange: () => handleToggleTraceSignal(s.id),
+                            style: { margin: 0, cursor: 'pointer', accentColor: '#10b981' }
+                          }),
+                          React.createElement('span', { style: { fontWeight: checked ? 'bold' : 'normal' } }, s.id),
+                          s.unit && React.createElement('span', { style: { fontSize: '9px', color: '#64748b' } }, `[${s.unit}]`)
+                        );
+                      })
+                    )
+                  ))
+                ),
+
+            // Live Decoded Preview (verifies AI-readable Legend + Stats + CSV)
+            previewText && React.createElement('details', {
+              style: { background: '#060911', border: '1px solid #1e293b', borderRadius: '6px', padding: '6px 10px' }
+            },
+              React.createElement('summary', { style: { cursor: 'pointer', fontSize: '11px', color: '#86efac' } },
+                `🔍 Preview AI Trace Payload (${previewText.length} chars, ~${Math.ceil(previewText.length / 4)} tokens)`
+              ),
+              React.createElement('pre', {
+                style: { margin: '6px 0 0 0', fontSize: '10px', color: '#cbd5e1', maxHeight: '180px', overflow: 'auto', whiteSpace: 'pre-wrap' }
+              }, previewText)
+            )
+          ),
+
+          // Footer
+          React.createElement('div', {
+            style: {
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 14px',
+              background: '#1e293b',
+              borderTop: '1px solid #334155',
+              gap: '8px'
+            }
+          },
+            React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+              React.createElement('button', {
+                onClick: handleOpenTracePicker,
+                style: { background: '#0f172a', color: '#cbd5e1', border: '1px solid #334155', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer' }
+              }, '↻ Refresh Trace'),
+              React.createElement('span', { style: { fontSize: '11px', color: '#94a3b8' } },
+                `Selected: ${aiTraceSelectedSignals.length} signals`
+              )
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: '8px' } },
+              React.createElement('button', {
+                onClick: () => setTracePickerModal(false),
+                style: { background: '#0f172a', color: '#cbd5e1', border: '1px solid #334155', borderRadius: '4px', padding: '5px 12px', fontSize: '11px', cursor: 'pointer' }
+              }, 'Close'),
+              React.createElement('button', {
+                onClick: () => {
+                  setAiIncludeTrace(true);
+                  setTracePickerModal(false);
+                },
+                disabled: aiTraceSelectedSignals.length === 0,
+                style: {
+                  background: aiTraceSelectedSignals.length > 0 ? '#059669' : '#1e293b',
+                  color: aiTraceSelectedSignals.length > 0 ? '#ffffff' : '#64748b',
+                  border: '1px solid #34d399',
+                  borderRadius: '4px',
+                  padding: '5px 14px',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  cursor: aiTraceSelectedSignals.length > 0 ? 'pointer' : 'default'
+                }
+              }, '✓ Enable Attach Trace')
+            )
+          )
+        )
+      );
+    })()
   );
 }
