@@ -319,7 +319,7 @@ flowchart LR
 SpaceGuidance-FBB は、F-BB（FPGA-BoardlessBench）の公式プラグイン規格（PPA 5.1 / DPPA v1.0）に準拠したハイブリッド拡張パッケージです。F-BB 統合 CLI（`fbb`）を用いてワンステップで導入・検証・起動できます。
 
 ### ① プラグインのインストール (Plugin Installation)
-F-BB 環境のターミナルにて、以下の統合 CLI コマンドを実行してインストールします（自動的に `~/.fbb/plugins/SpaceGuidance-FBB` 配下へクローンされ、C++ 物理シミュレーションデーモンが自動コンパイルされます）：
+F-BB 環境のターミナルにて、以下の統合 CLI コマンドを実行してインストールします（自動的に F-BB ルートの `./plugins/SpaceGuidance-FBB`（実体: `~/.fbb/plugins/SpaceGuidance-FBB`）へ展開され、C++ 物理シミュレーションデーモンが自動コンパイルされます）：
 
 ```bash
 # GitHub からワンショット導入（推奨）
@@ -332,34 +332,31 @@ fbb plugin install https://github.com/sirosiro/SpaceGuidance-FBB
 fbb plugin list
 
 # PPA / DPPA プラグイン仕様の整合性検証 (100% VALID チェック)
-fbb plugin validate ~/.fbb/plugins/SpaceGuidance-FBB
+fbb plugin validate ./plugins/SpaceGuidance-FBB
 ```
 
 ### ② F-BB 統合ラボ環境での実行 (Web ダッシュボード・3D 観戦モード)
-F-BB の Verilator RTL シミュレータ、C-Shim、および Web ダッシュボードと全連動させて実行します。
+F-BB ルートディレクトリから、Verilator RTL シミュレータ、C-Shim、および Web ダッシュボードと全連動させて実行します。
 
 ```bash
 # Stage 1: 小惑星パイプライン巡回の起動
-fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
+fbb lab ./plugins/SpaceGuidance-FBB/scenario/01_asteroid_pipeline
 
 # Stage 2: 宇宙テザークライマーの起動
-fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/02_tether_climber
+fbb lab ./plugins/SpaceGuidance-FBB/scenario/02_tether_climber
 
 # Stage 3: ISS トラスレール点検機の起動
-fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/03_iss_truss
+fbb lab ./plugins/SpaceGuidance-FBB/scenario/03_iss_truss
 
 # Stage 4: 深宇宙光レーザードッキングの起動
-fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/04_laser_docking
+fbb lab ./plugins/SpaceGuidance-FBB/scenario/04_laser_docking
 
 # Stage EX: パニックコントロール（最新最難関・デブリ衝突自律復旧）の起動
-fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/05_panic_control
+fbb lab ./plugins/SpaceGuidance-FBB/scenario/05_panic_control
 ```
 
-> **ローカル開発環境（`/workspaces` 等で直接作業している場合）**:
-> 相対パスまたは直接パスを指定して起動することも可能です：
-> ```bash
-> ./start_lab.sh /workspaces/SpaceGuidance-FBB/scenario/05_panic_control
-> ```
+> **ローカル開発環境（`fbb plugin link /workspaces/SpaceGuidance-FBB` を使用している場合）**:
+> `fbb` CLI がエイリアスを自動解決するため、上記の `fbb lab ./plugins/SpaceGuidance-FBB/scenario/...` コマンドがそのまま動作します（直接スクリプトを呼ぶ場合は `./start_lab.sh ./plugins/fbb-plugin-space-guidance/scenario/05_panic_control` でも起動できます）。
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の分割画面が自動ロードされます：
   * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（CHASE/FRONT/HERO/PATROL/TRACK/CINEMA 視点切替）。F-BB の波形シーク（Time-Travel Co-Debugging）と完全連動し、過去フレームの機体姿勢・位置・スラスタ噴射状態を瞬時に巻き戻し同期表示可能。
@@ -379,7 +376,7 @@ fbb lab ~/.fbb/plugins/SpaceGuidance-FBB/scenario/05_panic_control
 Web ダッシュボードを介さず、コンソールのみで物理シミュレーションと自律航法スクリプトを高速実行する場合：
 
 ```bash
-cd ~/.fbb/plugins/SpaceGuidance-FBB
+cd ./plugins/SpaceGuidance-FBB
 
 # 各ステージの直接実行
 bash scenario/01_asteroid_pipeline/run_mission.sh
