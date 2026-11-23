@@ -31,7 +31,7 @@ graph TD
 
     subgraph ACTUATOR_CORE["rcs_thruster_pwm.v"]
         Q16_DUTY["Q16.16 ➔ 8bit PWM デューティ変換器"]
-        FULL_BURN["100% 連続フルバーン飽和ロジック<br/>(ドロップアウト防止)"]
+        FULL_BURN["デューティ比 100% 連続出力ロジック<br/>(ドロップアウト防止)"]
         NOZZLE_MIX["8ノズル推力配分ミキサー<br/>(Thruster Allocation)"]
     end
 
@@ -53,7 +53,7 @@ graph TD
 | **Top-Level IP Core** | [`space_guidance_top.v`](./space_guidance_top.v) | ~240行 | AXI4-Lite スレーブバスIF、レジスタデコード、サブモジュール統合、割込（IRQ）生成 |
 | **Sensor DSP Filter** | [`line_sensor_filter.v`](./line_sensor_filter.v) | ~55行 | 8ch ADC 信号処理、太陽光グレア飽和検知、Q16.16 センサ重心リアルタイム計算 |
 | **Safety Interlock** | [`safety_interlock.v`](./safety_interlock.v) | ~120行 | ウォッチドッグタイマ、5軸独立 SEU パリティ監視、安全推力クランプ、E-STOP 遮断 |
-| **Thruster PWM Mixer** | [`rcs_thruster_pwm.v`](./rcs_thruster_pwm.v) | ~75行 | 符号付き Q16.16 から 8bit PWM への変換、100% フルバーン回路、8 ノズル推力配分 |
+| **Thruster PWM Mixer** | [`rcs_thruster_pwm.v`](./rcs_thruster_pwm.v) | ~75行 | 符号付き Q16.16 から 8bit PWM への変換、デューティ比 100% 連続出力回路、8 ノズル推力配分 |
 
 ---
 
@@ -97,9 +97,9 @@ AXI4-Lite バスからアクセス可能なレジスタ一覧です（ベース�
 * **1クロック即時全遮断**:
   `manual_estop_i`、`wdg_timeout_o`、`seu_alert_o` のいずれかがトリップした場合、全アクチュエータ出力（X, Y, Z, Torque, Wheel）を 1 サイクルで強制ゼロ（`32'd0`）へ遮断し、推力暴走を物理的に阻止します。
 
-### ③ 100% 連続フルバーン PWM（ドロップアウト防止）
+### ③ デューティ比 100% 連続出力 PWM（ドロップアウト防止）
 一般的な 8-bit カウンタ比較型 PWM（`duty > counter`）では、最大値 `255 (0xFF)` を設定してもカウンタが `255` に達した瞬間に 1 サイクルだけ `0` に落ちる「ドロップアウト（$255/256 \approx 99.6\%$）」が発生します。
-本回路では飽和判定回路を組み込み、最大噴射時の**完全連続燃焼（真の 100.00% 連続通電）** を保証しています：
+本回路では飽和判定回路を組み込み、最大指令時の**ドロップアウトなしの 100% 連続出力**を保証しています：
 ```verilog
 wire is_active_x = (duty_x == 8'hFF) ? 1'b1 : (duty_x > pwm_counter);
 ```

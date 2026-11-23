@@ -2,12 +2,12 @@
 
 ## 1. 存在意義と設計原則 (Core Value & Principles)
 
-**SpaceGuidance-FBB** は、組み込み教育・制御競技の原点である「ライントレースロボット」の制御概念を、極限環境である「宇宙探査・軌道誘導（Space Guidance）」へと昇華させた、FPGA-BoardlessBench (F-BB) 向けの完全独立型ゲームプラグインである。
+**SpaceGuidance-FBB** は、組み込み教育・制御競技の原点である「ライントレースロボット」の制御概念を、極限環境である「宇宙探査・軌道誘導（Space Guidance）」へと発展・応用した、FPGA-BoardlessBench (F-BB) 向けの完全独立型ゲームプラグインである。
 
 ### 設計原則
 1. **実機透過性と Sim-to-Real 100%**:
    - アプリケーション・自律航行スクリプト（Python / ROS 2）は、ホスト上のエミュレーション（`/dev/shm` / UIO）と AMD Xilinx Zynq 実機（`/dev/uio0`）で全く同一のバイナリ・コードで動作する。
-2. **Decoupled Observability & Zero Disk I/O (非侵襲的ゼロディスク観測)**:
+2. **Decoupled Observability & Zero Disk I/O (非侵襲・疎結合なゼロディスク観測)**:
    - 100Hz の物理シミュレーションループにおいて、ディスク I/O（`std::ofstream` による一時ファイル書き出しや `rename`）を完全に排除する。
    - すべての観測情報・6-DoF テレメトリは POSIX 共有メモリ（`/dev/shm/fbb_space_guidance_shm`）に Seqlock 方式で直接書き込み、Web ダッシュボードやコントローラがメモリ直読でゼロ遅延観測を行う。
 3. **Single Source of Truth (公式審判 SSOT)**:
@@ -15,7 +15,7 @@
 4. **Fair Engagement Timing & Zero Preparation Penalty (初動トリガーによる準備時間と競技時間の完全分離)**:
    - AI モデル（PyTorch / ONNX）のロード、重み展開、事前軌道生成等の「準備時間」は飛行時間およびタイムボーナス減点から完全に除外する。
    - 公式審判（`OfficialReferee`）のタイマースタートは、プレイヤーがハードウェアへ最初の有効な制御コマンド（推力またはホイールトルク）を発行した瞬間（First Control Engagement）に自動発火させる。
-5. **Learner-Centric Purity in Autopilot (自律操縦スクリプトの完全ピュア化)**:
+5. **Learner-Centric Purity in Autopilot (自律操縦スクリプトの制御ロジック純化)**:
    - `pilot.py` は純粋な誘導・航法・制御（GNC: Guidance, Navigation, Control）ロジックおよびゴール時の安全停止（スラストゼロ & `break`）のみに専念する。自前のタイマー計測（`time.time()`）や 20行超のプレゼンテーション用 ASCII バナー整形コードの配置を禁止し、公式審判リザルトの表示は `SpaceGuidanceHardware` の 1 行ヘルパー（`hw.print_summary()`）へ完全にカプセル化する。
 
 ---
@@ -59,7 +59,7 @@
    - `sg-orbit-viewer`: Three.js / Canvas による 3D ワイヤーフレーム宇宙空間・軌道・デブリ描画。ResizeObserver によるイベント駆動型リサイズ同期を採用し、描画ループ内での強制同期リフロー（Layout Thrashing）を完全排除した 120 FPS 高性能 WebGL パイプライン。3ペイン連動タイムトラベル（Time-Travel Scrubbing）シークバーを搭載し、過去フレームの飛行軌跡・姿勢を即座に巻き戻し検証可能。
    - `sg-chaos-fdir`: FDIR 縮退運用ステータス、公式スコアカード、カオス障害発生ログ。タイムトラベルシークと同期して過去ステップのスコア推移と障害状態を再現。
    - `sg-telemetry-gauge`: 計器盤、推進薬残量、C&W アナンシエータ（警報灯）。タイムトラベルシークと同期して計器盤の針や警報状態を過去時点へ巻き戻し表示。
-   - `sg-pilot-editor`: ブラウザ内自律航法スクリプトエディタ（`pilot.py` のリアルタイム編集・ホットリロード）。初期お手本コード（`pilot.default.py`）へのワンクリック復元（Revert Original）契約を標準提供。
+   - `sg-pilot-editor`: ブラウザ内自律航法スクリプトエディタ（`pilot.py` のリアルタイム編集・ホットリロード）。初期お手本コード（`pilot.default.py`）へのワンクリック復元（Revert Original）機能を標準提供。
 
 ---
 
@@ -69,15 +69,15 @@
   - **Decision**: 
     1. **制御プレーン (Control Plane)**: 毎秒 100 回のディスク一時ファイル書き込み・ポーリングによる制御ループを完全撤廃し、`include/space_guidance_shm.h` で定義される 496 バイトの POSIX 共有メモリ構造体（Seqlock 制御、ゼロコピー）を Python/C++ 自律操縦クライアントとの排他的チャネルとした。
     2. **観測プレーン (Observability / UI Plane)**: F-BB コアの「プラグイン完全隔離原則」に準拠し、F-BB Web ダッシュボード向けにはデーモンから 33Hz (30fps) で `/tmp/fbb_scenario_telemetry.json` をアトミック出力して WebSocket 経由でブラウザペインへ配信する。
-  - **Rationale**: 自律制御ループにおけるファイル I/O 詰まり・ジッター・CPU 浪費を根絶しつつ、F-BB プラットフォーム標準の Web UI 統合・テレメトリ監視との疎結合性を完全に両立するため。
+  - **Rationale**: 自律制御ループにおけるファイル I/O ブロッキング・ジッター・CPU 浪費を根絶しつつ、F-BB プラットフォーム標準の Web UI 統合・テレメトリ監視との疎結合性を完全に両立するため。
 
-- **2026-10-18: ADR #002 初動トリガー方式（First Action Timing Protocol）とパイロットコードの完全ピュア化**
+- **2026-10-18: ADR #002 初動トリガー方式（First Action Timing Protocol）とパイロットコードの簡潔化**
   - **Decision**:
     1. C++ 物理デーモン内の `OfficialReferee` において、デーモン起動時からの無条件タイマースタートを廃止し、最初の推力/トルク制御コマンド受信（またはスタートライン通過）を検知して公式タイマーを始動する「初動トリガー方式」を導入。ゴール到達時に公式タイマーを自動停止・確定する。
     2. 全ステージ（01〜05）の `pilot.py` 内に散乱していた自前の `start_time` / `elapsed` 計測および 20行超のスコア print バナーを一掃。`SpaceGuidanceHardware` 側に公式審判 SSOT から確定値を整形出力する `hw.print_summary(stage_name)` を新設し、`pilot.py` 側は 1 行の呼び出しへ集約。
   - **Rationale**:
     - AI や事前最適化アルゴリズムを導入したプレイヤーが、モデル読込やデータ準備時間を理由に理不尽なタイムペナルティを受ける構造的欠陥を排除し、公平な競技環境を確立するため。
-    - プレイヤーの自己申告計測によるチート（`elapsed` 改ざん）を物理的に排除し、100% 公式審判 SSOT による決定論的公正性を担保するため。
+    - プレイヤーの自己申告計測によるチート（`elapsed` 改ざん）を構造的に排除し、100% 公式審判 SSOT による決定論的公正性を担保するため。
     - 学習者・開発者が余計なインフラや表示整形コードに惑わされず、制御工学の本質に 100% 集中できる Learner-Centric Purity を確立するため。
 
 - **2026-11-06: ADR #003 Linux標準 Device Tree (DTS) の完全維持と General Tree Registers (GTR) 仮想ハードウェア契約分離**

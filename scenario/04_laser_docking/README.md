@@ -39,7 +39,7 @@
 
 ---
 
-## 3. ゲームプレイループとハッキングガイド
+## 3. チューニングガイド
 
 ### (1) 編集対象ファイル
 ```text
@@ -79,7 +79,7 @@ $$\text{Final Score} = \text{Approach Score} + \text{Soft Contact Bonus} + \text
 3. **推進剤残量ボーナス**:
    $$\text{Fuel Bonus} = \text{Fuel}(\%) \times 10.0$$
 4. **ステーション激突大破判定（Docking Crash Disqualification）**:
-   * 以下のいずれか1つでも超過した場合、ドッキングガイドペダル衝突・ラッチ破損により機体大破・即時失格（スコア 0 点、`DISQUALIFIED (DOCKING CRASH)`）：
+   * 以下のいずれか1つでも超過した場合、ドッキングガイドペタル衝突・ラッチ破損により機体大破・即時失格（スコア 0 点、`DISQUALIFIED (DOCKING CRASH)`）：
      - 接触速度 $v_{\text{contact}} > 0.08\text{ m/s}$
      - 光軸偏差 $|\Delta y| > 0.06\text{ m}$ ($6.0\text{cm}$)
      - ロール位相偏差 $|\Delta\theta| > 0.08\text{ rad}$ ($4.6^\circ$)

@@ -4,7 +4,7 @@
 
 ---
 
-## 1. コア設計思想: 「ゼロ依存の即座実行」＋「ROS 2 エコシステムへの拡張性」
+## 1. コア設計思想: 「外部依存なしの即時実行」＋「ROS 2 エコシステムへの拡張性」
 
 本ディレクトリは `ros2/` という名称を持っていますが、中核となるドライバ [`ros2/nodes/guidance_controller.py`](./nodes/guidance_controller.py) は **あえて ROS 2 (`rclpy`) をハードコードで必須とせず、Python 標準ライブラリのみで完結するピュア Python** として実装されています。
 
@@ -48,7 +48,7 @@ graph TD
 
 | モジュール名 | ファイルパス | 責務と特徴 |
 | :--- | :--- | :--- |
-| **Hardware Driver** | [`nodes/guidance_controller.py`](./nodes/guidance_controller.py) | **Sim-to-Real 透過ドライバ (`SpaceGuidanceHardware`)**<br>・仮想環境（`/dev/shm`）と実機 Zynq（`/dev/uio0`）の自動フォールバック<br>・Seqlock ロックフリー・リトライループによる 6-DoF テレメトリの無断裂取得<br>・ハードウェアウォッチドッグの定期キック (`kick_watchdog`)<br>・Zynq PS UART1（`/dev/ttyPS1`）への透過的複製出力 (`UartTee`) |
+| **Hardware Driver** | [`nodes/guidance_controller.py`](./nodes/guidance_controller.py) | **Sim-to-Real 透過ドライバ (`SpaceGuidanceHardware`)**<br>・仮想環境（`/dev/shm`）と実機 Zynq（`/dev/uio0`）の自動フォールバック<br>・Seqlock ロックフリー・リトライループによる 6-DoF テレメトリの分断のない一貫した取得（ティアフリー読み取り）<br>・ハードウェアウォッチドッグの定期キック (`kick_watchdog`)<br>・Zynq PS UART1（`/dev/ttyPS1`）への透過的複製出力 (`UartTee`) |
 
 ---
 

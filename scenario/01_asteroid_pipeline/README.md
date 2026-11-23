@@ -19,7 +19,7 @@ $$F_{\text{world}, y} = F_y \cos\phi, \quad F_{\text{world}, z} = F_y \sin\phi$$
 
 ## 2. ミッションブリーフィング：機体仕様・推進トポロジー (Pre-Flight Briefing: Spacecraft & Flight Corridor)
 
-本シナリオに挑む自律航法パイロットは、発進前に以下の機体ハードウェア・アクチュエータ仕様およびコース回廊仕様をブリーフィング情報として把握できます。機上プログラム（`pilot.py`）にこれらの情報を事前計画（カンペ / ウェイポイント記憶）として組み込み、効率的な自律誘導に役立てることが可能です。
+本シナリオに挑む自律航法パイロットは、発進前に以下の機体ハードウェア・アクチュエータ仕様およびコース回廊仕様をブリーフィング情報として把握できます。機上プログラム（`pilot.py`）にこれらの情報を既知のウェイポイント座標として組み込み、効率的な自律誘導に役立てることが可能です。
 
 ![Spacecraft Hardware Layout](images/spacecraft_hardware_layout.svg)
 
@@ -101,7 +101,7 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| + |\t
 * **航法戦術のヒント（Bank-to-Translate 戦術）**:
   ゲート手前 $2.5\text{m}$ でコース起伏を先読みし、ロールリアクションホイールで機体を $\pm 31^\circ$ にバンクさせます。バンク角を維持した状態で横スラスタ（$F_y$）を吹くことで、水平の遠心力打ち消しと垂直方向の登坂加速が同時に得られ、3Dゲート中心を PERFECT（$\le 5.0\text{cm}$）で射抜くことができます。
 * **公式審判（SSOT）との関係**:
-  パイロットが機上フライトプラン（`pilot.py` 内の `gate_x_list` カンペ）としてどの座標を保持して操縦しようと自由ですが、**実際のゲート通過判定・3次元空間偏差判定は物理シミュレータ側（`OfficialReferee`）が厳格かつ独立して実施**します。
+  パイロットが機上フライトプラン（`pilot.py` 内の `gate_x_list` など既知のウェイポイント座標）としてどの座標を保持して操縦しようと自由ですが、**実際のゲート通過判定・3次元空間偏差判定は物理シミュレータ側（`OfficialReferee`）が厳格かつ独立して実施**します。
 
 ---
 
@@ -148,7 +148,7 @@ $$\frac{d(\text{Fuel})}{dt} = - \left( |F_x| + |F_y| + |\tau_{\text{rcs}}| + |\t
 
 ---
 
-## 4. ゲームプレイループとハッキングガイド
+## 4. 基本操作とチューニングガイド
 
 ### (1) 編集対象ファイル
 プレイヤーがアルゴリズムやパラメータをチューニングする対象ファイル：
@@ -244,7 +244,7 @@ flowchart TD
 
 ## 5. アーケード採点・公式審判システム (Official Referee SSOT)
 
-公平な競技性を保証するため、採点および合否判定は Python 側ではなく中央デーモン（`space_guidance_daemon.cpp`）の **`OfficialReferee` エンジン** が 100Hz 周期でオーソリテーティブに実施します。
+公平な競技性を保証するため、採点および合否判定は Python 側ではなく中央デーモン（`space_guidance_daemon.cpp`）の **`OfficialReferee` エンジン** が 100Hz 周期で一元的に実施します。
 
 $$\text{Final Score} = \text{Checkpoint Score} + \text{Fuel Bonus} + \text{Time Bonus}$$
 

@@ -13,7 +13,7 @@
 
 ## 1. プロジェクト概要 (Project Overview)
 
-**SpaceGuidance-FBB** は、組み込み教育・制御競技の原点である「ライントレースロボット」の制御概念を、極限環境である **「宇宙探査・軌道誘導（Space Guidance）」** へと昇華させた、FPGA-BoardlessBench (F-BB) 向けの完全独立型ゲームプラグインです。
+**SpaceGuidance-FBB** は、組み込み教育・制御競技の原点である「ライントレースロボット」の制御概念を、極限環境である **「宇宙探査・軌道誘導（Space Guidance）」** へと発展・応用した、FPGA-BoardlessBench (F-BB) 向けの完全独立型ゲームプラグインです。
 
 > ### ☕ 作者からのメッセージ (Developer's Note)
 > 
@@ -49,7 +49,7 @@ graph LR
 
 ### 2.1 最新リリース：Stage EX「パニックコントロール」自律復旧シーケンス
 
-最新追加された **Stage EX (Panic Control)** では、漂流スペースデブリの激しい直撃を受け、探査機が毎秒140度超（$|\vec{\omega}_0| \approx 2.5\text{ rad/s}$）の激しい3軸高速カオスタンブリングに陥り、さらに搭載された12基のRCSスラスタのうち1〜2基が物理破損、燃料配管が損傷して微小リークが発生する極限状況からスタートします。
+最新追加された **Stage EX (Panic Control)** では、漂流スペースデブリの激しい直撃を受け、探査機が毎秒140度超（$|\vec{\omega}_0| \approx 2.5\text{ rad/s}$）の激しい3軸高速タンブリングに陥り、さらに搭載された12基のRCSスラスタのうち1〜2基が物理破損、燃料配管が損傷して微小リークが発生する極限状況からスタートします。
 
 プレイヤーは手動介入なしに、自律スクリプト（`pilot.py`）のみで以下の **4大フェーズ** を完全自律で成し遂げなければなりません：
 
@@ -106,7 +106,7 @@ flowchart TB
 
     subgraph SIM["3. Physics Simulation & Referee Engine (C++17 / 物理・公式審判)"]
         PHYS["[SG-FBB] Space Physics Engine (space_physics.cpp)<br/>(100Hz 剛体力学・弾性テザー弦波・3Dレール・6-DoF)"]:::sg
-        REF["[SG-FBB] Official Referee Engine (SSOT)<br/>(オーソリテーティブなゲート通過・採点・ランク判定)"]:::sg
+        REF["[SG-FBB] Official Referee Engine (SSOT)<br/>(一元的なゲート通過・採点・ランク判定)"]:::sg
         DAEMON["[SG-FBB] Space Guidance Daemon (space_guidance_daemon.cpp)<br/>(100Hz シミュレーションメインループ)"]:::sg
     end
 
@@ -215,17 +215,17 @@ flowchart TB
    * **実装**: ピュア Verilog HDL（詳細仕様・アーキテクチャ・レジスタマップは [rtl/README.md](./rtl/README.md) を参照。構成: `space_guidance_top.v`, `line_sensor_filter.v`, `rcs_thruster_pwm.v`, `safety_interlock.v`）
    * **役割**: AMD Xilinx Vivado で論理合成（Synthesis）し、Zynq / Kria KV260 の実機 FPGA ファブリック（PL）にそのまま書き込み可能なハードウェア IP です。
    * **高信頼性安全アーキテクチャ**:
-     * **真の 100% PWM 連続出力**: カウンタ飽和判定により 255/256（99.61%）のドロップアウトを排除し、最大指令時の正真正銘 100.00% 連続全開噴射（Continuous Full Burn）を担保。
+     * **デューティ比 100% 連続 PWM 出力**: カウンタ飽和判定により 255/256（99.61%）のドロップアウトを排除し、最大指令時の 100% 連続出力（フルオン）を担保。
      * **多軸双方向符号付き安全リミッター**: X軸推進力・Y軸ラテラル推力の両チャンネルに対し、符号を維持したまま設定限界値への厳格なクランプを実施（トップ階層テストポートで実測検証）。
      * **動的パリティ書き込みストローブ**: CPU による AXI レジスタ正常更新と、放射線等による自発的ビット反転（SEU）を正確に識別する動的奇数パリティ監視。
    * **包括的自動テスト体系**:
-     * `tests/test_rtl_top.cpp`: 全 7 項目の RTL 単体テスト（真の 100% PWM 連続性、X/Y 軸のビットレベル合否アサート、SEU 動的保護、WDT タイムアウト）。
-     * `tests/test_physics_sim.cpp`: 無摩擦慣性航行、センサ ADC エッジ検出、および「光学センサ ADC $	o$ RTL 重心演算 $	o$ PWM スラスタ噴射 $	o$ 6 自由度剛体物理推進」のクローズドループ Co-Sim 統合検証を自動アサートで 100% 保証。
+     * `tests/test_rtl_top.cpp`: 全 7 項目の RTL 単体テスト（100% デューティ比 PWM 連続性、X/Y 軸のビットレベル合否アサート、SEU 動的保護、WDT タイムアウト）。
+     * `tests/test_physics_sim.cpp`: 無摩擦慣性航行、センサ ADC エッジ検出、および「光学センサ ADC → RTL 重心演算 → PWM スラスタ噴射 → 6 自由度剛体物理推進」のクローズドループ Co-Sim 統合検証を自動アサートで 100% 保証。
 3. **100% Sim-to-Real 透過性の保証 (Single Source of Truth)**
    * Track A（PC 上の SIL）で開発した自律操縦スクリプト（`pilot.py`）は、実機 FPGA（Track B）に移植した際も、`/dev/uio0` の 32-bit MMIO レジスタマップ仕様が完全に一致しているため、**1 行のコード変更もなしにそのまま実機で動作**します。
 
 ### 3.2 公式審判システム (Official Referee: Single Source of Truth)
-本システムでは公平な競技性・シミュレーションの信頼性を担保するため、スコア計算・ゲート通過判定・ペナルティ判定・合否判定（Grade S/A/B/C）を各プレイヤーのスクリプトから完全に分離し、中央シミュレーションデーモン（`space_guidance_daemon.cpp`）内の **`OfficialReferee` エンジン** が 100Hz 周期でオーソリテーティブに判定します。
+本システムでは公平な競技性・シミュレーションの信頼性を担保するため、スコア計算・ゲート通過判定・ペナルティ判定・合否判定（Grade S/A/B/C）を各プレイヤーのスクリプトから完全に分離し、中央シミュレーションデーモン（`space_guidance_daemon.cpp`）内の **`OfficialReferee` エンジン** が 100Hz 周期で一元的に判定します。
 
 ```mermaid
 flowchart LR
@@ -238,7 +238,7 @@ flowchart LR
     end
 
     subgraph OFFICIAL_REFEREE["公式審判エンジン (Official Referee: SSOT)"]
-        REFEREE["オーソリテーティブ合否・スコアリング判定<br/>- デタンブル達成判定 (|ω| < 0.05 rad/s)<br/>- 脱出ゲート中心軸距離 r = √(y²+z²) 計測<br/>- ケーブル破断限界張力 (15,000N) 監視<br/>- デブリ再接触ペナルティ判定<br/>- 推進剤残量ボーナス計算<br/>- 確定フライトランク認定 (Grade S/A/B/C)"]
+        REFEREE["一元的な合否・スコアリング判定<br/>- デタンブル達成判定 (|ω| < 0.05 rad/s)<br/>- 脱出ゲート中心軸距離 r = √(y²+z²) 計測<br/>- ケーブル破断限界張力 (15,000N) 監視<br/>- デブリ再接触ペナルティ判定<br/>- 推進剤残量ボーナス計算<br/>- 確定フライトランク認定 (Grade S/A/B/C)"]
     end
 
     subgraph TELEMETRY_BUS["ゼロコピー高速配信バス"]
@@ -250,7 +250,7 @@ flowchart LR
     end
 
     subgraph PILOT_LAYER["プレイヤー自律誘導領域 (改ざん不可)"]
-        AUTOPILOT["自律誘導コード (pilot.py)<br/>- 読取専用テレメトリ取得<br/>- スラスタ / ホイール指令書き込み<br/>※スコア・物理の改ざんは原理的排除"]
+        AUTOPILOT["自律誘導コード (pilot.py)<br/>- 読取専用テレメトリ取得<br/>- スラスタ / ホイール指令書き込み<br/>※スコア・物理の改ざんを構造的に排除"]
     end
 
     SEED -->|"障害・衝突イベント"| SIM_ENGINE
@@ -316,7 +316,7 @@ flowchart LR
 
 ## 4. クイックスタート (Quick Start)
 
-SpaceGuidance-FBB は、F-BB（FPGA-BoardlessBench）の公式プラグイン規格（PPA 5.1 / DPPA v1.0）に準拠したハイブリッド拡張パッケージです。F-BB 統合 CLI（`fbb`）を用いてワンステップで導入・検証・起動できます。
+SpaceGuidance-FBB は、F-BB（FPGA-BoardlessBench）の公式プラグイン規格（PPA / DPPA v1.0）に準拠したハイブリッド拡張パッケージです。F-BB 統合 CLI（`fbb`）を用いてワンステップで導入・検証・起動できます。
 
 ### ① プラグインのインストール (Plugin Installation)
 F-BB 環境のターミナルにて、以下の統合 CLI コマンドを実行してインストールします（自動的に F-BB ルートの `./plugins/SpaceGuidance-FBB`（実体: `~/.fbb/plugins/SpaceGuidance-FBB`）へ展開され、C++ 物理シミュレーションデーモンが自動コンパイルされます）：
@@ -360,7 +360,7 @@ fbb lab ./plugins/SpaceGuidance-FBB/scenario/05_panic_control
 
 * **Web ダッシュボード**: ブラウザで [http://localhost:8080](http://localhost:8080) を開くと、以下の分割画面が自動ロードされます：
   * **SG 3D Cyber Orbit Viewer**: 立体ワイヤーフレーム飛行ビュー（CHASE/FRONT/HERO/PATROL/TRACK/CINEMA 視点切替）。F-BB の波形シーク（Time-Travel Co-Debugging）と完全連動し、過去フレームの機体姿勢・位置・スラスタ噴射状態を瞬時に巻き戻し同期表示可能。
-  * **SG Chaos FDIR & Scorecard**: 探査機の自律障害復旧（FDIR 4フェーズ遷移）、公式競技採点（`OfficialReferee` SSOT）、横偏差ベクトルゲージ、および Stage EX 破損スラスタ健全性マトリクスをリアルタイム表示。
+  * **SG Chaos FDIR & Scorecard**: 探査機の自律障害復旧（FDIR 4フェーズ遷移）、公式競技採点（`OfficialReferee` SSOT）、横偏差ゲージ、および Stage EX 破損スラスタ健全性マトリクスをリアルタイム表示。
     > 👉 **詳細仕様・SVG画面図解**: [panes/README.md#1-sg-chaos-fdir--scorecard](panes/README.md#1-sg-chaos-fdir--scorecard)
   * **SG Telemetry & C&W**: NASA 宇宙機規格の 3 色マスター警報盤（Caution & Warning）、推進剤デルタV燃料計、リアクションホイール飽和監視、光学センサ太陽グレア発光、および 2×2 姿勢・速度計器。
     > 👉 **詳細仕様・SVG画面図解**: [panes/README.md#2-sg-telemetry--cw](panes/README.md#2-sg-telemetry--cw)
@@ -370,7 +370,7 @@ fbb lab ./plugins/SpaceGuidance-FBB/scenario/05_panic_control
   * **UART: serial**: 探査機がシリアル出力する航法テレメトリログ。
 
 > 💡 **各専用ペインの UI 仕様・グラフィック図解・インジケータ解説**:  
-> [panes/README.md](panes/README.md) にて SVG ビジュアル付きで完全詳解されています。
+> [panes/README.md](panes/README.md) にて SVG ビジュアル付きで詳しく解説されています。
 
 ### ③ スタンドアローン直接実行 (CLI 高速モード)
 Web ダッシュボードを介さず、コンソールのみで物理シミュレーションと自律航法スクリプトを高速実行する場合：
